@@ -151,10 +151,11 @@ textarea { min-height: 80px; resize: vertical; line-height: 1.5; }
 .paper h3{font-size:12pt;margin-bottom:4px; text-align: left;}
 .paper p, .paper div {font-size:12pt;line-height:1.35;margin:5px 0; text-align: justify;}
 .paper table{font-size:11pt; width:100%; border-collapse:collapse; border-color:#000; margin-bottom:10px;}
-.paper th,.paper td{padding:5px; border:0.5pt solid #000; vertical-align: middle;}
+.paper th,.paper td{padding:5px; border:0.5pt solid #000; vertical-align: middle; text-align:left; word-wrap:break-word; overflow-wrap:break-word; word-break:break-word;}
 .paper th{text-align: center;}
 .paper table.scheme-table{font-size:8.5pt;}
-.paper table.scheme-table th,.paper table.scheme-table td{padding:2px 3px;text-align:center;}
+.paper table.scheme-table th{padding:2px 3px;text-align:center;}
+.paper table.scheme-table td{padding:2px 3px;}
 
 .page-table{width:100%;max-width:900px;margin:0 auto;border-collapse:collapse;background:#fff;}
 .page-table > thead > tr > td, .page-table > tfoot > tr > td, .page-table > tbody > tr > td{padding:0;border:0;}
@@ -167,10 +168,16 @@ textarea { min-height: 80px; resize: vertical; line-height: 1.5; }
 @media(max-width:800px){.grid{grid-template-columns:1fr}}
 
 @media print{
+ /* Allow a very tall row (long TLO/content text) to flow across a page break
+    instead of being forced whole onto the next page — that forcing is what was
+    pushing rows past the bottom margin with a missing/cut-off border. */
  table { page-break-inside: auto; }
- tr    { page-break-inside: avoid; }
+ tr    { page-break-inside: auto; }
  thead { display: table-header-group; }
  tfoot { display: table-footer-group; }
+ /* Prevent long unbroken strings (URLs, codes, long words) from overflowing
+    past the cell/table border when printed to PDF. */
+ .paper th, .paper td { word-wrap: break-word; overflow-wrap: break-word; word-break: break-word; }
  body{background:#fff;}
  header,.toolbar,.container{display:none!important}
  .preview{display:block!important;background:#fff;padding:0}
@@ -198,8 +205,8 @@ textarea { min-height: 80px; resize: vertical; line-height: 1.5; }
 </head>
 <body>
 <header>
-<h1>Offline Curriculum Data Entry System</h1>
-<small>Sharad Institute of Technology, Polytechnic, Yadrav — works without internet, Developed by Mr. S. N. Bodake</small>
+<h1>Curriculum Data Entry System</h1>
+<small>Sharad Institute of Technology, Polytechnic, Yadrav-Developed by Mr. Santosh N. Bodake</small>
 </header>
 <div class="toolbar">
 <button onclick="saveJSON()">Save Data</button>
@@ -421,18 +428,18 @@ textarea { min-height: 80px; resize: vertical; line-height: 1.5; }
 const $=id=>document.getElementById(id);
 function esc(v){return String(v??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 
-const IKS_NOTE_HTML = `Abbreviations: CL- Class Room Learning , TL- Tutorial Learning, LL-Laboratory Learning, SLH-Self Learning
+const IKS_NOTE_HTML = `Abbreviations: CL- Class Room Learning, TL- Tutorial Learning, LL-Laboratory Learning, SLH-Self Learning
 Hours, NLH-Notional Learning Hours, FA - Formative Assessment, SA -Summative assessment, IKS - Indian
 Knowledge System, SLA - Self Learning Assessment
-Legends: @ Internal Assessment, # External Assessment, *# On Line Examination , @$ Internal Online
+Legends: @ Internal Assessment, # External Assessment, *# On Line Examination, @$ Internal Online
 Examination
 Note :
 1. FA-TH represents average of two class tests of 30 marks each conducted during the semester.
 2. If candidate is not securing minimum passing marks in FA-PR of any course then the candidate shall be
 declared as "Detained" in that semester.
-3. If candidate is not securing minimum passing marks in SLA of any course then the candidate shall be
+3. If candidate is not securing minimum passing marks in SLA of any course, then the candidate shall be
 declared as fail and will have to repeat and resubmit SLA work.
-4. Notional Learning hours for the semester are (CL+LL+TL+SL)hrs.* 10 Weeks
+4. Notional Learning hours for the semester are (CL+LL+TL+SL) hrs.* 10 Weeks
 5. 1 credit is equivalent to 30 Notional hrs.
 6. * Self learning hours shall not be reflected in the Time Table.
 7. * Self learning includes micro project / assignment / other activities`.split('\n').join('<br>');
@@ -696,13 +703,13 @@ function saveWord(){
  div.Section1{ page:Section1; }
  body{font-family:'Times New Roman',Times,serif;font-size:12pt;}
  table{border-collapse:collapse;width:100%;margin-bottom:10px;}
- th,td{border:0.5pt solid #000;padding:5px;vertical-align:middle;}
+ th,td{border:0.5pt solid #000;padding:5px;vertical-align:middle;text-align:left;word-wrap:break-word;}
  th{text-align:center;}
  h2{font-size:13pt;border-bottom:0.5pt solid #000;padding-bottom:3px;margin-top:18px;}
- p,div{font-size:12pt;line-height:1.35;margin:5px 0;}
+ p,div{font-size:12pt;line-height:1.35;margin:5px 0;text-align:justify;}
  .pagebreak{page-break-before:always;mso-page-break-before:always;}
  table.scheme-table{font-size:7pt;table-layout:fixed;mso-table-layout-alt:fixed;}
- table.scheme-table th,table.scheme-table td{padding:1px 2px;}
+ table.scheme-table th,table.scheme-table td{padding:1px 2px;font-size:7pt;}
 </style>
 </head>
 <body>
@@ -793,10 +800,14 @@ function td(val, align = 'auto', valign = 'middle') {
     let v = String(val ?? '').trim();
     if (align === 'auto') {
         let vText = v.replace(/<[^>]*>?/gm, '');
-        align = (vText !== '' && !isNaN(vText)) ? 'center' : 'justify';
+        align = (vText !== '' && !isNaN(vText)) ? 'center' : 'left';
     }
-    // Inject both HTML attributes and inline CSS styles to force Word to align properly
-    return `<td align="${align}" valign="${valign}" style="text-align: ${align}; vertical-align: ${valign}; border:0.5pt solid #000; padding:5px;">${v}</td>`;
+    // Inject both HTML attributes and inline CSS styles (with !important, since
+    // Word's HTML engine can otherwise let a document-level <style> rule win over
+    // a plain inline style) to force both Word and the print/PDF engine to align
+    // cells consistently. word-break/overflow-wrap stop long unbroken text (URLs,
+    // codes) from overflowing past the cell/table border when printed to PDF.
+    return `<td align="${align}" valign="${valign}" style="text-align: ${align} !important; vertical-align: ${valign} !important; border:0.5pt solid #000; padding:5px; word-wrap:break-word; overflow-wrap:break-word; word-break:break-word;">${v}</td>`;
 }
 
 
@@ -852,77 +863,97 @@ function buildPaperHTML(d) {
     // margin instead of letting Word size columns to their content and overflow.
     const schemeColWidths = [6,20,5,6,3,3,3,4,4,4,5,4,4,3,3,3,3,3,3,3,3,5];
     const schemeColgroup = '<colgroup>' + schemeColWidths.map(w => `<col style="width:${w}%">`).join('') + '</colgroup>';
-    p += `<table border="1" cellspacing="0" cellpadding="2" width="100%" class="scheme-table" style="border-collapse:collapse; width:100%; max-width:100%; table-layout:fixed; mso-table-layout-alt:fixed; font-size:8.5pt;">
+    // This table has 22 columns, so it needs its own tight, self-contained cell style.
+    // (The shared thStyle/td() padding of 5px was being applied inline on every cell,
+    // which — because inline styles beat the .scheme-table CSS rule — added up across
+    // 22 columns to push the whole table past the page margin.) Keep padding minimal
+    // and defined only here.
+    const thStyleScheme = `style="border:0.5pt solid #000; padding:1px 2px; text-align:center; vertical-align:middle; font-weight:bold; font-size:7pt;"`;
+    // Text cells (Course Code/Title/Abbr/Category) go left+middle; cells holding an
+    // actual number (hours, credits, marks) stay centered — per the same auto rule
+    // used by td() above.
+    const tdScheme = (val) => {
+        let v = String(val ?? '').trim();
+        let align = (v !== '' && !isNaN(v)) ? 'center' : 'left';
+        return `<td align="${align}" valign="middle" style="text-align:${align} !important; vertical-align:middle !important; border:0.5pt solid #000; padding:1px 2px; font-size:7pt; word-wrap:break-word; overflow-wrap:break-word; word-break:break-word;">${v}</td>`;
+    };
+    p += `<table border="1" cellspacing="0" cellpadding="1" width="100%" class="scheme-table" style="border-collapse:collapse; width:100%; max-width:100%; table-layout:fixed; mso-table-layout-alt:fixed; font-size:7pt;">
  ${schemeColgroup}
  <thead>
  <tr>
-  <th ${thStyle} rowspan="5">Course Code</th><th ${thStyle} rowspan="5">Course Title</th><th ${thStyle} rowspan="5">Abbr</th><th ${thStyle} rowspan="5">Course Category/s</th>
-  <th ${thStyle} colspan="5">Learning Scheme</th>
-  <th ${thStyle} rowspan="5">Credits</th><th ${thStyle} rowspan="5">Paper Duration</th>
-  <th ${thStyle} colspan="10">Assessment Scheme</th>
-  <th ${thStyle} rowspan="5">Total Marks</th>
+  <th ${thStyleScheme} rowspan="5">Course Code</th><th ${thStyleScheme} rowspan="5">Course Title</th><th ${thStyleScheme} rowspan="5">Abbr</th><th ${thStyleScheme} rowspan="5">Course Category/s</th>
+  <th ${thStyleScheme} colspan="5">Learning Scheme</th>
+  <th ${thStyleScheme} rowspan="5">Credits</th><th ${thStyleScheme} rowspan="5">Paper Duration</th>
+  <th ${thStyleScheme} colspan="10">Assessment Scheme</th>
+  <th ${thStyleScheme} rowspan="5">Total Marks</th>
  </tr>
  <tr>
-  <th ${thStyle} colspan="3">Actual Contact Hrs./Week</th><th ${thStyle} rowspan="4">SLH</th><th ${thStyle} rowspan="4">NLH</th>
-  <th ${thStyle} colspan="4">Theory</th><th ${thStyle} colspan="4">Based on LL &amp; TL</th><th ${thStyle} colspan="2">Based on SL</th>
+  <th ${thStyleScheme} colspan="3">Actual Contact Hrs./Week</th><th ${thStyleScheme} rowspan="4">SLH</th><th ${thStyleScheme} rowspan="4">NLH</th>
+  <th ${thStyleScheme} colspan="4">Theory</th><th ${thStyleScheme} colspan="4">Based on LL &amp; TL</th><th ${thStyleScheme} colspan="2">Based on SL</th>
  </tr>
  <tr>
-  <th ${thStyle} rowspan="3">CL</th><th ${thStyle} rowspan="3">TL</th><th ${thStyle} rowspan="3">LL</th>
-  <th ${thStyle} rowspan="2">FA-TH</th><th ${thStyle} rowspan="2">SA-TH</th><th ${thStyle} rowspan="2" colspan="2">Total</th>
-  <th ${thStyle} colspan="4">Practical</th><th ${thStyle} rowspan="2" colspan="2">SLA</th>
+  <th ${thStyleScheme} rowspan="3">CL</th><th ${thStyleScheme} rowspan="3">TL</th><th ${thStyleScheme} rowspan="3">LL</th>
+  <th ${thStyleScheme} rowspan="2">FA-TH</th><th ${thStyleScheme} rowspan="2">SA-TH</th><th ${thStyleScheme} rowspan="2" colspan="2">Total</th>
+  <th ${thStyleScheme} colspan="4">Practical</th><th ${thStyleScheme} rowspan="2" colspan="2">SLA</th>
  </tr>
  <tr>
-  <th ${thStyle} colspan="2">FA-PR</th><th ${thStyle} colspan="2">SA-PR</th>
+  <th ${thStyleScheme} colspan="2">FA-PR</th><th ${thStyleScheme} colspan="2">SA-PR</th>
  </tr>
  <tr>
-  <th ${thStyle}>Max</th><th ${thStyle}>Max</th><th ${thStyle}>Max</th><th ${thStyle}>Min</th><th ${thStyle}>Max</th><th ${thStyle}>Min</th><th ${thStyle}>Max</th><th ${thStyle}>Min</th><th ${thStyle}>Max</th><th ${thStyle}>Min</th>
+  <th ${thStyleScheme}>Max</th><th ${thStyleScheme}>Max</th><th ${thStyleScheme}>Max</th><th ${thStyleScheme}>Min</th><th ${thStyleScheme}>Max</th><th ${thStyleScheme}>Min</th><th ${thStyleScheme}>Max</th><th ${thStyleScheme}>Min</th><th ${thStyleScheme}>Max</th><th ${thStyleScheme}>Min</th>
  </tr>
  </thead>
  <tbody><tr>
-  ${td(esc(d.courseCode), 'center', 'middle')}
-  ${td(esc(d.courseTitle), 'center', 'middle')}
-  ${td(esc(d.abbr), 'center', 'middle')}
-  ${td(esc(d.category), 'center', 'middle')}
-  ${td(esc(d.cl), 'center', 'middle')}
-  ${td(esc(d.tl), 'center', 'middle')}
-  ${td(esc(d.ll), 'center', 'middle')}
-  ${td(esc(d.slh), 'center', 'middle')}
-  ${td(esc(d.nlh), 'center', 'middle')}
-  ${td(esc(d.credits), 'center', 'middle')}
-  ${td(esc(d.duration), 'center', 'middle')}
-  ${td(esc(d.fathMax), 'center', 'middle')}
-  ${td(esc(d.sathMax), 'center', 'middle')}
-  ${td(esc(d.totalMax), 'center', 'middle')}
-  ${td(esc(d.totalMin), 'center', 'middle')}
-  ${td(esc(d.faprMax), 'center', 'middle')}
-  ${td(esc(d.faprMin), 'center', 'middle')}
-  ${td(esc(d.saprMax), 'center', 'middle')}
-  ${td(esc(d.saprMin), 'center', 'middle')}
-  ${td(esc(d.slaMax), 'center', 'middle')}
-  ${td(esc(d.slaMin), 'center', 'middle')}
-  ${td(esc(d.totalMarks), 'center', 'middle')}
+  ${tdScheme(esc(d.courseCode))}
+  ${tdScheme(esc(d.courseTitle))}
+  ${tdScheme(esc(d.abbr))}
+  ${tdScheme(esc(d.category))}
+  ${tdScheme(esc(d.cl))}
+  ${tdScheme(esc(d.tl))}
+  ${tdScheme(esc(d.ll))}
+  ${tdScheme(esc(d.slh))}
+  ${tdScheme(esc(d.nlh))}
+  ${tdScheme(esc(d.credits))}
+  ${tdScheme(esc(d.duration))}
+  ${tdScheme(esc(d.fathMax))}
+  ${tdScheme(esc(d.sathMax))}
+  ${tdScheme(esc(d.totalMax))}
+  ${tdScheme(esc(d.totalMin))}
+  ${tdScheme(esc(d.faprMax))}
+  ${tdScheme(esc(d.faprMin))}
+  ${tdScheme(esc(d.saprMax))}
+  ${tdScheme(esc(d.saprMin))}
+  ${tdScheme(esc(d.slaMax))}
+  ${tdScheme(esc(d.slaMin))}
+  ${tdScheme(esc(d.totalMarks))}
  </tr></tbody>
  </table>`;
 
-    p += `<div style="margin-top:10px;">`;
+    p += `<div style="margin-top:10px; text-align:left;">`;
     if (d.iksHrs) p += `<b>Total IKS Hrs for Semester:</b> ${esc(d.iksHrs)} Hrs<br>`;
     p += IKS_NOTE_HTML;
     p += `</div>`;
 
     p += `<h2>V. THEORY LEARNING OUTCOMES AND ALIGNED COURSE CONTENT</h2>`;
-    p += `${tableStart}<thead><tr><th ${thStyle}>Sr.No</th><th ${thStyle}>TLOs aligned to COs</th><th ${thStyle}>Learning content mapped with TLOs and COs</th><th ${thStyle}>Suggested Learning Pedagogies</th></tr></thead><tbody>`;
+    // Explicit column widths (table-layout:fixed) so columns can be resized independent
+    // of content. History: Sr 6% (fixed) / TLO 20% / Content 44% / Pedagogy 30% ->
+    // Pedagogy reduced 30% (30% -> 21%), and the 9% freed up moved entirely into
+    // Content (44% -> 53%). Sr and TLO left unchanged.
+    p += `<table border="1" cellspacing="0" cellpadding="5" width="100%" style="border-collapse:collapse; margin-bottom:10px; width:100%; table-layout:fixed; mso-table-layout-alt:fixed;">
+ <colgroup><col style="width:6%"><col style="width:20%"><col style="width:53%"><col style="width:21%"></colgroup>
+ <thead><tr><th ${thStyle}>Sr. No</th><th ${thStyle}>TLOs aligned to COs</th><th ${thStyle}>Learning content mapped with TLOs and COs</th><th ${thStyle}>Suggested Learning Pedagogies</th></tr></thead><tbody>`;
     d.theory.forEach((t, i) => {
         let sr = i + 1;
         let tloStr = t.tlo.filter(x => x.trim()).map((x, j) => `<div style="margin-bottom:6px"><b>TLO ${sr}.${j + 1}</b> ${esc(x)}</div>`).join('');
         let unitHeading = (t.unitTitle || '').trim() ? `<div style="margin-bottom:8px"><b>Unit - ${toRoman(sr)} ${esc(t.unitTitle)}</b></div>` : '';
         let contentStr = unitHeading + t.content.filter(x => x.trim()).map((x, j) => `<div style="margin-bottom:6px"><b>${sr}.${j + 1}</b> ${esc(x)}</div>`).join('');
         let pedStr = esc(t.ped).replace(/\\n/g, '<br>');
-        p += `<tr>${td(sr, 'center', 'top')}${td(tloStr, 'auto', 'top')}${td(contentStr, 'auto', 'top')}${td(pedStr, 'auto', 'middle')}</tr>`;
+        p += `<tr>${td(`<b>${sr}</b>`, 'center', 'middle')}${td(tloStr, 'auto', 'top')}${td(contentStr, 'auto', 'top')}${td(pedStr, 'auto', 'middle')}</tr>`;
     });
     p += `</tbody></table>`;
 
     p += `<h2>VI. LABORATORY LEARNING OUTCOME AND ALIGNED PRACTICAL / TUTORIAL EXPERIENCES</h2>`;
-    p += `${tableStart}<thead><tr><th ${thStyle}>Sr.No</th><th ${thStyle}>Laboratory Learning Outcome</th><th ${thStyle}>Practical / Tutorial Title</th><th ${thStyle}>Hrs</th><th ${thStyle}>Relevant COs</th></tr></thead><tbody>`;
+    p += `${tableStart}<thead><tr><th ${thStyle}>Sr. No</th><th ${thStyle}>Laboratory Learning Outcome</th><th ${thStyle}>Practical / Tutorial Title</th><th ${thStyle}>Hrs</th><th ${thStyle}>Relevant COs</th></tr></thead><tbody>`;
     d.lab.forEach((l, i) => {
         let sr = i + 1;
         let lloStr = (l.llo || []).filter(x => x.trim()).map((x, j) => {
@@ -933,15 +964,15 @@ function buildPaperHTML(d) {
     });
     p += `</tbody></table>`;
 
-    p += `<div style="margin-top:10px;">${LAB_NOTE_HTML}</div>`;
+    p += `<div style="margin-top:10px; text-align:left;">${LAB_NOTE_HTML}</div>`;
 
     p += `<p><b>VII. MICRO PROJECT / ASSIGNMENT / ACTIVITIES</b><br>${esc(d.activities).replace(/\\n/g, '<br>')}</p>`;
     p += `<h2>VIII. LABORATORY EQUIPMENT / INSTRUMENTS / TOOLS / SOFTWARE REQUIRED</h2>`;
 
-    p += tableFrom('equipmentTable', ['Sr.No', 'Equipment Name with Broad Specifications', 'Relevant LLO Number'], r => `<tr>${td(r.cells[0].textContent, 'center')}${td(esc(r.cells[1].querySelector('textarea').value))}${td(esc(r.cells[2].querySelector('input').value), 'center')}</tr>`);
+    p += tableFrom('equipmentTable', ['Sr. No', 'Equipment Name with Broad Specifications', 'Relevant LLO Number'], r => `<tr>${td(r.cells[0].textContent, 'center')}${td(esc(r.cells[1].querySelector('textarea').value))}${td(esc(r.cells[2].querySelector('input').value), 'center')}</tr>`);
 
     p += `<h2>IX. SUGGESTED WEIGHTAGE TO LEARNING EFFORTS & ASSESSMENT PURPOSE</h2>`;
-    p += `${tableStart}<thead><tr><th ${thStyle}>Sr.No</th><th ${thStyle}>Unit Title</th><th ${thStyle}>Aligned COs</th><th ${thStyle}>Learning Hours</th><th ${thStyle}>R-Level</th><th ${thStyle}>U-Level</th><th ${thStyle}>A-Level</th><th ${thStyle}>Total Marks</th></tr></thead><tbody>`;
+    p += `${tableStart}<thead><tr><th ${thStyle}>Sr. No</th><th ${thStyle}>Unit Title</th><th ${thStyle}>Aligned COs</th><th ${thStyle}>Learning Hours</th><th ${thStyle}>R-Level</th><th ${thStyle}>U-Level</th><th ${thStyle}>A-Level</th><th ${thStyle}>Total Marks</th></tr></thead><tbody>`;
     document.querySelectorAll('#weightTable tbody tr').forEach(r => {
         p += `<tr>${td(r.cells[0].textContent, 'center')}${td(esc(r.cells[1].querySelector('input').value))}${[2, 3, 4, 5, 6, 7].map(i => td(esc(r.cells[i].querySelector('input').value), 'center')).join('')}</tr>`;
     });
@@ -949,9 +980,9 @@ function buildPaperHTML(d) {
 
     p += `<h2>X. ASSESSMENT METHODOLOGIES / TOOLS</h2>`;
     p += `<h3>Formative assessment (Assessment for Learning)</h3>`;
-    p += listAsTable(d.formativeAssessment, ['Sr.No', 'Methodology / Tool']);
+    p += listAsTable(d.formativeAssessment, ['Sr. No', 'Methodology / Tool']);
     p += `<h3>Summative Assessment (Assessment of Learning)</h3>`;
-    p += listAsTable(d.summativeAssessment, ['Sr.No', 'Methodology / Tool']);
+    p += listAsTable(d.summativeAssessment, ['Sr. No', 'Methodology / Tool']);
 
     p += `<h2>XI. SUGGESTED COs - POs MATRIX FORM</h2>`;
     p += `${tableStart}<tr><th ${thStyle}>CO</th><th ${thStyle}>PO1</th><th ${thStyle}>PO2</th><th ${thStyle}>PO3</th><th ${thStyle}>PO4</th><th ${thStyle}>PO5</th><th ${thStyle}>PO6</th><th ${thStyle}>PO7</th><th ${thStyle}>PO8</th><th ${thStyle}>PO9</th><th ${thStyle}>PO10</th><th ${thStyle}>PO11</th><th ${thStyle}>PSO1</th><th ${thStyle}>PSO2</th><th ${thStyle}>PSO3</th></tr>`;
@@ -960,13 +991,13 @@ function buildPaperHTML(d) {
     p += '</table>';
 
     p += `<h2>XII. SUGGESTED LEARNING MATERIALS / BOOKS</h2>`;
-    p += tableFrom('booksTable', ['Sr.No', 'Author', 'Title', 'Publisher with ISBN'], r => `<tr>${td(r.cells[0].textContent, 'center')}${td(esc(r.cells[1].querySelector('textarea').value))}${td(esc(r.cells[2].querySelector('textarea').value))}${td(esc(r.cells[3].querySelector('textarea').value))}</tr>`);
+    p += tableFrom('booksTable', ['Sr. No', 'Author', 'Title', 'Publisher with ISBN'], r => `<tr>${td(r.cells[0].textContent, 'center')}${td(esc(r.cells[1].querySelector('textarea').value))}${td(esc(r.cells[2].querySelector('textarea').value))}${td(esc(r.cells[3].querySelector('textarea').value))}</tr>`);
 
     p += `<h2>XIII. LEARNING WEBSITES & PORTALS</h2>`;
     {
         let rows = [...document.querySelectorAll('#webTable tbody tr')];
         if (rows.length) {
-            p += `${tableStart}<thead><tr><th ${thStyle}>Sr.No</th><th ${thStyle}>Link / Portal</th><th ${thStyle}>QR Code</th><th ${thStyle}>Description</th></tr></thead><tbody>`;
+            p += `${tableStart}<thead><tr><th ${thStyle}>Sr. No</th><th ${thStyle}>Link / Portal</th><th ${thStyle}>QR Code</th><th ${thStyle}>Description</th></tr></thead><tbody>`;
             rows.forEach(r => {
                 let link = r.querySelector('.web-link').value.trim();
                 let qrCell = link ? `<img src="${qrUrl(link)}" width="90" height="90" alt="QR Code">` : '';
