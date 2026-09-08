@@ -145,21 +145,21 @@ textarea { min-height: 80px; resize: vertical; line-height: 1.5; }
 .preview { display: none; background: #94a3b8; padding: 40px; }
 
 
-/* ===== PDF-style output typography (UNCHANGED AS REQUESTED) ===== */
+/* ===== PDF-style output typography ===== */
 .paper{background:#fff;margin:auto;max-width:900px;padding:15mm 15mm;box-shadow:0 0 8px #333; font-family: "Times New Roman", Times, serif; font-size: 12pt; text-align: justify;}
-.paper h2{font-size:13pt;border-bottom:1px solid #000;padding-bottom:3px;margin-top:18px; text-align: left;}
+.paper h2{font-size:13pt;border-bottom:0.5pt solid #000;padding-bottom:3px;margin-top:18px; text-align: left;}
 .paper h3{font-size:12pt;margin-bottom:4px; text-align: left;}
 .paper p, .paper div {font-size:12pt;line-height:1.35;margin:5px 0; text-align: justify;}
 .paper table{font-size:11pt; width:100%; border-collapse:collapse; border-color:#000; margin-bottom:10px;}
-.paper th,.paper td{padding:5px; border:1px solid #000; vertical-align: middle;}
+.paper th,.paper td{padding:5px; border:0.5pt solid #000; vertical-align: middle;}
 .paper th{text-align: center;}
 .paper table.scheme-table{font-size:8.5pt;}
 .paper table.scheme-table th,.paper table.scheme-table td{padding:2px 3px;text-align:center;}
 
 .page-table{width:100%;max-width:900px;margin:0 auto;border-collapse:collapse;background:#fff;}
 .page-table > thead > tr > td, .page-table > tfoot > tr > td, .page-table > tbody > tr > td{padding:0;border:0;}
-.msbte-page-header{padding:4mm 15mm 3mm 15mm;margin-bottom:15px;border-bottom:1px solid #000;background:#fff;font-family:"Times New Roman",Times,serif;}
-.msbte-page-footer{padding:3mm 15mm 4mm 15mm;margin-top:15px;border-top:1px solid #000;background:#fff;font-family:"Times New Roman",Times,serif;}
+.msbte-page-header{padding:4mm 15mm 3mm 15mm;margin-bottom:15px;border-bottom:0.5pt solid #000;background:#fff;font-family:"Times New Roman",Times,serif;}
+.msbte-page-footer{padding:3mm 15mm 4mm 15mm;margin-top:15px;border-top:0.5pt solid #000;background:#fff;font-family:"Times New Roman",Times,serif;}
 .hdr-row{display:flex;justify-content:space-between;font-size:13pt;font-weight:bold;}
 .hdr-sem{font-size:11pt;font-weight:bold;margin-top:2px;}
 .ftr-row{text-align:center;font-size:13pt;font-weight:bold;}
@@ -175,8 +175,21 @@ textarea { min-height: 80px; resize: vertical; line-height: 1.5; }
  header,.toolbar,.container{display:none!important}
  .preview{display:block!important;background:#fff;padding:0}
  .page-table{max-width:none;}
- .paper{box-shadow:none;max-width:none;margin:0;padding:0; font-family:"Times New Roman", Times, serif; font-size:12pt;}
+ /* Reserve space at the bottom of every printed page equal to the footer's height,
+    so page content never collides with the fixed footer below. */
+ .paper{box-shadow:none;max-width:none;margin:0;padding:0 0 22mm 0; font-family:"Times New Roman", Times, serif; font-size:12pt;}
  .msbte-page-header,.msbte-page-footer{padding-left:0;padding-right:0;}
+ /* Fixed positioning detaches the footer from document flow and re-paints it at the
+    same spot on every physical page — so it always sits at the true bottom of the
+    page instead of trailing the content on a page that ends mid-way down. */
+ .msbte-page-footer{
+     position: fixed;
+     bottom: 0;
+     left: 0;
+     right: 0;
+     width: 100%;
+     background: #fff;
+ }
  .pagebreak{page-break-before:always}
 
  @page{ size:A4; margin:15mm; }
@@ -276,11 +289,8 @@ textarea { min-height: 80px; resize: vertical; line-height: 1.5; }
         <label>Total IKS Hrs for Semester (Hrs)</label>
         <input id="iksHrs" type="number" placeholder="Enter hours">
     </div>
-    <div class="field full">
-        <label>Extra Details</label>
-        <textarea id="iksExtra" placeholder="Enter extra details here..."></textarea>
-    </div>
 </div>
+<p class="note">The Abbreviations, Legends and Notes block is printed automatically after this section — no input needed.</p>
 </div>
 
 <div class="card">
@@ -293,10 +303,7 @@ textarea { min-height: 80px; resize: vertical; line-height: 1.5; }
 <h2>5. VI. Laboratory Learning Outcome and Practical / Tutorial Experiences</h2>
 <table id="labTable"><thead><tr><th style="text-align:center;">Sr.</th><th>Laboratory Learning Outcome (LLO)</th><th>Practical / Tutorial Title</th><th style="text-align:center;">Hours</th><th style="text-align:center;">Relevant COs</th><th style="text-align:center;">Mandatory?</th><th style="text-align:center;">Del.</th></tr></thead><tbody></tbody></table>
 <button class="add" onclick="addLab()">+ Add Practical</button>
-<div class="field full" style="margin-top: 20px;">
-    <label>Extra Details</label>
-    <textarea id="labExtra" placeholder="Enter extra details here..."></textarea>
-</div>
+<p class="note">A standard note about mandatory LLOs and minimum lab coverage is printed automatically after this section — no input needed.</p>
 </div>
 
 <div class="card">
@@ -335,7 +342,16 @@ textarea { min-height: 80px; resize: vertical; line-height: 1.5; }
 
 <div class="card">
 <h2>9. X. Assessment Methodologies / Tools</h2>
-<textarea id="assessment"></textarea>
+<div class="field">
+<label>Formative assessment (Assessment for Learning)</label>
+<div class="dyn-list" data-type="formativeAssessment"></div>
+<button type="button" class="add-btn" onclick="addDynItem(this)">+ Add Formative Assessment</button>
+</div>
+<div class="field" style="margin-top:16px;">
+<label>Summative Assessment (Assessment of Learning)</label>
+<div class="dyn-list" data-type="summativeAssessment"></div>
+<button type="button" class="add-btn" onclick="addDynItem(this)">+ Add Summative Assessment</button>
+</div>
 </div>
 
 <div class="card">
@@ -353,8 +369,22 @@ textarea { min-height: 80px; resize: vertical; line-height: 1.5; }
 
 <div class="card">
 <h2>12. XIII. Learning Websites & Portals</h2>
-<table id="webTable"><thead><tr><th style="text-align:center;width:50px;">Sr.</th><th>Link / Portal</th><th>Description</th><th style="text-align:center;width:50px;">Del.</th></tr></thead><tbody></tbody></table>
+<table id="webTable"><thead><tr><th style="text-align:center;width:50px;">Sr.</th><th>Link / Portal</th><th style="text-align:center;width:100px;">QR Code</th><th>Description</th><th style="text-align:center;width:50px;">Del.</th></tr></thead><tbody></tbody></table>
 <button class="add" onclick="addWeb()">+ Add Website</button>
+</div>
+
+<div class="card">
+<h2>13. Prepared by</h2>
+<div class="field">
+<label>Name of Course Expert</label>
+<div class="dyn-list" data-type="courseExpert"></div>
+<button type="button" class="add-btn" onclick="addDynItem(this)">+ Add Course Expert</button>
+</div>
+<div class="field" style="margin-top:16px;">
+<label>Name of Industry Expert</label>
+<div class="dyn-list" data-type="industryExpert"></div>
+<button type="button" class="add-btn" onclick="addDynItem(this)">+ Add Industry Expert</button>
+</div>
 </div>
 
 <div class="card">
@@ -377,28 +407,88 @@ textarea { min-height: 80px; resize: vertical; line-height: 1.5; }
 </table>
 </div>
 
+<datalist id="assessmentOptions">
+    <option value="Written Test">
+    <option value="Practical Exam">
+    <option value="Micro-Project">
+    <option value="Assignment">
+    <option value="Oral / Viva-voce">
+    <option value="Presentation / Seminar">
+    <option value="Quiz / Objective Test">
+</datalist>
+
 <script>
 const $=id=>document.getElementById(id);
 function esc(v){return String(v??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 
+const IKS_NOTE_HTML = `Abbreviations: CL- Class Room Learning , TL- Tutorial Learning, LL-Laboratory Learning, SLH-Self Learning
+Hours, NLH-Notional Learning Hours, FA - Formative Assessment, SA -Summative assessment, IKS - Indian
+Knowledge System, SLA - Self Learning Assessment
+Legends: @ Internal Assessment, # External Assessment, *# On Line Examination , @$ Internal Online
+Examination
+Note :
+1. FA-TH represents average of two class tests of 30 marks each conducted during the semester.
+2. If candidate is not securing minimum passing marks in FA-PR of any course then the candidate shall be
+declared as "Detained" in that semester.
+3. If candidate is not securing minimum passing marks in SLA of any course then the candidate shall be
+declared as fail and will have to repeat and resubmit SLA work.
+4. Notional Learning hours for the semester are (CL+LL+TL+SL)hrs.* 10 Weeks
+5. 1 credit is equivalent to 30 Notional hrs.
+6. * Self learning hours shall not be reflected in the Time Table.
+7. * Self learning includes micro project / assignment / other activities`.split('\n').join('<br>');
+
+const LAB_NOTE_HTML = `Note : Out of above suggestive LLOs 
+'*' Marked Practicals (LLOs) Are mandatory.
+Minimum 80% of above list of lab experiment are to be performed.
+Judicial mix of LLOs are to be performed to achieve desired outcomes.`.split('\n').join('<br>');
+
 function rowButton(){return `<button type="button" class="red" onclick="this.closest('tr').remove();renumber()">X</button>`}
+
+// ===== Generic dynamic-list helpers (used by TLO/Topic, LLO, Course/Industry
+// Experts, and Formative/Summative Assessment lists) =====
+// Some lists (assessment) benefit from a datalist of suggestions.
+const DYN_LIST_SUGGESTIONS = { formativeAssessment: 'assessmentOptions', summativeAssessment: 'assessmentOptions' };
+
+function dynRowHTML(value = '', type = '') {
+    let listAttr = DYN_LIST_SUGGESTIONS[type] ? ` list="${DYN_LIST_SUGGESTIONS[type]}"` : '';
+    return `<div style="display:flex;margin-bottom:6px"><span class="lbl"></span><input value="${esc(value)}" style="flex:1"${listAttr}><button type="button" class="red" onclick="removeDynRow(this)">X</button></div>`;
+}
+
+function removeDynRow(btn) {
+    btn.parentElement.remove();
+    refreshAllLabels();
+}
 
 function addDynItem(btn) {
     let list = btn.previousElementSibling;
-    list.insertAdjacentHTML('beforeend', `<div style="display:flex;margin-bottom:6px"><span class="lbl"></span><input value="" style="flex:1"><button type="button" class="red" onclick="this.parentElement.remove(); updateDynamicLabels(); updateLabLabels();">X</button></div>`);
-    updateDynamicLabels();
-    updateLabLabels();
+    list.insertAdjacentHTML('beforeend', dynRowHTML('', list.dataset.type));
+    refreshAllLabels();
 }
 
+// Clears and repopulates a flat dynamic list (used for loading saved data).
+function fillDynList(type, values) {
+    let list = document.querySelector(`.dyn-list[data-type="${type}"]`);
+    if (!list) return;
+    list.innerHTML = '';
+    (values && values.length ? values : ['']).forEach(v => list.insertAdjacentHTML('beforeend', dynRowHTML(v, type)));
+}
+
+function initDynList(type, count = 1) {
+    let list = document.querySelector(`.dyn-list[data-type="${type}"]`);
+    if (!list) return;
+    for (let i = 0; i < count; i++) list.insertAdjacentHTML('beforeend', dynRowHTML('', type));
+}
+
+// Row-scoped numbering (labels depend on the parent table row's position).
 function updateDynamicLabels() {
     document.querySelectorAll('#theoryTable tbody > tr').forEach((tr, i) => {
         let unitNo = i + 1;
-        if(tr.cells[0]) tr.cells[0].textContent = unitNo;
+        if (tr.cells[0]) tr.cells[0].textContent = unitNo;
         tr.querySelectorAll('.dyn-list[data-type="tlo"] > div').forEach((div, j) => {
-            div.querySelector('.lbl').textContent = `TLO ${unitNo}.${j+1} `;
+            div.querySelector('.lbl').textContent = `TLO ${unitNo}.${j + 1} `;
         });
         tr.querySelectorAll('.dyn-list[data-type="content"] > div').forEach((div, j) => {
-            div.querySelector('.lbl').textContent = `${unitNo}.${j+1} `;
+            div.querySelector('.lbl').textContent = `${unitNo}.${j + 1} `;
         });
     });
 }
@@ -407,9 +497,37 @@ function updateLabLabels() {
     document.querySelectorAll('#labTable tbody > tr').forEach((tr, i) => {
         let sr = i + 1;
         tr.querySelectorAll('.dyn-list[data-type="llo"] > div').forEach((div, j) => {
-            div.querySelector('.lbl').textContent = `LLO ${sr}.${j+1} `;
+            div.querySelector('.lbl').textContent = `LLO ${sr}.${j + 1} `;
         });
     });
+}
+
+// Flat numbering: Course Experts then Industry Experts continue the same sequence.
+function updateExpertLabels() {
+    let num = 1;
+    ['courseExpert', 'industryExpert'].forEach(type => {
+        document.querySelectorAll(`.dyn-list[data-type="${type}"] > div`).forEach(div => {
+            div.querySelector('.lbl').textContent = `${num}. `;
+            num++;
+        });
+    });
+}
+
+// Flat numbering: Formative and Summative assessments are numbered independently.
+function updateAssessmentLabels() {
+    ['formativeAssessment', 'summativeAssessment'].forEach(type => {
+        document.querySelectorAll(`.dyn-list[data-type="${type}"] > div`).forEach((div, i) => {
+            div.querySelector('.lbl').textContent = `${i + 1}. `;
+        });
+    });
+}
+
+// Single entry point that keeps every dynamic-list label in sync.
+function refreshAllLabels() {
+    updateDynamicLabels();
+    updateLabLabels();
+    updateExpertLabels();
+    updateAssessmentLabels();
 }
 
 function addCO(v=''){let n=document.querySelectorAll('#coTable tbody tr').length+1; $('coTable').querySelector('tbody').insertAdjacentHTML('beforeend',`<tr><td style="text-align:center;font-weight:600;">CO${n}</td><td><textarea>${esc(v)}</textarea></td><td style="text-align:center;">${rowButton()}</td></tr>`);renumber()}
@@ -418,13 +536,13 @@ function addTheory(d={}){
     let tlos = Array.isArray(d.tlo) ? d.tlo : (d.tlo ? d.tlo.split('\n') : ['']);
     let contents = Array.isArray(d.content) ? d.content : (d.content ? d.content.split('\n') : ['']);
 
-    let tloHTML = `<div class="dyn-list" data-type="tlo">` + tlos.map(v => `<div style="display:flex;margin-bottom:6px"><span class="lbl"></span><input value="${esc(v)}" style="flex:1"><button type="button" class="red" onclick="this.parentElement.remove(); updateDynamicLabels()">X</button></div>`).join('') + `</div><button type="button" class="add-btn" onclick="addDynItem(this)">+ TLO</button>`;
+    let tloHTML = `<div class="dyn-list" data-type="tlo">` + tlos.map(v => dynRowHTML(v)).join('') + `</div><button type="button" class="add-btn" onclick="addDynItem(this)">+ TLO</button>`;
 
-    let contentHTML = `<input class="unit-title" oninput="syncWeightage()" placeholder="Chapter / Unit name" value="${esc(d.unitTitle||'')}" style="font-weight:bold;margin-bottom:8px; border-bottom-width: 2px;">` + `<div class="dyn-list" data-type="content">` + contents.map(v => `<div style="display:flex;margin-bottom:6px"><span class="lbl"></span><input value="${esc(v)}" style="flex:1"><button type="button" class="red" onclick="this.parentElement.remove(); updateDynamicLabels()">X</button></div>`).join('') + `</div><button type="button" class="add-btn" onclick="addDynItem(this)">+ Topic</button>`;
+    let contentHTML = `<input class="unit-title" oninput="syncWeightage()" placeholder="Chapter / Unit name" value="${esc(d.unitTitle||'')}" style="font-weight:bold;margin-bottom:8px; border-bottom-width: 2px;">` + `<div class="dyn-list" data-type="content">` + contents.map(v => dynRowHTML(v)).join('') + `</div><button type="button" class="add-btn" onclick="addDynItem(this)">+ Topic</button>`;
 
     $('theoryTable').querySelector('tbody').insertAdjacentHTML('beforeend',
     `<tr>
-        <td style="text-align:center;font-weight:600;"></td>
+        <td style="text-align:center;font-weight:600;vertical-align:top;"></td>
         <td style="vertical-align:top">${tloHTML}</td>
         <td style="vertical-align:top">${contentHTML}</td>
         <td style="vertical-align:top"><textarea style="height:100%; min-height:100px;">${esc(d.ped||'')}</textarea></td>
@@ -437,7 +555,7 @@ function addTheory(d={}){
 function addLab(d={}){
     let n=document.querySelectorAll('#labTable tbody tr').length+1;
     let llos = Array.isArray(d.llo) ? d.llo : (d.llo ? [d.llo] : ['']);
-    let lloHTML = `<div class="dyn-list" data-type="llo">` + llos.map(v => `<div style="display:flex;margin-bottom:6px"><span class="lbl"></span><input value="${esc(v)}" style="flex:1"><button type="button" class="red" onclick="this.parentElement.remove(); updateLabLabels()">X</button></div>`).join('') + `</div><button type="button" class="add-btn" onclick="addDynItem(this); updateLabLabels();">+ LLO</button>`;
+    let lloHTML = `<div class="dyn-list" data-type="llo">` + llos.map(v => dynRowHTML(v)).join('') + `</div><button type="button" class="add-btn" onclick="addDynItem(this)">+ LLO</button>`;
     $('labTable').querySelector('tbody').insertAdjacentHTML('beforeend',
     `<tr>
         <td style="text-align:center;font-weight:600;">${n}</td>
@@ -452,8 +570,17 @@ function addLab(d={}){
 }
 function addEquipment(d={}){let n=document.querySelectorAll('#equipmentTable tbody tr').length+1;$('equipmentTable').querySelector('tbody').insertAdjacentHTML('beforeend',`<tr><td style="text-align:center;font-weight:600;">${n}</td><td><textarea>${esc(d.name||'')}</textarea></td><td><input style="text-align:center;" value="${esc(d.llo||'')}"></td><td style="text-align:center;">${rowButton()}</td></tr>`)}
 function addBook(d={}){let n=document.querySelectorAll('#booksTable tbody tr').length+1;$('booksTable').querySelector('tbody').insertAdjacentHTML('beforeend',`<tr><td style="text-align:center;font-weight:600;">${n}</td><td><textarea>${esc(d.author||'')}</textarea></td><td><textarea>${esc(d.title||'')}</textarea></td><td><textarea>${esc(d.pub||'')}</textarea></td><td style="text-align:center;">${rowButton()}</td></tr>`)}
-function addWeb(d={}){let n=document.querySelectorAll('#webTable tbody tr').length+1;$('webTable').querySelector('tbody').insertAdjacentHTML('beforeend',`<tr><td style="text-align:center;font-weight:600;">${n}</td><td><input value="${esc(d.link||'')}"></td><td><textarea>${esc(d.desc||'')}</textarea></td><td style="text-align:center;">${rowButton()}</td></tr>`)}
-
+function qrUrl(v){return 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data='+encodeURIComponent(v)}
+function updateWebQR(input){
+    let img = input.closest('tr').querySelector('.web-qr');
+    let v = input.value.trim();
+    if(v){ img.src = qrUrl(v); img.style.display=''; } else { img.removeAttribute('src'); img.style.display='none'; }
+}
+function addWeb(d={}){
+    let n=document.querySelectorAll('#webTable tbody tr').length+1;
+    let link = d.link||'';
+    $('webTable').querySelector('tbody').insertAdjacentHTML('beforeend',`<tr><td style="text-align:center;font-weight:600;">${n}</td><td><input class="web-link" value="${esc(link)}" oninput="updateWebQR(this)"></td><td style="text-align:center;"><img class="web-qr" width="90" height="90" alt="QR" style="${link?'':'display:none;'}" ${link?`src="${qrUrl(link)}"`:''}></td><td><textarea class="web-desc">${esc(d.desc||'')}</textarea></td><td style="text-align:center;">${rowButton()}</td></tr>`);
+}
 function updateGrandTotal() {
     let hrs=0, r=0, u=0, a=0, total=0;
     document.querySelectorAll('#weightTable tbody tr').forEach(tr => {
@@ -509,7 +636,7 @@ function renumber(){
             if(id==='coTable')r.cells[0].textContent='CO'+(i+1);
         });
     });
-    updateDynamicLabels();
+    refreshAllLabels();
     buildMatrix();
     syncWeightage();
 }
@@ -543,7 +670,11 @@ function collect(){
  data.equipment=[...document.querySelectorAll('#equipmentTable tbody tr')].map(r=>({name:r.cells[1].querySelector('textarea').value,llo:r.cells[2].querySelector('input').value}));
  data.weight=[...document.querySelectorAll('#weightTable tbody tr')].map(r=>{let x=[...r.querySelectorAll('input')].map(a=>a.value);return {title:x[0],co:x[1],hours:x[2],r:x[3],u:x[4],a:x[5],total:x[6]}});
  data.books=[...document.querySelectorAll('#booksTable tbody tr')].map(r=>{let x=[...r.querySelectorAll('textarea')].map(a=>a.value);return {author:x[0],title:x[1],pub:x[2]}});
- data.web=[...document.querySelectorAll('#webTable tbody tr')].map(r=>({link:r.cells[1].querySelector('input').value,desc:r.cells[2].querySelector('textarea').value}));
+ data.web=[...document.querySelectorAll('#webTable tbody tr')].map(r=>({link:r.querySelector('.web-link').value,desc:r.querySelector('.web-desc').value}));
+ data.formativeAssessment=[...document.querySelectorAll('.dyn-list[data-type="formativeAssessment"] input')].map(i=>i.value);
+ data.summativeAssessment=[...document.querySelectorAll('.dyn-list[data-type="summativeAssessment"] input')].map(i=>i.value);
+ data.courseExperts=[...document.querySelectorAll('.dyn-list[data-type="courseExpert"] input')].map(i=>i.value);
+ data.industryExperts=[...document.querySelectorAll('.dyn-list[data-type="industryExpert"] input')].map(i=>i.value);
  data.matrix=[...document.querySelectorAll('#matrixTable input[data-m]')].map(x=>[x.dataset.m,x.value]);
  return data;
 }
@@ -553,29 +684,28 @@ function saveJSON(){let blob=new Blob([JSON.stringify(collect(),null,2)],{type:'
 function saveWord(){
  let d = collect();
  let bodyHTML = buildPaperHTML(d);
- let headerHTML = `<div style="display:flex;justify-content:space-between;font-weight:bold;font-size:13pt;"><span>${esc((d.courseTitle||'').toUpperCase())}</span><span>Subject Code : ${esc(d.courseCode||'')}</span></div>`;
- let footerHTML = `<p style="text-align:center;font-weight:bold;font-size:13pt;margin:0;">Sharad Institute of Technology, Polytechnic, Yadrav</p>`;
 
+ // Word output has no page header or footer — just the page margins and content.
  let doc = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
 <head>
 <meta charset='utf-8'>
 <title>${esc(d.courseCode||'Curriculum Document')}</title>
 <!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom><w:DoNotOptimizeForBrowser/></w:WordDocument></xml><![endif]-->
 <style>
- @page Section1{ size:21cm 29.7cm; margin:2cm 1.5cm 2cm 1.5cm; mso-header-margin:1cm; mso-footer-margin:1cm; mso-header:h1; mso-footer:f1; }
+ @page Section1{ size:21cm 29.7cm; margin:1.5cm 1.5cm 1.5cm 1.5cm; }
  div.Section1{ page:Section1; }
  body{font-family:'Times New Roman',Times,serif;font-size:12pt;}
  table{border-collapse:collapse;width:100%;margin-bottom:10px;}
- th,td{border:1px solid #000;padding:5px;vertical-align:middle;}
+ th,td{border:0.5pt solid #000;padding:5px;vertical-align:middle;}
  th{text-align:center;}
- h2{font-size:13pt;border-bottom:1px solid #000;padding-bottom:3px;margin-top:18px;}
+ h2{font-size:13pt;border-bottom:0.5pt solid #000;padding-bottom:3px;margin-top:18px;}
  p,div{font-size:12pt;line-height:1.35;margin:5px 0;}
  .pagebreak{page-break-before:always;mso-page-break-before:always;}
+ table.scheme-table{font-size:7pt;table-layout:fixed;mso-table-layout-alt:fixed;}
+ table.scheme-table th,table.scheme-table td{padding:1px 2px;}
 </style>
 </head>
 <body>
-<div style='mso-element:header' id='h1'>${headerHTML}</div>
-<div style='mso-element:footer' id='f1'>${footerHTML}</div>
 <div class='Section1'>
 ${bodyHTML}
 </div>
@@ -630,26 +760,45 @@ function loadData(d){
  if(d.books) d.books.forEach(v => addBook(v));
  if(d.web) d.web.forEach(v => addWeb(v));
 
+ // Prepared by (Experts) — supports new dynamic-list format and old fixed-field JSON.
+ let courseExperts = d.courseExperts || [d.courseExpert1, d.courseExpert2].filter(v => v);
+ let industryExperts = d.industryExperts || [d.industryExpert1, d.industryExpert2].filter(v => v);
+ fillDynList('courseExpert', courseExperts);
+ fillDynList('industryExpert', industryExperts);
+
+ // Assessment Methodologies — supports new dynamic-list format and the old single list.
+ let formative = d.formativeAssessment || [];
+ let summative = d.summativeAssessment || (d.assessmentList ? d.assessmentList.map(a => a.text) : (d.assessment ? [d.assessment] : []));
+ fillDynList('formativeAssessment', formative);
+ fillDynList('summativeAssessment', summative);
+
  buildMatrix();
  if(d.matrix) d.matrix.forEach(([key,val])=>{let x=document.querySelector(`[data-m="${key}"]`);if(x)x.value=val});
+ refreshAllLabels();
 }
 
 function clearAll(){if(confirm('Clear all entered data?'))location.reload()}
 
-function tableFrom(id,heads,fn){
- let rows=[...document.querySelectorAll('#'+id+' tbody tr')];
- if(!rows.length)return '';
- return `<table><thead><tr>${heads.map(h=>'<th>'+h+'</th>').join('')}</tr></thead><tbody>${rows.map(fn).join('')}</tbody></table>`;
+function tableFrom(id, heads, fn) {
+    let rows = [...document.querySelectorAll('#' + id + ' tbody tr')];
+    if (!rows.length) return '';
+    // MS Word loves explicit border, cellspacing, and width attributes on tables
+    return `<table border="1" cellspacing="0" cellpadding="5" width="100%" style="border-collapse:collapse; margin-bottom:10px; width:100%;">
+        <thead><tr>${heads.map(h => `<th style="border:0.5pt solid #000; padding:5px; text-align:center;"><b>${h}</b></th>`).join('')}</tr></thead>
+        <tbody>${rows.map(fn).join('')}</tbody>
+    </table>`;
 }
 
-function td(val, align='auto') {
+function td(val, align = 'auto', valign = 'middle') {
     let v = String(val ?? '').trim();
-    if(align === 'auto') {
-        let vText = v.replace(/<[^>]*>?/gm, ''); 
+    if (align === 'auto') {
+        let vText = v.replace(/<[^>]*>?/gm, '');
         align = (vText !== '' && !isNaN(vText)) ? 'center' : 'justify';
     }
-    return `<td style="text-align: ${align}; vertical-align: middle;">${v}</td>`;
+    // Inject both HTML attributes and inline CSS styles to force Word to align properly
+    return `<td align="${align}" valign="${valign}" style="text-align: ${align}; vertical-align: ${valign}; border:0.5pt solid #000; padding:5px;">${v}</td>`;
 }
+
 
 function fmtDate(iso){
  if(!iso) return '';
@@ -675,123 +824,187 @@ function toRoman(num){
  return res;
 }
 
-function buildPaperHTML(d){
- let p='';
+function buildPaperHTML(d) {
+    let p = '';
 
- p+=`<div style="margin-bottom:20px;">`;
- p+=`<div style="margin-bottom:6px;"><b>Programme Name/s :</b> ${esc(d.programme)}</div>`;
- p+=`<div style="margin-bottom:6px;"><b>Programme Code :</b> ${esc(d.programmeCode)}</div>`;
- p+=`<div style="margin-bottom:6px;"><b>Semester :</b> ${esc(d.semester)}</div>`;
- p+=`<div style="margin-bottom:6px;"><b>Course Title :</b> ${esc(d.courseTitle)}</div>`;
- p+=`<div style="margin-bottom:6px;"><b>Course Code :</b> ${esc(d.courseCode)}</div>`;
- p+=`</div>`;
+    // Hardcode table attributes for MS Word
+    const tableStart = `<table border="1" cellspacing="0" cellpadding="5" width="100%" style="border-collapse:collapse; margin-bottom:10px; width:100%;">`;
+    const thStyle = `style="border:0.5pt solid #000; padding:5px; text-align:center; font-weight:bold;"`;
 
- p+=`<h2>I. RATIONALE</h2><p>${esc(d.rationale).replace(/\\n/g,'<br>')}</p>`;
- p+=`<h2>II. INDUSTRY / EMPLOYER EXPECTED OUTCOME</h2><p>${esc(d.employer).replace(/\\n/g,'<br>')}</p>`;
+    p += `<div style="margin-bottom:20px;">`;
+    p += `<div style="margin-bottom:6px;"><b>Programme Name/s :</b> ${esc(d.programme)}</div>`;
+    p += `<div style="margin-bottom:6px;"><b>Programme Code :</b> ${esc(d.programmeCode)}</div>`;
+    p += `<div style="margin-bottom:6px;"><b>Semester :</b> ${esc(d.semester)}</div>`;
+    p += `<div style="margin-bottom:6px;"><b>Course Title :</b> ${esc(d.courseTitle)}</div>`;
+    p += `<div style="margin-bottom:6px;"><b>Course Code :</b> ${esc(d.courseCode)}</div>`;
+    p += `</div>`;
 
- p+=`<h2>III. COURSE LEVEL LEARNING OUTCOMES (COs)</h2>`;
- p+=`<p><i>Students will be able to achieve & demonstrate the following COs on completion of course based learning</i></p>`;
- p+=tableFrom('coTable',['CO','Course Outcome'],r=>`<tr>${td(r.cells[0].textContent, 'center')}${td(esc(r.cells[1].querySelector('textarea').value))}</tr>`);
+    p += `<h2>I. RATIONALE</h2><p>${esc(d.rationale).replace(/\\n/g, '<br>')}</p>`;
+    p += `<h2>II. INDUSTRY / EMPLOYER EXPECTED OUTCOME</h2><p>${esc(d.employer).replace(/\\n/g, '<br>')}</p>`;
 
- p+=`<h2>IV. TEACHING-LEARNING & ASSESSMENT SCHEME</h2>`;
- p+=`<table class="scheme-table">
+    p += `<h2>III. COURSE LEVEL LEARNING OUTCOMES (COs)</h2>`;
+    p += `<p><i>Students will be able to achieve & demonstrate the following COs on completion of course based learning</i></p>`;
+    p += tableFrom('coTable', ['CO', 'Course Outcome'], r => `<tr>${td(r.cells[0].textContent, 'center')}${td(esc(r.cells[1].querySelector('textarea').value))}</tr>`);
+
+    p += `<h2>IV. TEACHING-LEARNING & ASSESSMENT SCHEME</h2>`;
+    // Explicit borders for the complex scheme table. table-layout:fixed + an explicit
+    // colgroup (percentages summing to 100%) keep all 22 columns within the page
+    // margin instead of letting Word size columns to their content and overflow.
+    const schemeColWidths = [6,20,5,6,3,3,3,4,4,4,5,4,4,3,3,3,3,3,3,3,3,5];
+    const schemeColgroup = '<colgroup>' + schemeColWidths.map(w => `<col style="width:${w}%">`).join('') + '</colgroup>';
+    p += `<table border="1" cellspacing="0" cellpadding="2" width="100%" class="scheme-table" style="border-collapse:collapse; width:100%; max-width:100%; table-layout:fixed; mso-table-layout-alt:fixed; font-size:8.5pt;">
+ ${schemeColgroup}
  <thead>
  <tr>
-  <th rowspan="5">Course Code</th><th rowspan="5">Course Title</th><th rowspan="5">Abbr</th><th rowspan="5">Course Category/s</th>
-  <th colspan="5">Learning Scheme</th>
-  <th rowspan="5">Credits</th><th rowspan="5">Paper Duration</th>
-  <th colspan="10">Assessment Scheme</th>
-  <th rowspan="5">Total Marks</th>
+  <th ${thStyle} rowspan="5">Course Code</th><th ${thStyle} rowspan="5">Course Title</th><th ${thStyle} rowspan="5">Abbr</th><th ${thStyle} rowspan="5">Course Category/s</th>
+  <th ${thStyle} colspan="5">Learning Scheme</th>
+  <th ${thStyle} rowspan="5">Credits</th><th ${thStyle} rowspan="5">Paper Duration</th>
+  <th ${thStyle} colspan="10">Assessment Scheme</th>
+  <th ${thStyle} rowspan="5">Total Marks</th>
  </tr>
  <tr>
-  <th colspan="3">Actual Contact Hrs./Week</th><th rowspan="4">SLH</th><th rowspan="4">NLH</th>
-  <th colspan="4">Theory</th><th colspan="4">Based on LL &amp; TL</th><th colspan="2">Based on SL</th>
+  <th ${thStyle} colspan="3">Actual Contact Hrs./Week</th><th ${thStyle} rowspan="4">SLH</th><th ${thStyle} rowspan="4">NLH</th>
+  <th ${thStyle} colspan="4">Theory</th><th ${thStyle} colspan="4">Based on LL &amp; TL</th><th ${thStyle} colspan="2">Based on SL</th>
  </tr>
  <tr>
-  <th rowspan="3">CL</th><th rowspan="3">TL</th><th rowspan="3">LL</th>
-  <th rowspan="2">FA-TH</th><th rowspan="2">SA-TH</th><th rowspan="2" colspan="2">Total</th>
-  <th colspan="4">Practical</th><th rowspan="2" colspan="2">SLA</th>
+  <th ${thStyle} rowspan="3">CL</th><th ${thStyle} rowspan="3">TL</th><th ${thStyle} rowspan="3">LL</th>
+  <th ${thStyle} rowspan="2">FA-TH</th><th ${thStyle} rowspan="2">SA-TH</th><th ${thStyle} rowspan="2" colspan="2">Total</th>
+  <th ${thStyle} colspan="4">Practical</th><th ${thStyle} rowspan="2" colspan="2">SLA</th>
  </tr>
  <tr>
-  <th colspan="2">FA-PR</th><th colspan="2">SA-PR</th>
+  <th ${thStyle} colspan="2">FA-PR</th><th ${thStyle} colspan="2">SA-PR</th>
  </tr>
  <tr>
-  <th>Max</th><th>Max</th><th>Max</th><th>Min</th><th>Max</th><th>Min</th><th>Max</th><th>Min</th><th>Max</th><th>Min</th>
+  <th ${thStyle}>Max</th><th ${thStyle}>Max</th><th ${thStyle}>Max</th><th ${thStyle}>Min</th><th ${thStyle}>Max</th><th ${thStyle}>Min</th><th ${thStyle}>Max</th><th ${thStyle}>Min</th><th ${thStyle}>Max</th><th ${thStyle}>Min</th>
  </tr>
  </thead>
  <tbody><tr>
-  <td>${esc(d.courseCode)}</td><td>${esc(d.courseTitle)}</td><td>${esc(d.abbr)}</td><td>${esc(d.category)}</td>
-  <td>${esc(d.cl)}</td><td>${esc(d.tl)}</td><td>${esc(d.ll)}</td><td>${esc(d.slh)}</td><td>${esc(d.nlh)}</td>
-  <td>${esc(d.credits)}</td><td>${esc(d.duration)}</td>
-  <td>${esc(d.fathMax)}</td><td>${esc(d.sathMax)}</td><td>${esc(d.totalMax)}</td><td>${esc(d.totalMin)}</td>
-  <td>${esc(d.faprMax)}</td><td>${esc(d.faprMin)}</td><td>${esc(d.saprMax)}</td><td>${esc(d.saprMin)}</td>
-  <td>${esc(d.slaMax)}</td><td>${esc(d.slaMin)}</td>
-  <td>${esc(d.totalMarks)}</td>
+  ${td(esc(d.courseCode), 'center', 'middle')}
+  ${td(esc(d.courseTitle), 'center', 'middle')}
+  ${td(esc(d.abbr), 'center', 'middle')}
+  ${td(esc(d.category), 'center', 'middle')}
+  ${td(esc(d.cl), 'center', 'middle')}
+  ${td(esc(d.tl), 'center', 'middle')}
+  ${td(esc(d.ll), 'center', 'middle')}
+  ${td(esc(d.slh), 'center', 'middle')}
+  ${td(esc(d.nlh), 'center', 'middle')}
+  ${td(esc(d.credits), 'center', 'middle')}
+  ${td(esc(d.duration), 'center', 'middle')}
+  ${td(esc(d.fathMax), 'center', 'middle')}
+  ${td(esc(d.sathMax), 'center', 'middle')}
+  ${td(esc(d.totalMax), 'center', 'middle')}
+  ${td(esc(d.totalMin), 'center', 'middle')}
+  ${td(esc(d.faprMax), 'center', 'middle')}
+  ${td(esc(d.faprMin), 'center', 'middle')}
+  ${td(esc(d.saprMax), 'center', 'middle')}
+  ${td(esc(d.saprMin), 'center', 'middle')}
+  ${td(esc(d.slaMax), 'center', 'middle')}
+  ${td(esc(d.slaMin), 'center', 'middle')}
+  ${td(esc(d.totalMarks), 'center', 'middle')}
  </tr></tbody>
  </table>`;
 
- if(d.iksHrs || d.iksExtra) {
-     p+= `<div style="margin-top:10px;">`;
-     if(d.iksHrs) p+= `<b>Total IKS Hrs for Semester:</b> ${esc(d.iksHrs)} Hrs<br>`;
-     if(d.iksExtra) p+= `<b> </b><br>${esc(d.iksExtra).replace(/\\n/g,'<br>')}`;
-     p+= `</div>`;
- }
+    p += `<div style="margin-top:10px;">`;
+    if (d.iksHrs) p += `<b>Total IKS Hrs for Semester:</b> ${esc(d.iksHrs)} Hrs<br>`;
+    p += IKS_NOTE_HTML;
+    p += `</div>`;
 
- p+=`<h2>V. THEORY LEARNING OUTCOMES AND ALIGNED COURSE CONTENT</h2>`;
- p+=`<table><thead><tr><th>Sr.No</th><th>TLOs aligned to COs</th><th>Learning content mapped with TLOs and COs</th><th>Suggested Learning Pedagogies</th></tr></thead><tbody>`;
- d.theory.forEach((t, i) => {
-     let sr = i + 1;
-     let tloStr = t.tlo.filter(x=>x.trim()).map((x, j) => `<div style="margin-bottom:6px"><b>TLO ${sr}.${j+1}</b> ${esc(x)}</div>`).join('');
-     let unitHeading = (t.unitTitle||'').trim() ? `<div style="margin-bottom:8px"><b>Unit - ${toRoman(sr)} ${esc(t.unitTitle)}</b></div>` : '';
-     let contentStr = unitHeading + t.content.filter(x=>x.trim()).map((x, j) => `<div style="margin-bottom:6px"><b>${sr}.${j+1}</b> ${esc(x)}</div>`).join('');
-     let pedStr = esc(t.ped).replace(/\\n/g,'<br>');
-     p += `<tr>${td(sr, 'center')}${td(tloStr)}${td(contentStr)}${td(pedStr)}</tr>`;
- });
- p += `</tbody></table>`;
+    p += `<h2>V. THEORY LEARNING OUTCOMES AND ALIGNED COURSE CONTENT</h2>`;
+    p += `${tableStart}<thead><tr><th ${thStyle}>Sr.No</th><th ${thStyle}>TLOs aligned to COs</th><th ${thStyle}>Learning content mapped with TLOs and COs</th><th ${thStyle}>Suggested Learning Pedagogies</th></tr></thead><tbody>`;
+    d.theory.forEach((t, i) => {
+        let sr = i + 1;
+        let tloStr = t.tlo.filter(x => x.trim()).map((x, j) => `<div style="margin-bottom:6px"><b>TLO ${sr}.${j + 1}</b> ${esc(x)}</div>`).join('');
+        let unitHeading = (t.unitTitle || '').trim() ? `<div style="margin-bottom:8px"><b>Unit - ${toRoman(sr)} ${esc(t.unitTitle)}</b></div>` : '';
+        let contentStr = unitHeading + t.content.filter(x => x.trim()).map((x, j) => `<div style="margin-bottom:6px"><b>${sr}.${j + 1}</b> ${esc(x)}</div>`).join('');
+        let pedStr = esc(t.ped).replace(/\\n/g, '<br>');
+        p += `<tr>${td(sr, 'center', 'top')}${td(tloStr, 'auto', 'top')}${td(contentStr, 'auto', 'top')}${td(pedStr, 'auto', 'middle')}</tr>`;
+    });
+    p += `</tbody></table>`;
 
- p+=`<h2>VI. LABORATORY LEARNING OUTCOME AND ALIGNED PRACTICAL / TUTORIAL EXPERIENCES</h2>`;
- p+=`<table><thead><tr><th>Sr.No</th><th>Laboratory Learning Outcome</th><th>Practical / Tutorial Title</th><th>Hrs</th><th>Relevant COs</th></tr></thead><tbody>`;
- d.lab.forEach((l, i) => {
-     let sr = i + 1;
-     let lloStr = (l.llo||[]).filter(x=>x.trim()).map((x, j) => {
-         return `<div style="margin-bottom:6px"><b>LLO ${sr}.${j+1}</b> ${esc(x)}</div>`;
-     }).join('');
-     let title = l.mand ? `<b>*</b> ${esc(l.title)}` : esc(l.title);
-     p += `<tr>${td(sr, 'center')}${td(lloStr)}${td(title)}${td(esc(l.hrs), 'center')}${td(esc(l.co), 'center')}</tr>`;
- });
- p += `</tbody></table>`;
+    p += `<h2>VI. LABORATORY LEARNING OUTCOME AND ALIGNED PRACTICAL / TUTORIAL EXPERIENCES</h2>`;
+    p += `${tableStart}<thead><tr><th ${thStyle}>Sr.No</th><th ${thStyle}>Laboratory Learning Outcome</th><th ${thStyle}>Practical / Tutorial Title</th><th ${thStyle}>Hrs</th><th ${thStyle}>Relevant COs</th></tr></thead><tbody>`;
+    d.lab.forEach((l, i) => {
+        let sr = i + 1;
+        let lloStr = (l.llo || []).filter(x => x.trim()).map((x, j) => {
+            return `<div style="margin-bottom:6px"><b>LLO ${sr}.${j + 1}</b> ${esc(x)}</div>`;
+        }).join('');
+        let title = l.mand ? `<b>*</b> ${esc(l.title)}` : esc(l.title);
+        p += `<tr>${td(sr, 'center')}${td(lloStr)}${td(title)}${td(esc(l.hrs), 'center')}${td(esc(l.co), 'center')}</tr>`;
+    });
+    p += `</tbody></table>`;
 
- if(d.labExtra) {
-     p+= `<div style="margin-top:10px;"><b> </b><br>${esc(d.labExtra).replace(/\\n/g,'<br>')}</div>`;
- }
+    p += `<div style="margin-top:10px;">${LAB_NOTE_HTML}</div>`;
 
- p+=`<p><b>VII. MICRO PROJECT / ASSIGNMENT / ACTIVITIES</b><br>${esc(d.activities).replace(/\\n/g,'<br>')}</p>`;
- p+=`<h2>VIII. LABORATORY EQUIPMENT / INSTRUMENTS / TOOLS / SOFTWARE REQUIRED</h2>`;
+    p += `<p><b>VII. MICRO PROJECT / ASSIGNMENT / ACTIVITIES</b><br>${esc(d.activities).replace(/\\n/g, '<br>')}</p>`;
+    p += `<h2>VIII. LABORATORY EQUIPMENT / INSTRUMENTS / TOOLS / SOFTWARE REQUIRED</h2>`;
 
- p+=tableFrom('equipmentTable',['Sr.No','Equipment Name with Broad Specifications','Relevant LLO Number'],r=>`<tr>${td(r.cells[0].textContent, 'center')}${td(esc(r.cells[1].querySelector('textarea').value))}${td(esc(r.cells[2].querySelector('input').value), 'center')}</tr>`);
+    p += tableFrom('equipmentTable', ['Sr.No', 'Equipment Name with Broad Specifications', 'Relevant LLO Number'], r => `<tr>${td(r.cells[0].textContent, 'center')}${td(esc(r.cells[1].querySelector('textarea').value))}${td(esc(r.cells[2].querySelector('input').value), 'center')}</tr>`);
 
- p+=`<h2>IX. SUGGESTED WEIGHTAGE TO LEARNING EFFORTS & ASSESSMENT PURPOSE</h2>`;
- p+=`<table><thead><tr><th>Sr.No</th><th>Unit Title</th><th>Aligned COs</th><th>Learning Hours</th><th>R-Level</th><th>U-Level</th><th>A-Level</th><th>Total Marks</th></tr></thead><tbody>`;
- document.querySelectorAll('#weightTable tbody tr').forEach(r=>{
-     p+=`<tr>${td(r.cells[0].textContent, 'center')}${td(esc(r.cells[1].querySelector('input').value))}${[2,3,4,5,6,7].map(i=>td(esc(r.cells[i].querySelector('input').value), 'center')).join('')}</tr>`;
- });
- p+=`</tbody><tfoot><tr><th colspan="3" style="text-align:right">Grand Total:</th><th>${$('gt-hrs').textContent}</th><th>${$('gt-r').textContent}</th><th>${$('gt-u').textContent}</th><th>${$('gt-a').textContent}</th><th>${$('gt-total').textContent}</th></tr></tfoot></table>`;
+    p += `<h2>IX. SUGGESTED WEIGHTAGE TO LEARNING EFFORTS & ASSESSMENT PURPOSE</h2>`;
+    p += `${tableStart}<thead><tr><th ${thStyle}>Sr.No</th><th ${thStyle}>Unit Title</th><th ${thStyle}>Aligned COs</th><th ${thStyle}>Learning Hours</th><th ${thStyle}>R-Level</th><th ${thStyle}>U-Level</th><th ${thStyle}>A-Level</th><th ${thStyle}>Total Marks</th></tr></thead><tbody>`;
+    document.querySelectorAll('#weightTable tbody tr').forEach(r => {
+        p += `<tr>${td(r.cells[0].textContent, 'center')}${td(esc(r.cells[1].querySelector('input').value))}${[2, 3, 4, 5, 6, 7].map(i => td(esc(r.cells[i].querySelector('input').value), 'center')).join('')}</tr>`;
+    });
+    p += `<tr><th colspan="3" style="text-align:right; border:0.5pt solid #000; padding:5px;"><b>Grand Total:</b></th><th ${thStyle}>${$('gt-hrs').textContent}</th><th ${thStyle}>${$('gt-r').textContent}</th><th ${thStyle}>${$('gt-u').textContent}</th><th ${thStyle}>${$('gt-a').textContent}</th><th ${thStyle}>${$('gt-total').textContent}</th></tr></tbody></table>`;
 
- p+=`<h2>X. ASSESSMENT METHODOLOGIES / TOOLS</h2><p>${esc(d.assessment).replace(/\\n/g,'<br>')}</p>`;
- p+=`<h2>XI. SUGGESTED COs - POs MATRIX FORM</h2>`;
- p+=`<table><tr><th>CO</th><th>PO1</th><th>PO2</th><th>PO3</th><th>PO4</th><th>PO5</th><th>PO6</th><th>PO7</th><th>PO8</th><th>PO9</th><th>PO10</th><th>PO11</th><th>PSO1</th><th>PSO2</th><th>PSO3</th></tr>`;
+    p += `<h2>X. ASSESSMENT METHODOLOGIES / TOOLS</h2>`;
+    p += `<h3>Formative assessment (Assessment for Learning)</h3>`;
+    p += listAsTable(d.formativeAssessment, ['Sr.No', 'Methodology / Tool']);
+    p += `<h3>Summative Assessment (Assessment of Learning)</h3>`;
+    p += listAsTable(d.summativeAssessment, ['Sr.No', 'Methodology / Tool']);
 
- document.querySelectorAll('#matrixTable tbody tr').forEach((r,i)=>{p+='<tr>'+td('CO'+(i+1),'center')+[...r.querySelectorAll('input')].map(x=>td(esc(x.value),'center')).join('')+'</tr>'});p+='</table>';
+    p += `<h2>XI. SUGGESTED COs - POs MATRIX FORM</h2>`;
+    p += `${tableStart}<tr><th ${thStyle}>CO</th><th ${thStyle}>PO1</th><th ${thStyle}>PO2</th><th ${thStyle}>PO3</th><th ${thStyle}>PO4</th><th ${thStyle}>PO5</th><th ${thStyle}>PO6</th><th ${thStyle}>PO7</th><th ${thStyle}>PO8</th><th ${thStyle}>PO9</th><th ${thStyle}>PO10</th><th ${thStyle}>PO11</th><th ${thStyle}>PSO1</th><th ${thStyle}>PSO2</th><th ${thStyle}>PSO3</th></tr>`;
 
- p+=`<h2>XII. SUGGESTED LEARNING MATERIALS / BOOKS</h2>`;
- p+=tableFrom('booksTable',['Sr.No','Author','Title','Publisher with ISBN'],r=>`<tr>${td(r.cells[0].textContent, 'center')}${td(esc(r.cells[1].querySelector('textarea').value))}${td(esc(r.cells[2].querySelector('textarea').value))}${td(esc(r.cells[3].querySelector('textarea').value))}</tr>`);
+    document.querySelectorAll('#matrixTable tbody tr').forEach((r, i) => { p += '<tr>' + td('CO' + (i + 1), 'center') + [...r.querySelectorAll('input')].map(x => td(esc(x.value), 'center')).join('') + '</tr>' });
+    p += '</table>';
 
- p+=`<h2>XIII. LEARNING WEBSITES & PORTALS</h2>`;
- p+=tableFrom('webTable',['Sr.No','Link / Portal','Description'],r=>`<tr>${td(r.cells[0].textContent, 'center')}${td(esc(r.cells[1].querySelector('input').value))}${td(esc(r.cells[2].querySelector('textarea').value))}</tr>`);
+    p += `<h2>XII. SUGGESTED LEARNING MATERIALS / BOOKS</h2>`;
+    p += tableFrom('booksTable', ['Sr.No', 'Author', 'Title', 'Publisher with ISBN'], r => `<tr>${td(r.cells[0].textContent, 'center')}${td(esc(r.cells[1].querySelector('textarea').value))}${td(esc(r.cells[2].querySelector('textarea').value))}${td(esc(r.cells[3].querySelector('textarea').value))}</tr>`);
 
+    p += `<h2>XIII. LEARNING WEBSITES & PORTALS</h2>`;
+    {
+        let rows = [...document.querySelectorAll('#webTable tbody tr')];
+        if (rows.length) {
+            p += `${tableStart}<thead><tr><th ${thStyle}>Sr.No</th><th ${thStyle}>Link / Portal</th><th ${thStyle}>QR Code</th><th ${thStyle}>Description</th></tr></thead><tbody>`;
+            rows.forEach(r => {
+                let link = r.querySelector('.web-link').value.trim();
+                let qrCell = link ? `<img src="${qrUrl(link)}" width="90" height="90" alt="QR Code">` : '';
+                p += `<tr>${td(r.cells[0].textContent, 'center')}${td(esc(link))}${td(qrCell, 'center')}${td(esc(r.querySelector('.web-desc').value))}</tr>`;
+            });
+            p += `</tbody></table>`;
+        }
+    }
 
+    p += `<div style="margin-top:20px;"><b>Prepared by:</b></div>`;
+    p += `<div style="margin-top:10px;">${preparedByLines(d)}</div>`;
 
- return p;
+    return p;
+}
+
+// One name per line: Course Experts first, then Industry Experts, numbered in sequence.
+function preparedByLines(d) {
+    let num = 1;
+    let lines = '';
+    (d.courseExperts || []).filter(v => v && v.trim()).forEach(name => {
+        lines += `<div style="margin-bottom:6px;">${num}. Name of Course Expert : ${esc(name)}</div>`;
+        num++;
+    });
+    (d.industryExperts || []).filter(v => v && v.trim()).forEach(name => {
+        lines += `<div style="margin-bottom:6px;">${num}. Name of Industry Expert : ${esc(name)}</div>`;
+        num++;
+    });
+    return lines;
+}
+
+// Renders a simple numbered list (e.g. assessment methodologies) as a Word-friendly table.
+function listAsTable(items, heads) {
+    let list = (items || []).filter(v => v && v.trim());
+    if (!list.length) return '';
+    return `<table border="1" cellspacing="0" cellpadding="5" width="100%" style="border-collapse:collapse; margin-bottom:10px; width:100%;">
+        <thead><tr>${heads.map(h => `<th style="border:0.5pt solid #000; padding:5px; text-align:center;"><b>${h}</b></th>`).join('')}</tr></thead>
+        <tbody>${list.map((v, i) => `<tr>${td(i + 1, 'center')}${td(esc(v))}</tr>`).join('')}</tbody>
+    </table>`;
 }
 
 function showPreview(){
@@ -827,7 +1040,12 @@ $('docDate').value=new Date().toISOString().slice(0,10);
 for(let i=0;i<5;i++)addCO();
 for(let i=0;i<5;i++)addTheory();
 for(let i=0;i<3;i++)addLab();
+initDynList('formativeAssessment',2);
+initDynList('summativeAssessment',2);
+initDynList('courseExpert',2);
+initDynList('industryExpert',2);
 buildMatrix();
+refreshAllLabels();
 </script>
 </body>
 </html>
