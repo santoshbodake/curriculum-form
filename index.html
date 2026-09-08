@@ -1018,11 +1018,11 @@ function preparedByLines(d) {
     let num = 1;
     let lines = '';
     (d.courseExperts || []).filter(v => v && v.trim()).forEach(name => {
-        lines += `<div style="margin-bottom:6px;">${num}. Name of Course Expert : ${esc(name)}</div>`;
+        lines += `<div style="margin-bottom:6px;">${num}. Name of Course Expert: ${esc(name)}</div>`;
         num++;
     });
     (d.industryExperts || []).filter(v => v && v.trim()).forEach(name => {
-        lines += `<div style="margin-bottom:6px;">${num}. Name of Industry Expert : ${esc(name)}</div>`;
+        lines += `<div style="margin-bottom:6px;">${num}. Name of Industry Expert: ${esc(name)}</div>`;
         num++;
     });
     return lines;
