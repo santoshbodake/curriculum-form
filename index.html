@@ -532,7 +532,7 @@ Hours, NLH-Notional Learning Hours, FA - Formative Assessment, SA -Summative ass
 Knowledge System, SLA - Self Learning Assessment
 Legends: @ Internal Assessment, # External Assessment, *# On Line Examination, @$ Internal Online
 Examination
-Note :
+Note:
 1. FA-TH represents average of two class tests of 30 marks each conducted during the semester.
 2. If candidate is not securing minimum passing marks in FA-PR of any course then the candidate shall be
 declared as "Detained" in that semester.
@@ -543,7 +543,7 @@ declared as fail and will have to repeat and resubmit SLA work.
 6. * Self learning hours shall not be reflected in the Time Table.
 7. * Self learning includes micro project / assignment / other activities`.split('\n').join('<br>');
 
-const LAB_NOTE_HTML = `Note : Out of above suggestive LLOs 
+const LAB_NOTE_HTML = `Note: Out of above suggestive LLOs 
 '*' Marked Practicals (LLOs) Are mandatory.
 Minimum 80% of above list of lab experiment are to be performed.
 Judicial mix of LLOs are to be performed to achieve desired outcomes.`.split('\n').join('<br>');
@@ -1044,11 +1044,11 @@ function buildPaperHTML(d) {
     const thStyle = `style="border:0.5pt solid #000; padding:5px; text-align:center; font-weight:bold;"`;
 
     p += `<div style="margin-bottom:20px;">`;
-    p += `<div style="margin-bottom:6px;"><b>Programme Name/s :</b> ${esc(d.programme)}</div>`;
-    p += `<div style="margin-bottom:6px;"><b>Programme Code :</b> ${esc(d.programmeCode)}</div>`;
-    p += `<div style="margin-bottom:6px;"><b>Semester :</b> ${esc(d.semester)}</div>`;
-    p += `<div style="margin-bottom:6px;"><b>Course Title :</b> ${esc(d.courseTitle)}</div>`;
-    p += `<div style="margin-bottom:6px;"><b>Course Code :</b> ${esc(d.courseCode)}</div>`;
+    p += `<div style="margin-bottom:6px;"><b>Programme Name/s:</b> ${esc(d.programme)}</div>`;
+    p += `<div style="margin-bottom:6px;"><b>Programme Code:</b> ${esc(d.programmeCode)}</div>`;
+    p += `<div style="margin-bottom:6px;"><b>Semester:</b> ${esc(d.semester)}</div>`;
+    p += `<div style="margin-bottom:6px;"><b>Course Title:</b> ${esc(d.courseTitle)}</div>`;
+    p += `<div style="margin-bottom:6px;"><b>Course Code:</b> ${esc(d.courseCode)}</div>`;
     p += `</div>`;
 
     p += `<h2>I. RATIONALE</h2><p>${esc(d.rationale).replace(/\\n/g, '<br>')}</p>`;
