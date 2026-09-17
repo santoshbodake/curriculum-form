@@ -1,0 +1,1830 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script>
+/* ===== Access Guard: must be logged in via login.html ===== */
+(function () {
+  try {
+    var auth = JSON.parse(sessionStorage.getItem('autonomy2026_auth') || 'null');
+    if (!auth || !auth.username) {
+      window.location.replace('login.html');
+    }
+  } catch (e) {
+    window.location.replace('login.html');
+  }
+})();
+function logout() {
+  sessionStorage.removeItem('autonomy2026_auth');
+  window.location.replace('login.html');
+}
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title> Autonomy 2026 </title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- JSZip & HTML-to-DOCX conversion libraries -->
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html-docx-js@0.3.1/dist/html-docx.js"></script>
+<style>
+/* ===== Elegant & Colorful Modern UI ===== */
+* { box-sizing: border-box; }
+body { 
+    margin: 0; 
+    font-family: 'Inter', system-ui, -apple-system, sans-serif; 
+    background: linear-gradient(135deg, #f0f4ff 0%, #fdf4ff 50%, #f3f4f6 100%); 
+    color: #1e293b; 
+}
+
+header { 
+    background: linear-gradient(135deg, #4f46e5 0%, #9333ea 50%, #db2777 100%); 
+    color: #fff; 
+    padding: 12px 32px; 
+    position: sticky; 
+    top: 0; 
+    z-index: 10;
+    box-shadow: 0 4px 15px rgba(147, 51, 234, 0.2);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+header h1 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: -0.01em; text-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+header small { opacity: 0.9; font-size: 12px; margin: 0; font-weight: 500; }
+
+.toolbar { 
+    padding: 12px 32px; 
+    background: rgba(255, 255, 255, 0.75); 
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(226, 232, 240, 0.8); 
+    display: flex; 
+    gap: 12px; 
+    flex-wrap: wrap; 
+    align-items: center; 
+    position: sticky; 
+    top: 43px; 
+    z-index: 9;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+}
+
+button { 
+    border: none; 
+    border-radius: 8px; 
+    padding: 10px 20px; 
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer; 
+    background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); 
+    color: #fff;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 12px rgba(124, 58, 237, 0.25);
+}
+button:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(124, 58, 237, 0.4); }
+button:active { transform: translateY(0); }
+
+button.secondary { background: linear-gradient(135deg, #64748b 0%, #475569 100%); box-shadow: 0 4px 12px rgba(100, 116, 139, 0.2); }
+button.secondary:hover { box-shadow: 0 6px 16px rgba(100, 116, 139, 0.35); }
+
+button.green { background: linear-gradient(135deg, #059669 0%, #10b981 100%); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2); }
+button.green:hover { box-shadow: 0 6px 16px rgba(16, 185, 129, 0.35); }
+
+button.red { background: linear-gradient(135deg, #e11d48 0%, #f43f5e 100%); box-shadow: 0 4px 12px rgba(225, 29, 72, 0.2); }
+button.red:hover { box-shadow: 0 6px 16px rgba(225, 29, 72, 0.35); }
+
+.container { max-width: 1280px; margin: 40px auto; padding: 0 24px; }
+
+/* ===== Section Card Themes & Color Strips ===== */
+.card { 
+    background: rgba(255, 255, 255, 0.95); 
+    border: 1px solid rgba(255, 255, 255, 0.5); 
+    border-radius: 16px; 
+    padding: 32px; 
+    margin-bottom: 30px;
+    box-shadow: 0 10px 30px rgba(79, 70, 229, 0.06);
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    backdrop-filter: blur(10px);
+    position: relative; /* Required for the top color strip */
+}
+.card:hover { 
+    box-shadow: 0 16px 40px rgba(147, 51, 234, 0.1); 
+    transform: translateY(-2px);
+}
+
+/* Add the elegant top color strip to every card */
+.card::before {
+    content: '';
+    position: absolute;
+    top: 0; 
+    left: 0; 
+    right: 0;
+    height: 6px;
+    background: var(--card-theme, #4f46e5);
+    border-top-left-radius: 15px; /* Matches inner curve of the card */
+    border-top-right-radius: 15px;
+}
+
+/* Dynamic theme variables for each section */
+.card:nth-child(1) { --card-theme: #f43f5e; } /* Instructions */
+.card:nth-child(2) { --card-theme: #06b6d4; } /* 1. Course Information (Teal like screenshot) */
+.card:nth-child(3) { --card-theme: #3b82f6; } /* 3. COs */
+.card:nth-child(4) { --card-theme: #8b5cf6; } /* 4. Teaching Scheme */
+.card:nth-child(5) { --card-theme: #ec4899; } /* 5. Theory */
+.card:nth-child(6) { --card-theme: #f59e0b; } /* 6. Lab */
+.card:nth-child(7) { --card-theme: #10b981; } /* 7. Micro Project */
+.card:nth-child(8) { --card-theme: #6366f1; } /* 8. Lab Equipment */
+.card:nth-child(9) { --card-theme: #f97316; } /* 9. Weightage */
+.card:nth-child(10) { --card-theme: #14b8a6; } /* 10. Assessment */
+.card:nth-child(11) { --card-theme: #84cc16; } /* 11. Matrix */
+.card:nth-child(12) { --card-theme: #0ea5e9; } /* 12. Books */
+.card:nth-child(13) { --card-theme: #d946ef; } /* 13. Websites */
+.card:nth-child(14) { --card-theme: #eab308; } /* 13. Prepared by */
+.card:nth-child(15) { --card-theme: #64748b; } /* Notes */
+.card:nth-child(16) { --card-theme: #ef4444; } /* 14. QPP */
+
+#instructionsCard {
+    background: linear-gradient(to bottom right, #ffffff, #fdf4ff);
+    border-color: #fbcfe8;
+}
+
+/* Card Titles with matching circular icon */
+.card h2 { 
+    font-size: 20px; 
+    margin: 0 0 24px; 
+    color: #1e293b;
+    border-bottom: 2px solid rgba(241, 245, 249, 0.8); 
+    padding-bottom: 14px;
+    font-weight: 700;
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+/* The hollow circle next to the title */
+.card h2::before {
+    content: '';
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 4px solid var(--card-theme, #4f46e5);
+    border-radius: 50%;
+    background: transparent;
+    flex-shrink: 0;
+}
+/* The accent underline snippet */
+.card h2::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 60px;
+    height: 2px;
+    background: var(--card-theme, #4f46e5);
+    border-radius: 2px;
+}
+
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+.field label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 8px; color: #475569; text-transform: uppercase; letter-spacing: 0.05em; }
+
+input, textarea, select { 
+    width: 100%; 
+    padding: 12px 16px; 
+    border: 1px solid #cbd5e1; 
+    border-radius: 10px; 
+    font-family: inherit;
+    font-size: 14px;
+    background: #f8fafc;
+    color: #1e293b;
+    transition: all 0.3s ease;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
+}
+input:focus, textarea:focus, select:focus {
+    background: #fff;
+    border-color: #9333ea;
+    outline: none;
+    box-shadow: 0 0 0 4px rgba(147, 51, 234, 0.15), inset 0 2px 4px rgba(0,0,0,0.01);
+}
+textarea { min-height: 90px; resize: vertical; line-height: 1.6; }
+.full { grid-column: 1 / -1; }
+
+/* Programme Name/s multi-select dropdown */
+.multiselect { position: relative; }
+.ms-display {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    background: #f8fafc;
+    color: #1e293b;
+    font-size: 14px;
+    cursor: pointer;
+    min-height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    transition: all 0.3s ease;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
+}
+.ms-display:hover { border-color: #94a3b8; background: #fff; }
+.ms-display.open { border-color: #9333ea; box-shadow: 0 0 0 4px rgba(147, 51, 234, 0.15); background: #fff; }
+.ms-display .ms-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ms-display .ms-arrow { flex-shrink: 0; font-size: 12px; color: #64748b; }
+.ms-panel {
+    display: none;
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    right: 0;
+    background: #fff;
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    border-radius: 12px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+    max-height: 280px;
+    overflow-y: auto;
+    padding: 8px;
+    z-index: 30;
+}
+.ms-panel.open { display: block; animation: slideDown 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.ms-option { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 8px; font-size: 14px; cursor: pointer; transition: all 0.2s; }
+.ms-option:hover { background: #f3e8ff; color: #7e22ce; transform: translateX(2px); }
+.ms-option input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; accent-color: #9333ea; flex-shrink: 0; }
+
+.card table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 12px; font-size: 14px; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; }
+.card th, .card td { border-bottom: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0; padding: 10px; vertical-align: middle; }
+.card th:last-child, .card td:last-child { border-right: none; }
+.card tbody tr:last-child td { border-bottom: none; }
+.card th { background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); color: #334155; font-weight: 700; text-align: left; }
+.card td input, .card td textarea, .card td select { border: 1px solid transparent; padding: 8px 6px; background: transparent; width: 100%; border-radius: 6px; }
+.card td input:focus, .card td textarea:focus, .card td select:focus { border: 1px solid #9333ea; background: #fff; box-shadow: 0 0 0 3px rgba(147, 51, 234, 0.1); }
+.card tbody tr { transition: background 0.2s; }
+.card tbody tr:hover { background: #f8fafc; }
+
+/* High-Density Table Fixes (Prevents numbers from getting cut off horizontally) */
+#scheme th, #scheme td { padding: 8px 4px; font-size: 13px; }
+#scheme td input { padding: 8px 2px; min-width: 48px; }
+#matrixTable th, #matrixTable td { padding: 8px 4px; }
+#matrixTable td input { padding: 8px 2px; min-width: 40px; }
+
+.add { 
+    margin-top: 24px; 
+    background: linear-gradient(135deg, rgba(147, 51, 234, 0.05) 0%, rgba(79, 70, 229, 0.05) 100%); 
+    color: #7c3aed; 
+    border: 2px dashed rgba(147, 51, 234, 0.3); 
+    box-shadow: none;
+    width: 100%;
+    padding: 16px;
+    border-radius: 12px;
+    font-size: 14px;
+}
+.add:hover { background: linear-gradient(135deg, rgba(147, 51, 234, 0.1) 0%, rgba(79, 70, 229, 0.1) 100%); border-color: #7c3aed; box-shadow: 0 4px 15px rgba(147, 51, 234, 0.1); transform: translateY(-1px); }
+
+.add-btn { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; margin-top: 10px; font-size: 13px; padding: 8px 14px; border-radius: 8px; cursor: pointer; width: 100%; box-shadow: 0 2px 4px rgba(0,0,0,0.02); font-weight: 600; transition: all 0.2s; }
+.add-btn:hover { background: #e2e8f0; color: #1e293b; border-color: #94a3b8; transform: translateY(-1px); box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+
+.lbl { font-weight: 700; margin-right: 12px; font-size: 13px; align-self: center; width: 75px; text-align: right; white-space: nowrap; color: #64748b; }
+.note { font-size: 13px; color: #64748b; margin-top: 14px; display: block; font-style: italic; }
+.hint { 
+    font-size: 14px; 
+    color: #1e40af; 
+    background: linear-gradient(to right, #eff6ff, #e0e7ff); 
+    border-left: 4px solid #4f46e5; 
+    border-radius: 0 10px 10px 0; 
+    padding: 16px 20px; 
+    margin: 0; 
+    display: flex;
+    align-items: center;
+    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.06);
+}
+
+.checkbox { display: flex; gap: 8px; align-items: center; justify-content: center; }
+.checkbox input { width: 22px; height: 22px; cursor: pointer; accent-color: #db2777; transition: transform 0.2s; }
+.checkbox input:hover { transform: scale(1.15); }
+
+.card td button.red { padding: 6px 12px; font-size: 12px; border-radius: 8px; min-width: 32px; display: inline-flex; justify-content: center; align-items: center; box-shadow: none; }
+.dyn-list button.red { padding: 6px 12px; font-size: 12px; border-radius: 8px; margin-left: 10px; box-shadow: none; }
+
+.preview { display: none; background: #94a3b8; padding: 40px; font-family: "Times New Roman", Times, serif !important; }
+
+/* ===== PDF-style output typography ===== */
+.paper {
+    background: #fff;
+    margin: auto;
+    max-width: 900px;
+    padding: 15mm 15mm;
+    box-shadow: 0 0 8px #333;
+    font-family: "Times New Roman", Times, serif !important;
+    font-size: 12pt !important;
+    text-align: justify;
+}
+.paper * {
+    font-family: "Times New Roman", Times, serif !important;
+}
+.paper h2 {
+    font-size: 12pt !important;
+    border-bottom: 0.5pt solid #000;
+    padding-bottom: 3px;
+    margin-top: 18px;
+    text-align: left;
+    font-weight: bold;
+}
+.paper h3 {
+    font-size: 12pt !important;
+    margin-bottom: 4px;
+    text-align: left;
+    font-weight: bold;
+}
+.paper p, .paper div, .paper span, .paper li {
+    font-size: 12pt !important;
+    line-height: 1.35;
+    margin: 4px 0;
+    text-align: left;
+}
+.paper table {
+    font-size: 12pt !important;
+    width: 100%;
+    border-collapse: collapse;
+    border-color: #000;
+    margin-bottom: 10px;
+}
+.paper th, .paper td {
+    padding: 5px;
+    border: 0.5pt solid #000;
+    vertical-align: middle;
+    text-align: left;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    word-break: break-word;
+    font-size: 12pt !important;
+}
+.paper th { text-align: center; }
+
+/* High-density tables */
+.paper table.scheme-table,
+.paper table.scheme-table th,
+.paper table.scheme-table td {
+     font-size: 9pt !important;
+     line-height: 1.05 !important;
+    padding: 0 1px;
+}
+.paper table.scheme-table, .paper table.scheme-table * { font-weight: normal !important; }
+.paper table.scheme-table th span,
+.paper table.scheme-table td span {
+    font-size: inherit !important;
+    line-height: inherit !important;
+}
+.paper table.scheme-table col:nth-child(1) { width: 5.5% !important; }
+.paper table.scheme-table col:nth-child(2) { width: 10.5% !important; }
+.paper table.scheme-table col:nth-child(3) { width: 4.5% !important; }
+.paper table.scheme-table col:nth-child(4) { width: 8.5% !important; }
+.paper table.scheme-table col:nth-child(5), .paper table.scheme-table col:nth-child(6), .paper table.scheme-table col:nth-child(7) { width: 3% !important; }
+.paper table.scheme-table col:nth-child(8), .paper table.scheme-table col:nth-child(9) { width: 4% !important; }
+.paper table.scheme-table col:nth-child(10) { width: 5.5% !important; }
+.paper table.scheme-table col:nth-child(11) { width: 6.5% !important; }
+.paper table.scheme-table col:nth-child(12), .paper table.scheme-table col:nth-child(13) { width: 3.8% !important; }
+.paper table.scheme-table col:nth-child(14) { width: 4.2% !important; }
+.paper table.scheme-table col:nth-child(15), .paper table.scheme-table col:nth-child(16), .paper table.scheme-table col:nth-child(17), .paper table.scheme-table col:nth-child(18), .paper table.scheme-table col:nth-child(19), .paper table.scheme-table col:nth-child(20), .paper table.scheme-table col:nth-child(21) { width: 3.6% !important; }
+.paper table.scheme-table col:nth-child(22) { width: 5.6% !important; }
+
+.paper table.qpp-table,
+.paper table.qpp-table th,
+.paper table.qpp-table td {
+     font-size: 6.5pt !important;
+     line-height: 1.08 !important;
+     padding: 1px;
+}
+
+.page-table {
+    width: 100%;
+    max-width: 900px;
+    margin: 0 auto;
+    border-collapse: collapse;
+    background: #fff;
+    font-family: "Times New Roman", Times, serif !important;
+}
+.page-table > thead > tr > td, .page-table > tfoot > tr > td, .page-table > tbody > tr > td { padding: 0; border: 0; }
+.msbte-page-header {
+    padding: 4mm 15mm 3mm 15mm;
+    margin-bottom: 15px;
+    border-bottom: 0.5pt solid #000;
+    background: #fff;
+    font-family: "Times New Roman", Times, serif !important;
+    font-size: 12pt !important;
+}
+.msbte-page-footer {
+    padding: 3mm 15mm 4mm 15mm;
+    margin-top: 15px;
+    border-top: 0.5pt solid #000;
+    background: #fff;
+    font-family: "Times New Roman", Times, serif !important;
+    font-size: 12pt !important;
+}
+.hdr-row { display: flex; justify-content: space-between; font-size: 12pt !important; font-weight: bold; font-family: "Times New Roman", Times, serif !important; }
+.hdr-sem { font-size: 12pt !important; font-weight: bold; margin-top: 2px; font-family: "Times New Roman", Times, serif !important; }
+.ftr-row { text-align: center; font-size: 12pt !important; font-weight: bold; font-family: "Times New Roman", Times, serif !important; }
+
+/* Periodic reminder to save data */
+#saveReminder {
+    display: none;
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    max-width: 340px;
+    background: rgba(15, 23, 42, 0.95);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #f8fafc;
+    padding: 20px;
+    border-radius: 16px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+    z-index: 100;
+    font-size: 14px;
+    line-height: 1.5;
+    animation: reminderIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+#saveReminder.show { display: block; }
+#saveReminder b { display: block; margin-bottom: 8px; font-size: 16px; color: #fbbf24; }
+#saveReminder .reminder-actions { margin-top: 16px; display: flex; gap: 12px; }
+#saveReminder button { padding: 8px 16px; font-size: 13px; border-radius: 8px; }
+#saveReminder button.dismiss { background: rgba(255, 255, 255, 0.1); box-shadow: none; color: #e2e8f0; border: 1px solid rgba(255,255,255,0.1); }
+#saveReminder button.dismiss:hover { background: rgba(255, 255, 255, 0.2); color: #fff; }
+@keyframes reminderIn {
+    from { opacity: 0; transform: translateY(20px) scale(0.95); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media(max-width:900px){
+    .grid{grid-template-columns:1fr; gap: 16px;}
+    header { padding: 12px 20px; flex-direction: column; align-items: flex-start; gap: 4px; }
+    .toolbar { padding: 12px 20px; top: 62px; }
+    .container { padding: 0 16px; margin: 24px auto; }
+    .card { padding: 20px; }
+}
+
+@media print{
+ table { page-break-inside: auto; }
+ .paper table:not(.scheme-table):not(.qpp-table) tr { page-break-inside: auto; break-inside: auto; }
+ .paper table.scheme-table tr, .paper table.qpp-table tr { page-break-inside: avoid; break-inside: avoid; }
+ -webkit-print-color-adjust: exact;
+ print-color-adjust: exact;
+ clear: both;
+ float: none;
+ thead { display: table-header-group; }
+ tfoot { display: table-footer-group; }
+ body { background: #fff; font-family: "Times New Roman", Times, serif !important; }
+ header, .toolbar, .container { display: none !important; }
+ .preview { display: block !important; background: #fff; padding: 0; font-family: "Times New Roman", Times, serif !important; }
+ .page-table { max-width: none; font-family: "Times New Roman", Times, serif !important; }
+ .paper { box-shadow: none; max-width: none; margin: 0; padding: 0; font-family: "Times New Roman", Times, serif !important; font-size: 12pt !important; }
+ .paper * { font-family: "Times New Roman", Times, serif !important; }
+ .paper table { font-size: 12pt !important; }
+ .paper th, .paper td { font-size: 12pt !important; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word; }
+ .paper table.scheme-table, .paper table.scheme-table th, .paper table.scheme-table td { font-size: 9pt !important; line-height: 1.05 !important; padding: 1px 2px; }
+ .paper table.scheme-table, .paper table.scheme-table * { font-weight: normal !important; }
+ .paper table.scheme-table th span, .paper table.scheme-table td span { font-size: inherit !important; line-height: inherit !important; }
+ .paper table.qpp-table, .paper table.qpp-table th, .paper table.qpp-table td { font-size: 6.5pt !important; line-height: 1.08 !important; padding: 1px; }
+ .msbte-page-header, .msbte-page-footer { padding-left: 0; padding-right: 0; font-family: "Times New Roman", Times, serif !important; font-size: 12pt !important; }
+ .hdr-row, .ftr-row { font-family: "Times New Roman", Times, serif !important; font-size: 12pt !important; }
+ .msbte-page-footer {
+     margin-top: 6mm;
+     background: #fff;
+ }
+ .pagebreak { page-break-before: always; }
+ @page { size: A4; margin: 15mm; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Curriculum Data Entry System</h1>
+    <small>Developed by Santosh N. Bodake</small>
+  </div>
+  <div style="display:flex; gap:10px; align-items:center;">
+  <button onclick="window.open('scheme.html', '_blank')" style="background: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.5); box-shadow: none; padding: 8px 16px;">
+    Open Scheme Form &#8599;
+  </button>
+  <button onclick="logout()" style="background: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.5); box-shadow: none; padding: 8px 16px;">
+    Logout
+  </button>
+  </div>
+</header>
+<div class="toolbar">
+<button onclick="saveJSON()">Save Data Locally</button>
+<button onclick="loadJSON()">Load Data from Local Drive</button>
+<button class="green" onclick="saveOnline()">Save Online</button>
+<button class="secondary" onclick="loadOnline()">Load Online</button>
+<span id="onlineStatus" class="hint" style="display:none;"></span>
+<button class="green" onclick="showPreview()">Preview / Print</button>
+<button class="secondary" id="editBtn" onclick="exitPreview()" style="display:none;">Back to Edit</button>
+<button class="secondary" onclick="doPrint()">Print / Save PDF</button>
+<button class="secondary" onclick="saveWord()">Save as Word (.docx)</button>
+<button class="red" onclick="clearAll()">Clear</button>
+<span class="hint" id="printHint" style="display:none">Tip: in the Print dialog, enable "Headers and footers" to also get the date/time stamp and automatic "Page X of Y" numbering on every sheet, exactly like the original MSBTE document.</span>
+</div>
+
+<div id="saveReminder">
+<b>Don't forget to save!</b>
+It's been 20 minutes since your last save. Click "Save Data" to avoid losing your work.
+<div class="reminder-actions">
+<button onclick="saveJSON(); dismissSaveReminder();">Save Now</button>
+<button class="dismiss" onclick="dismissSaveReminder()">Dismiss</button>
+</div>
+</div>
+
+<div class="container" id="form">
+
+<div class="card" id="instructionsCard">
+<h2>Instructions — Read Before You Start</h2>
+<ol style="padding-left:20px; line-height:1.8; margin:0;">
+<li><b>Keep the following ready</b> before you begin:
+  <ol type="a" style="line-height:1.8;">
+    <li>Approved Programme Name(s), Program Code, Course Title, Course Code, and Scheme (e.g., K)</li>
+    <li>Course Outcomes (COs), Theory unit-wise content, Lab experiment list, and reference books/websites — ideally drafted in a Word/notepad file first, so you can copy-paste instead of composing on the fly</li>
+    <li>Names &amp; designations of Course Experts and Industry Experts who reviewed this curriculum</li>
+  </ol>
+</li>
+<li><b>Work top to bottom</b> — Section 1 (Course Information) drives auto-fills elsewhere (e.g., selecting Programme Name auto-fills the Program Code), so fill it first.</li>
+<li><b>Use "+ Add" buttons</b> to add more rows wherever needed (COs, Theory units, Lab practicals, Equipment, Books, Websites, Experts, Assessments) — extra blank rows are fine to leave empty; they're skipped in the final document.</li>
+<li><b>Section IX (Weightage table)</b> auto-syncs with Section V (Theory units) — don't fill it separately; just make sure Section V is complete first.</li>
+<li><b>Save your work often</b>:
+  <ol type="a" style="line-height:1.8;">
+    <li><b>Save Data Locally</b> downloads a JSON backup file to your computer.</li>
+    <li><b>Save Online</b> stores your data on the server against your Course Code (fill Course Code before using this).</li>
+    <li><b>Load Data / Load Online</b> lets you resume a previously saved draft — loading will overwrite whatever is currently in the form, so save first if unsure.</li>
+  </ol>
+  You'll get a reminder every 20 minutes if you haven't saved — don't ignore it, refreshing/closing the tab without saving will lose your work.
+</li>
+<li><b>Use Preview / Print</b> to check formatting before finalizing. From there you can:
+  <ol type="a" style="line-height:1.8;">
+    <li><b>Print / Save PDF</b> — enable "Headers and footers" in the print dialog for date-stamp and page numbering.</li>
+    <li><b>Save as Word (.docx)</b> — for an editable .docx copy.</li>
+    <li><b>Clear</b> wipes the entire form — use only when starting fresh, and only after saving your current data.</li>
+  </ol>
+</li>
+<li>Fields marked <b>readonly</b> (like Program Code) are auto-generated — don't try to type in them; fix the source field instead (e.g., Programme Name selection).</li>
+</ol>
+<div class="hint" style="display:block; margin-top:14px; align-items:flex-start;">
+<div><b>Section-specific notes:</b><br>
+&bull; <b>Section IV</b> (Teaching-Learning &amp; Assessment Scheme): Enter contact hours, credits, and marks exactly as per the approved scheme — no validation is applied.<br>
+&bull; <b>Section XI</b> (CO-PO-PSO Matrix): Use standard correlation levels (1/2/3 or blank) consistently across all COs.<br>
+&bull; <b>Section XIV</b> (Question Paper Profile): Fill Unit(T), Level(L: R/U/A), and Marks(M) per bit carefully — the Total Marks should match your Section IV total theory marks.</div>
+</div>
+<button type="button" class="secondary" style="margin-top:14px;" onclick="document.getElementById('instructionsCard').style.display='none'">Got it, hide instructions</button>
+</div>
+
+<div class="card">
+<h2>1. Course Information</h2>
+<div class="grid">
+<div class="field full">
+<label>Programme Name/s</label>
+<div class="multiselect" id="programmeMultiselect">
+    <div class="ms-display" id="programmeDisplay" onclick="toggleProgrammeDropdown(event)"><span class="ms-text">Select Programme(s)...</span><span class="ms-arrow">&#9662;</span></div>
+    <div class="ms-panel" id="programmePanel"></div>
+</div>
+<input type="hidden" id="programme">
+</div>
+<div class="field full"><label>Program Code:</label><input id="programmeCode" readonly></div>
+<div class="field"><label>Semester :</label><select id="semester">
+    <option value="">Select Semester...</option>
+    <option value="First">First</option>
+    <option value="Second">Second</option>
+    <option value="Third">Third</option>
+    <option value="Fourth">Fourth</option>
+    <option value="Fifth">Fifth</option>
+    <option value="Sixth">Sixth</option>
+</select></div>
+<div class="field"><label>Scheme (e.g. K)</label><input id="curriculumScheme" value="K"></div>
+<div class="field"><label>Course Title</label><input id="courseTitle"></div>
+<div class="field"><label>Course Code</label><input id="courseCode"></div>
+<div class="field"><label>Course Category / Abbreviation</label><input id="category" value="DSC"></div>
+<div class="field"><label>Abbr (short course code, e.g. IRO)</label><input id="abbr"></div>
+
+<div class="field full"><label>1. I. Rationale</label><textarea id="rationale"></textarea></div>
+<div class="field full"><label>2. II. Industry / Employer Expected Outcome</label><textarea id="employer"></textarea></div>
+</div>
+</div>
+
+<div class="card">
+<h2>3. III. Course Level Learning Outcomes (COs)</h2>
+<table id="coTable"><thead><tr><th style="width:12%">CO</th><th>Course Outcome</th><th style="width:50px;text-align:center;">Del.</th></tr></thead><tbody></tbody></table>
+<button class="add" onclick="addCO()">+ Add CO</button>
+</div>
+
+<div class="card">
+<h2>4. IV. Teaching-Learning & Assessment Scheme</h2>
+<div style="overflow-x:auto;">
+<table id="scheme">
+<thead>
+<tr>
+<th colspan="5" style="text-align:center;">Learning Scheme</th>
+<th rowspan="5" style="text-align:center;">Credits</th>
+<th rowspan="5" style="text-align:center;">Paper Duration</th>
+<th colspan="10" style="text-align:center;">Assessment Scheme</th>
+<th rowspan="5" style="text-align:center;">Total Marks</th>
+</tr>
+<tr>
+<th colspan="3" style="text-align:center;">Actual Contact Hrs./Week</th>
+<th rowspan="4" style="text-align:center;">SLH</th>
+<th rowspan="4" style="text-align:center;">NLH</th>
+<th colspan="4" style="text-align:center;">Theory</th>
+<th colspan="4" style="text-align:center;">Based on LL &amp; TL</th>
+<th colspan="2" style="text-align:center;">Based on SL</th>
+</tr>
+<tr>
+<th rowspan="3" style="text-align:center;">CL</th>
+<th rowspan="3" style="text-align:center;">TL</th>
+<th rowspan="3" style="text-align:center;">LL</th>
+<th rowspan="2" style="text-align:center;">FA-TH</th>
+<th rowspan="2" style="text-align:center;">SA-TH</th>
+<th rowspan="2" colspan="2" style="text-align:center;">Total</th>
+<th colspan="4" style="text-align:center;">Practical</th>
+<th rowspan="2" colspan="2" style="text-align:center;">SLA</th>
+</tr>
+<tr>
+<th colspan="2" style="text-align:center;">FA-PR</th>
+<th colspan="2" style="text-align:center;">SA-PR</th>
+</tr>
+<tr>
+<th style="text-align:center;">Max</th><th style="text-align:center;">Max</th><th style="text-align:center;">Max</th><th style="text-align:center;">Min</th><th style="text-align:center;">Max</th><th style="text-align:center;">Min</th><th style="text-align:center;">Max</th><th style="text-align:center;">Min</th><th style="text-align:center;">Max</th><th style="text-align:center;">Min</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><input id="cl" style="text-align:center;"></td><td><input id="tl" style="text-align:center;"></td><td><input id="ll" style="text-align:center;"></td><td><input id="slh" style="text-align:center;"></td><td><input id="nlh" style="text-align:center;"></td><td><input id="credits" style="text-align:center;"></td>
+<td><input id="duration" style="text-align:center;"></td>
+<td><input id="fathMax" style="text-align:center;"></td><td><input id="sathMax" style="text-align:center;"></td><td><input id="totalMax" style="text-align:center;"></td><td><input id="totalMin" style="text-align:center;"></td>
+<td><input id="faprMax" style="text-align:center;"></td><td><input id="faprMin" style="text-align:center;"></td><td><input id="saprMax" style="text-align:center;"></td><td><input id="saprMin" style="text-align:center;"></td>
+<td><input id="slaMax" style="text-align:center;"></td><td><input id="slaMin" style="text-align:center;"></td>
+<td><input id="totalMarks" style="text-align:center;font-weight:bold;"></td>
+</tr></tbody></table>
+</div>
+<div class="grid" style="margin-top: 20px;">
+    <div class="field">
+        <label>Total IKS Hrs for Semester (Hrs)</label>
+        <input id="iksHrs" type="number" placeholder="Enter hours">
+    </div>
+</div>
+<p class="note">The Abbreviations, Legends and Notes block is printed automatically after this section — no input needed.</p>
+</div>
+
+<div class="card">
+<h2>5. V. Theory Learning Outcomes and Aligned Course Content</h2>
+<table id="theoryTable"><thead><tr><th style="width:50px;text-align:center;">Sr.</th><th>TLOs aligned to COs</th><th>Learning Content mapped with TLOs and COs</th><th>Suggested Learning Pedagogies</th><th style="width:50px;text-align:center;">Del.</th></tr></thead><tbody></tbody></table>
+<button class="add" onclick="addTheory()">+ Add Unit / Chapter Row</button>
+</div>
+
+<div class="card">
+<h2>6. VI. Laboratory Learning Outcome and Practical / Tutorial Experiences</h2>
+<table id="labTable"><thead><tr><th style="text-align:center;">Sr.</th><th>Laboratory Learning Outcome (LLO)</th><th>Practical / Tutorial Title</th><th style="text-align:center;">Hours</th><th style="text-align:center;">Relevant COs</th><th style="text-align:center;">Mandatory?</th><th style="text-align:center;">Del.</th></tr></thead><tbody></tbody></table>
+<button class="add" onclick="addLab()">+ Add Practical</button>
+<p class="note">A standard note about mandatory LLOs and minimum lab coverage is printed automatically after this section — no input needed.</p>
+</div>
+
+<div class="card">
+<h2>7. VII. Micro Project / Assignment / Activities</h2>
+<textarea id="activities" style="width:100%;min-height:120px"></textarea>
+</div>
+
+<div class="card">
+<h2>8. VIII. Laboratory Equipment / Instruments / Tools / Software</h2>
+<table id="equipmentTable"><thead><tr><th style="text-align:center;width:50px;">Sr.</th><th>Equipment Name with Broad Specifications</th><th style="text-align:center;width:150px;">Relevant LLO Number</th><th style="text-align:center;width:50px;">Del.</th></tr></thead><tbody></tbody></table>
+<button class="add" onclick="addEquipment()">+ Add Equipment</button>
+</div>
+
+<div class="card">
+<h2>9. IX. Suggested Weightage to Learning Efforts & Assessment Purpose</h2>
+<table id="weightTable">
+<thead>
+<tr>
+<th style="text-align:center;width:50px;">Sr.</th><th>Unit Title</th><th style="text-align:center;width:120px;">Aligned COs</th><th style="text-align:center;width:120px;">Learning Hours</th><th style="text-align:center;width:80px;">R-Level</th><th style="text-align:center;width:80px;">U-Level</th><th style="text-align:center;width:80px;">A-Level</th><th style="text-align:center;width:100px;">Total Marks</th>
+</tr>
+</thead>
+<tbody></tbody>
+<tfoot>
+<tr>
+<th colspan="3" style="text-align:right">Grand Total:</th>
+<th id="gt-hrs" style="text-align:center;font-weight:bold;">0</th>
+<th id="gt-r" style="text-align:center;font-weight:bold;">0</th>
+<th id="gt-u" style="text-align:center;font-weight:bold;">0</th>
+<th id="gt-a" style="text-align:center;font-weight:bold;">0</th>
+<th id="gt-total" style="text-align:center;font-weight:bold;">0</th>
+</tr>
+</tfoot>
+</table>
+<p class="note">Rows are automatically synced with Section V (Theory Learning Outcomes).</p>
+</div>
+
+<div class="card">
+<h2>10. X. Assessment Methodologies / Tools</h2>
+<div class="field">
+<label>Formative assessment (Assessment for Learning)</label>
+<div class="dyn-list" data-type="formativeAssessment"></div>
+<button type="button" class="add-btn" onclick="addDynItem(this)">+ Add Formative Assessment</button>
+</div>
+<div class="field" style="margin-top:16px;">
+<label>Summative Assessment (Assessment of Learning)</label>
+<div class="dyn-list" data-type="summativeAssessment"></div>
+<button type="button" class="add-btn" onclick="addDynItem(this)">+ Add Summative Assessment</button>
+</div>
+</div>
+
+<div class="card">
+<h2>11. XI. COs - POs - PSOs Matrix</h2>
+<div style="overflow-x:auto;">
+<table id="matrixTable"><thead><tr><th style="text-align:center;">CO</th><th style="text-align:center;">PO1</th><th style="text-align:center;">PO2</th><th style="text-align:center;">PO3</th><th style="text-align:center;">PO4</th><th style="text-align:center;">PO5</th><th style="text-align:center;">PO6</th><th style="text-align:center;">PO7</th><th style="text-align:center;">PO8</th><th style="text-align:center;">PO9</th><th style="text-align:center;">PO10</th><th style="text-align:center;">PO11</th><th style="text-align:center;">PSO1</th><th style="text-align:center;">PSO2</th><th style="text-align:center;">PSO3</th></tr></thead><tbody></tbody></table>
+</div>
+</div>
+
+<div class="card">
+<h2>12. XII. Suggested Learning Materials / Books</h2>
+<table id="booksTable"><thead><tr><th style="text-align:center;width:50px;">Sr.</th><th>Author</th><th>Title</th><th>Publisher / ISBN</th><th style="text-align:center;width:50px;">Del.</th></tr></thead><tbody></tbody></table>
+<button class="add" onclick="addBook()">+ Add Book</button>
+</div>
+
+<div class="card">
+<h2>13. XIII. Learning Websites & Portals</h2>
+<table id="webTable"><thead><tr><th style="text-align:center;width:50px;">Sr.</th><th>Link / Portal</th><th style="text-align:center;width:100px;">QR Code</th><th>Description</th><th style="text-align:center;width:50px;">Del.</th></tr></thead><tbody></tbody></table>
+<button class="add" onclick="addWeb()">+ Add Website</button>
+</div>
+
+<div class="card">
+<h2>13. Prepared by</h2>
+<div class="field">
+<label>Course Expert — Designation & Name</label>
+<div class="dyn-list" data-type="courseExpert"></div>
+<button type="button" class="add-btn" onclick="addDynItem(this)">+ Add Course Expert</button>
+</div>
+<div class="field" style="margin-top:16px;">
+<label>Industry Expert — Designation & Name</label>
+<div class="dyn-list" data-type="industryExpert"></div>
+<button type="button" class="add-btn" onclick="addDynItem(this)">+ Add Industry Expert</button>
+</div>
+</div>
+
+<div class="card">
+<h2>Document Notes / Footer</h2>
+<div class="grid">
+<div class="field full"><label>Institute Name (shown once, at end of document)</label><input id="instituteName" value="Sharad Institute of Technology, Polytechnic, Yadrav"></div>
+</div>
+</div>
+
+<div class="card">
+<h2>14. XIV. Question Paper Profile (QPP)</h2>
+<div style="overflow-x:auto;">
+<table style="font-size:12px;">
+<thead>
+<tr>
+<th rowspan="2" style="text-align:center;">Category</th>
+<th colspan="3" style="text-align:center;">Bit 1</th>
+<th colspan="3" style="text-align:center;">Bit 2</th>
+<th colspan="3" style="text-align:center;">Bit 3</th>
+<th colspan="3" style="text-align:center;">Bit 4</th>
+<th colspan="3" style="text-align:center;">Bit 5</th>
+<th colspan="3" style="text-align:center;">Bit 6</th>
+<th colspan="3" style="text-align:center;">Bit 7</th>
+<th rowspan="2" style="text-align:center;">Options</th>
+<th rowspan="2" style="text-align:center;">Marks</th>
+</tr>
+<tr>
+<th style="text-align:center;">T</th><th style="text-align:center;">L</th><th style="text-align:center;">M</th>
+<th style="text-align:center;">T</th><th style="text-align:center;">L</th><th style="text-align:center;">M</th>
+<th style="text-align:center;">T</th><th style="text-align:center;">L</th><th style="text-align:center;">M</th>
+<th style="text-align:center;">T</th><th style="text-align:center;">L</th><th style="text-align:center;">M</th>
+<th style="text-align:center;">T</th><th style="text-align:center;">L</th><th style="text-align:center;">M</th>
+<th style="text-align:center;">T</th><th style="text-align:center;">L</th><th style="text-align:center;">M</th>
+<th style="text-align:center;">T</th><th style="text-align:center;">L</th><th style="text-align:center;">M</th>
+</tr>
+</thead>
+<tbody>
+<tr><td style="text-align:center;font-weight:600;">1</td><td style="text-align:center;"><select id="qppT_1_1" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_1_1" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_1_1" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_1_2" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_1_2" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_1_2" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_1_3" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_1_3" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_1_3" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_1_4" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_1_4" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_1_4" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_1_5" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_1_5" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_1_5" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_1_6" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_1_6" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_1_6" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_1_7" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_1_7" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_1_7" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><input id="qppOpt_1" style="width:64px;text-align:center;padding:4px;" placeholder="5(7)"></td><td style="text-align:center;"><input id="qppMarks_1" style="width:72px;text-align:center;padding:4px;" placeholder="10(14)"></td></tr><tr><td style="text-align:center;font-weight:600;">2</td><td style="text-align:center;"><select id="qppT_2_1" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_2_1" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_2_1" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_2_2" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_2_2" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_2_2" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_2_3" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_2_3" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_2_3" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_2_4" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_2_4" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_2_4" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_2_5" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_2_5" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_2_5" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_2_6" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_2_6" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_2_6" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_2_7" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_2_7" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_2_7" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><input id="qppOpt_2" style="width:64px;text-align:center;padding:4px;" placeholder="5(7)"></td><td style="text-align:center;"><input id="qppMarks_2" style="width:72px;text-align:center;padding:4px;" placeholder="10(14)"></td></tr><tr><td style="text-align:center;font-weight:600;">3</td><td style="text-align:center;"><select id="qppT_3_1" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_3_1" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_3_1" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_3_2" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_3_2" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_3_2" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_3_3" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_3_3" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_3_3" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_3_4" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_3_4" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_3_4" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_3_5" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_3_5" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_3_5" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_3_6" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_3_6" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_3_6" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_3_7" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_3_7" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_3_7" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><input id="qppOpt_3" style="width:64px;text-align:center;padding:4px;" placeholder="5(7)"></td><td style="text-align:center;"><input id="qppMarks_3" style="width:72px;text-align:center;padding:4px;" placeholder="10(14)"></td></tr><tr><td style="text-align:center;font-weight:600;">4</td><td style="text-align:center;"><select id="qppT_4_1" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_4_1" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_4_1" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_4_2" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_4_2" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_4_2" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_4_3" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_4_3" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_4_3" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_4_4" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_4_4" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_4_4" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_4_5" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_4_5" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_4_5" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_4_6" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_4_6" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_4_6" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_4_7" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_4_7" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_4_7" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><input id="qppOpt_4" style="width:64px;text-align:center;padding:4px;" placeholder="5(7)"></td><td style="text-align:center;"><input id="qppMarks_4" style="width:72px;text-align:center;padding:4px;" placeholder="10(14)"></td></tr><tr><td style="text-align:center;font-weight:600;">5</td><td style="text-align:center;"><select id="qppT_5_1" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_5_1" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_5_1" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_5_2" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_5_2" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_5_2" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_5_3" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_5_3" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_5_3" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_5_4" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_5_4" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_5_4" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_5_5" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_5_5" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_5_5" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_5_6" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_5_6" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_5_6" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_5_7" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_5_7" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_5_7" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><input id="qppOpt_5" style="width:64px;text-align:center;padding:4px;" placeholder="5(7)"></td><td style="text-align:center;"><input id="qppMarks_5" style="width:72px;text-align:center;padding:4px;" placeholder="10(14)"></td></tr><tr><td style="text-align:center;font-weight:600;">6</td><td style="text-align:center;"><select id="qppT_6_1" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_6_1" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_6_1" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_6_2" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_6_2" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_6_2" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_6_3" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_6_3" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_6_3" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_6_4" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_6_4" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_6_4" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_6_5" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_6_5" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_6_5" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_6_6" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_6_6" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_6_6" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><select id="qppT_6_7" style="width:40px;text-align:center;padding:2px;"><option value="">-</option></select></td><td style="text-align:center;"><select id="qppL_6_7" style="width:48px;text-align:center;padding:2px;"><option value="">-</option><option value="R">R</option><option value="U">U</option><option value="A">A</option></select></td><td style="text-align:center;"><input id="qppM_6_7" style="width:30px;text-align:center;padding:4px;"></td><td style="text-align:center;"><input id="qppOpt_6" style="width:64px;text-align:center;padding:4px;" placeholder="5(7)"></td><td style="text-align:center;"><input id="qppMarks_6" style="width:72px;text-align:center;padding:4px;" placeholder="10(14)"></td></tr>
+</tbody>
+<tfoot>
+<tr><td colspan="23" style="text-align:center;"><b>Total</b></td><td style="text-align:center;"><input id="qppTotalMarks" style="width:72px;text-align:center;padding:4px;" placeholder="70(102)"></td></tr>
+</tfoot>
+</table>
+</div>
+<div class="hint" style="display:block; margin-top:14px;">
+<b>Legends</b><br>
+T= Unit Number (Topic and Sub - Topics) &nbsp;&nbsp;&nbsp; L= Level of Question &nbsp;&nbsp;&nbsp; M= Marks<br>
+R= Remembering &nbsp;&nbsp;&nbsp; U= Understanding &nbsp;&nbsp;&nbsp; A= Application and above
+</div>
+<span class="note">In "Options": first digit = compulsory questions, digit in brackets = total number of questions offered. In "Marks": first two digits = compulsory marks, digits in brackets = marks with option.</span>
+</div>
+
+</div>
+
+<div class="preview" id="preview">
+<table class="page-table">
+<thead><tr><td><div class="msbte-page-header" id="pageHeader"></div></td></tr></thead>
+<tfoot><tr><td><div class="msbte-page-footer" id="pageFooter"></div></td></tr></tfoot>
+<tbody><tr><td><div class="paper" id="paper"></div></td></tr></tbody>
+</table>
+</div>
+
+<datalist id="assessmentOptions">
+    <option value="Written Test">
+    <option value="Practical Exam">
+    <option value="Micro-Project">
+    <option value="Assignment">
+    <option value="Oral / Viva-voce">
+    <option value="Presentation / Seminar">
+    <option value="Quiz / Objective Test">
+</datalist>
+
+<script>
+const $=id=>document.getElementById(id);
+function esc(v){return String(v??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+
+const IKS_NOTE_HTML = `Abbreviations: CL- Class Room Learning, TL- Tutorial Learning, LL-Laboratory Learning, SLH-Self Learning
+Hours, NLH-Notional Learning Hours, FA - Formative Assessment, SA -Summative assessment, IKS - Indian
+Knowledge System, SLA - Self Learning Assessment
+Legends: @ Internal Assessment, # External Assessment, *# On Line Examination, @$ Internal Online
+Examination
+Note:
+1. FA-TH represents average of two class tests of 30 marks each conducted during the semester.
+2. If candidate is not securing minimum passing marks in FA-PR of any course then the candidate shall be
+declared as "Detained" in that semester.
+3. If candidate is not securing minimum passing marks in SLA of any course, then the candidate shall be
+declared as fail and will have to repeat and resubmit SLA work.
+4. Notional Learning hours for the semester are (CL+LL+TL+SL) hrs.* 10 Weeks
+5. 1 credit is equivalent to 30 Notional hrs.
+6. * Self learning hours shall not be reflected in the Time Table.
+7. * Self learning includes micro project / assignment / other activities`.split('\n').join('<br>');
+
+const LAB_NOTE_HTML = `Note: Out of above suggestive LLOs 
+'*' Marked Practicals (LLOs) Are mandatory.
+Minimum 80% of above list of lab experiment are to be performed.
+Judicial mix of LLOs are to be performed to achieve desired outcomes.`.split('\n').join('<br>');
+
+function rowButton(){return `<button type="button" class="red" onclick="this.closest('tr').remove();renumber()">X</button>`}
+
+const DYN_LIST_SUGGESTIONS = { formativeAssessment: 'assessmentOptions', summativeAssessment: 'assessmentOptions' };
+const EXPERT_TYPES = ['courseExpert', 'industryExpert'];
+
+function dynRowHTML(value = '', type = '', designation = '') {
+    if (EXPERT_TYPES.includes(type)) {
+        return `<div style="display:flex;margin-bottom:6px;gap:6px;"><span class="lbl"></span><input class="expert-name" value="${esc(value)}" placeholder="Name" style="flex:2" autocomplete="off"><input class="expert-designation" value="${esc(designation)}" placeholder="Designation" style="flex:1" autocomplete="off"><button type="button" class="red" onclick="removeDynRow(this)">X</button></div>`;
+    }
+    let listAttr = DYN_LIST_SUGGESTIONS[type] ? ` list="${DYN_LIST_SUGGESTIONS[type]}"` : '';
+    return `<div style="display:flex;margin-bottom:6px"><span class="lbl"></span><input value="${esc(value)}" style="flex:1"${listAttr}><button type="button" class="red" onclick="removeDynRow(this)">X</button></div>`;
+}
+
+function removeDynRow(btn) {
+    btn.parentElement.remove();
+    refreshAllLabels();
+}
+
+function addDynItem(btn) {
+    let list = btn.previousElementSibling;
+    list.insertAdjacentHTML('beforeend', dynRowHTML('', list.dataset.type));
+    refreshAllLabels();
+}
+
+function fillDynList(type, values) {
+    let list = document.querySelector(`.dyn-list[data-type="${type}"]`);
+    if (!list) return;
+    list.innerHTML = '';
+    (values && values.length ? values : ['']).forEach(v => {
+        if (EXPERT_TYPES.includes(type)) {
+            let name = (v && typeof v === 'object') ? (v.name || '') : (v || '');
+            let designation = (v && typeof v === 'object') ? (v.designation || '') : '';
+            list.insertAdjacentHTML('beforeend', dynRowHTML(name, type, designation));
+        } else {
+            list.insertAdjacentHTML('beforeend', dynRowHTML(v, type));
+        }
+    });
+}
+
+function initDynList(type, count = 1) {
+    let list = document.querySelector(`.dyn-list[data-type="${type}"]`);
+    if (!list) return;
+    for (let i = 0; i < count; i++) list.insertAdjacentHTML('beforeend', dynRowHTML('', type));
+}
+
+function updateDynamicLabels() {
+    document.querySelectorAll('#theoryTable tbody > tr').forEach((tr, i) => {
+        let unitNo = i + 1;
+        if (tr.cells[0]) tr.cells[0].textContent = unitNo;
+        tr.querySelectorAll('.dyn-list[data-type="tlo"] > div').forEach((div, j) => {
+            div.querySelector('.lbl').textContent = `TLO ${unitNo}.${j + 1} `;
+        });
+        tr.querySelectorAll('.dyn-list[data-type="content"] > div').forEach((div, j) => {
+            div.querySelector('.lbl').textContent = `${unitNo}.${j + 1} `;
+        });
+    });
+}
+
+function updateLabLabels() {
+    document.querySelectorAll('#labTable tbody > tr').forEach((tr, i) => {
+        let sr = i + 1;
+        tr.querySelectorAll('.dyn-list[data-type="llo"] > div').forEach((div, j) => {
+            div.querySelector('.lbl').textContent = `LLO ${sr}.${j + 1} `;
+        });
+    });
+}
+
+function updateExpertLabels() {
+    let num = 1;
+    ['courseExpert', 'industryExpert'].forEach(type => {
+        document.querySelectorAll(`.dyn-list[data-type="${type}"] > div`).forEach(div => {
+            div.querySelector('.lbl').textContent = `${num}. `;
+            num++;
+        });
+    });
+}
+
+function updateAssessmentLabels() {
+    ['formativeAssessment', 'summativeAssessment'].forEach(type => {
+        document.querySelectorAll(`.dyn-list[data-type="${type}"] > div`).forEach((div, i) => {
+            div.querySelector('.lbl').textContent = `${i + 1}. `;
+        });
+    });
+}
+
+function refreshAllLabels() {
+    updateDynamicLabels();
+    updateLabLabels();
+    updateExpertLabels();
+    updateAssessmentLabels();
+}
+
+function addCO(v=''){let n=document.querySelectorAll('#coTable tbody tr').length+1; $('coTable').querySelector('tbody').insertAdjacentHTML('beforeend',`<tr><td style="text-align:center;font-weight:600;">CO${n}</td><td><textarea>${esc(v)}</textarea></td><td style="text-align:center;">${rowButton()}</td></tr>`);renumber()}
+
+function addTheory(d={}){
+    let tlos = Array.isArray(d.tlo) ? d.tlo : (d.tlo ? d.tlo.split('\n') : ['']);
+    let contents = Array.isArray(d.content) ? d.content : (d.content ? d.content.split('\n') : ['']);
+
+    let tloHTML = `<div class="dyn-list" data-type="tlo">` + tlos.map(v => dynRowHTML(v)).join('') + `</div><button type="button" class="add-btn" onclick="addDynItem(this)">+ TLO</button>`;
+
+    let contentHTML = `<input class="unit-title" oninput="syncWeightage()" placeholder="Chapter / Unit name" value="${esc(d.unitTitle||'')}" style="font-weight:bold;margin-bottom:8px; border-bottom-width: 2px;">` + `<div class="dyn-list" data-type="content">` + contents.map(v => dynRowHTML(v)).join('') + `</div><button type="button" class="add-btn" onclick="addDynItem(this)">+ Topic</button>`;
+
+    $('theoryTable').querySelector('tbody').insertAdjacentHTML('beforeend',
+    `<tr>
+        <td style="text-align:center;font-weight:600;vertical-align:top;"></td>
+        <td style="vertical-align:top">${tloHTML}</td>
+        <td style="vertical-align:top">${contentHTML}</td>
+        <td style="vertical-align:top"><textarea style="height:100%; min-height:100px;">${esc(d.ped||'')}</textarea></td>
+        <td style="text-align:center;vertical-align:top;">${rowButton()}</td>
+    </tr>`);
+    updateDynamicLabels();
+    syncWeightage();
+}
+
+function addLab(d={}){
+    let n=document.querySelectorAll('#labTable tbody tr').length+1;
+    let llos = Array.isArray(d.llo) ? d.llo : (d.llo ? [d.llo] : ['']);
+    let lloHTML = `<div class="dyn-list" data-type="llo">` + llos.map(v => dynRowHTML(v)).join('') + `</div><button type="button" class="add-btn" onclick="addDynItem(this)">+ LLO</button>`;
+    $('labTable').querySelector('tbody').insertAdjacentHTML('beforeend',
+    `<tr>
+        <td style="text-align:center;font-weight:600;">${n}</td>
+        <td style="vertical-align:top">${lloHTML}</td>
+        <td style="vertical-align:top"><textarea class="lab-title">${esc(d.title||'')}</textarea></td>
+        <td style="vertical-align:top"><input class="lab-hrs" style="text-align:center;" value="${esc(d.hrs||'')}"></td>
+        <td style="vertical-align:top"><input class="lab-co" style="text-align:center;" value="${esc(d.co||'')}"></td>
+        <td class="checkbox" style="vertical-align:top"><input type="checkbox" class="lab-mand" ${d.mand?'checked':''}></td>
+        <td style="text-align:center;vertical-align:top;">${rowButton()}</td>
+    </tr>`);
+    updateLabLabels();
+}
+function addEquipment(d={}){let n=document.querySelectorAll('#equipmentTable tbody tr').length+1;$('equipmentTable').querySelector('tbody').insertAdjacentHTML('beforeend',`<tr><td style="text-align:center;font-weight:600;">${n}</td><td><textarea>${esc(d.name||'')}</textarea></td><td><input style="text-align:center;" value="${esc(d.llo||'')}"></td><td style="text-align:center;">${rowButton()}</td></tr>`)}
+function addBook(d={}){let n=document.querySelectorAll('#booksTable tbody tr').length+1;$('booksTable').querySelector('tbody').insertAdjacentHTML('beforeend',`<tr><td style="text-align:center;font-weight:600;">${n}</td><td><textarea>${esc(d.author||'')}</textarea></td><td><textarea>${esc(d.title||'')}</textarea></td><td><textarea>${esc(d.pub||'')}</textarea></td><td style="text-align:center;">${rowButton()}</td></tr>`)}
+function qrUrl(v){return 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data='+encodeURIComponent(v)}
+function updateWebQR(input){
+    let img = input.closest('tr').querySelector('.web-qr');
+    let v = input.value.trim();
+    if(v){ img.src = qrUrl(v); img.style.display=''; } else { img.removeAttribute('src'); img.style.display='none'; }
+}
+function addWeb(d={}){
+    let n=document.querySelectorAll('#webTable tbody tr').length+1;
+    let link = d.link||'';
+    $('webTable').querySelector('tbody').insertAdjacentHTML('beforeend',`<tr><td style="text-align:center;font-weight:600;">${n}</td><td><input class="web-link" value="${esc(link)}" oninput="updateWebQR(this)"></td><td style="text-align:center;"><img class="web-qr" width="90" height="90" alt="QR" style="${link?'':'display:none;'}" ${link?`src="${qrUrl(link)}"`:''}></td><td><textarea class="web-desc">${esc(d.desc||'')}</textarea></td><td style="text-align:center;">${rowButton()}</td></tr>`);
+}
+function updateGrandTotal() {
+    let hrs=0, r=0, u=0, a=0, total=0;
+    document.querySelectorAll('#weightTable tbody tr').forEach(tr => {
+        let rowR = Number(tr.querySelector('.w-r').value) || 0;
+        let rowU = Number(tr.querySelector('.w-u').value) || 0;
+        let rowA = Number(tr.querySelector('.w-a').value) || 0;
+        let rowTotal = rowR + rowU + rowA;
+        tr.querySelector('.w-total').value = rowTotal;
+
+        hrs += Number(tr.querySelector('.w-hrs').value) || 0;
+        r += rowR;
+        u += rowU;
+        a += rowA;
+        total += rowTotal;
+    });
+    $('gt-hrs').textContent = hrs;
+    $('gt-r').textContent = r;
+    $('gt-u').textContent = u;
+    $('gt-a').textContent = a;
+    $('gt-total').textContent = total;
+}
+
+function refreshQppTOptions() {
+    let n = document.querySelectorAll('#theoryTable tbody tr').length;
+    document.querySelectorAll('select[id^="qppT_"]').forEach(sel => {
+        let cur = sel.value;
+        let opts = '<option value="">-</option>';
+        for (let k = 1; k <= n; k++) opts += `<option value="${k}">${k}</option>`;
+        sel.innerHTML = opts;
+        if ([...sel.options].some(o => o.value === cur)) sel.value = cur;
+    });
+}
+
+function syncWeightage() {
+    let theoryRows = document.querySelectorAll('#theoryTable tbody tr');
+    let weightBody = document.querySelector('#weightTable tbody');
+    let weightRows = weightBody.querySelectorAll('tr');
+
+    while(weightRows.length < theoryRows.length) {
+        let n = weightRows.length + 1;
+        weightBody.insertAdjacentHTML('beforeend', `<tr>
+            <td style="text-align:center;font-weight:600;">${n}</td>
+            <td><input class="weight-title" readonly style="background:transparent; border:none; outline:none; width:100%; box-shadow:none; padding:4px;"></td>
+            <td><input class="w-co" style="text-align:center;"></td>
+            <td><input class="w-hrs" style="text-align:center;" oninput="updateGrandTotal()"></td>
+            <td><input class="w-r" style="text-align:center;" oninput="updateGrandTotal()"></td>
+            <td><input class="w-u" style="text-align:center;" oninput="updateGrandTotal()"></td>
+            <td><input class="w-a" style="text-align:center;" oninput="updateGrandTotal()"></td>
+            <td><input class="w-total" readonly style="text-align:center;font-weight:bold;background:#f1f5f9;"></td>
+        </tr>`);
+        weightRows = weightBody.querySelectorAll('tr');
+    }
+    while(weightRows.length > theoryRows.length) {
+        weightRows[weightRows.length-1].remove();
+        weightRows = weightBody.querySelectorAll('tr');
+    }
+
+    theoryRows.forEach((tr, i) => {
+        let title = tr.querySelector('.unit-title').value;
+        weightRows[i].querySelector('.weight-title').value = title;
+        weightRows[i].cells[0].textContent = i + 1;
+    });
+    updateGrandTotal();
+    refreshQppTOptions();
+}
+
+function renumber(){
+    ['coTable','labTable','equipmentTable','booksTable','webTable'].forEach(id=>{
+        document.querySelectorAll('#'+id+' tbody tr').forEach((r,i)=>{
+            if(r.cells[0] && id!=='coTable')r.cells[0].textContent=i+1;
+            if(id==='coTable')r.cells[0].textContent='CO'+(i+1);
+        });
+    });
+    refreshAllLabels();
+    buildMatrix();
+    syncWeightage();
+}
+
+function buildMatrix(){
+ let body=$('matrixTable').querySelector('tbody');
+ body.innerHTML='';
+ document.querySelectorAll('#coTable tbody tr').forEach((r,i)=>{
+  let cells='<td style="text-align:center;font-weight:600;">CO'+(i+1)+'</td>'+Array(14).fill(0).map((_,j)=>`<td><input style="text-align:center;width:45px" data-m="${i}-${j}" maxlength="1" pattern="[123]"></td>`).join('');
+  body.insertAdjacentHTML('beforeend','<tr>'+cells+'</tr>');
+ });
+}
+function value(id){return $(id).value}
+
+const PROGRAMME_OPTIONS = [
+    {code:'AN', name:'Artificial Intelligence and Machine Learning'},
+    {code:'AO', name:'Automation and Robotics'},
+    {code:'CE', name:'Civil Engineering'},
+    {code:'CO', name:'Computer Engineering'},
+    {code:'IH', name:'Computer Science and Information Technology'},
+    {code:'EE', name:'Electrical Engineering'},
+    {code:'TE', name:'Electronics and Computer Engineering'},
+    {code:'ME', name:'Mechanical Engineering'},
+    {code:'MK', name:'Mechatronics'}
+];
+
+function buildProgrammePanel(){
+    let panel = $('programmePanel');
+    panel.innerHTML = PROGRAMME_OPTIONS.map((o,i) => `<label class="ms-option"><input type="checkbox" id="prog-opt-${i}" value="${esc(o.code)}" data-name="${esc(o.name)}" onchange="updateProgrammeSelection()"><span>${esc(o.name)} (${esc(o.code)})</span></label>`).join('');
+}
+
+function toggleProgrammeDropdown(e){
+    if(e) e.stopPropagation();
+    $('programmePanel').classList.toggle('open');
+    $('programmeDisplay').classList.toggle('open');
+}
+
+document.addEventListener('click', e=>{
+    let ms = $('programmeMultiselect');
+    if(ms && !ms.contains(e.target)){
+        $('programmePanel').classList.remove('open');
+        $('programmeDisplay').classList.remove('open');
+    }
+});
+
+function updateProgrammeSelection(){
+    let checked = [...document.querySelectorAll('#programmePanel input[type="checkbox"]:checked')];
+    let names = checked.map(c=>c.dataset.name);
+    let codes = checked.map(c=>c.value);
+    $('programme').value = names.join(' / ');
+    $('programmeCode').value = codes.join(' / ');
+    $('programmeDisplay').querySelector('.ms-text').textContent = names.length ? names.join(' / ') : 'Select Programme(s)...';
+}
+
+function syncProgrammeFromValue(){
+    let namesStr = $('programme').value || '';
+    let names = namesStr.split('/').map(s=>s.trim()).filter(Boolean);
+    let matchedAny = false;
+    document.querySelectorAll('#programmePanel input[type="checkbox"]').forEach(cb=>{
+        let isMatch = names.includes(cb.dataset.name);
+        cb.checked = isMatch;
+        if(isMatch) matchedAny = true;
+    });
+    if(matchedAny){
+        updateProgrammeSelection();
+    } else {
+        $('programmeDisplay').querySelector('.ms-text').textContent = namesStr ? namesStr : 'Select Programme(s)...';
+    }
+}
+function collect(){
+ let data={};
+ document.querySelectorAll('input[id],textarea[id],select[id]').forEach(e=>data[e.id]=e.value);
+ data.cos=[...document.querySelectorAll('#coTable tbody tr')].map(r=>r.cells[1].querySelector('textarea').value);
+ data.theory=[...document.querySelectorAll('#theoryTable tbody tr')].map(r=>({
+     unitTitle: r.querySelector('.unit-title').value,
+     tlo: [...r.querySelectorAll('.dyn-list[data-type="tlo"] input')].map(i=>i.value),
+     content: [...r.querySelectorAll('.dyn-list[data-type="content"] input')].map(i=>i.value),
+     ped: r.cells[3].querySelector('textarea').value
+ }));
+ data.lab=[...document.querySelectorAll('#labTable tbody tr')].map(r=>({
+     llo: [...r.querySelectorAll('.dyn-list[data-type="llo"] input')].map(i=>i.value),
+     title: r.querySelector('.lab-title').value,
+     hrs: r.querySelector('.lab-hrs').value,
+     co: r.querySelector('.lab-co').value,
+     mand: r.querySelector('.lab-mand').checked
+ }));
+ data.equipment=[...document.querySelectorAll('#equipmentTable tbody tr')].map(r=>({name:r.cells[1].querySelector('textarea').value,llo:r.cells[2].querySelector('input').value}));
+ data.weight=[...document.querySelectorAll('#weightTable tbody tr')].map(r=>{let x=[...r.querySelectorAll('input')].map(a=>a.value);return {title:x[0],co:x[1],hours:x[2],r:x[3],u:x[4],a:x[5],total:x[6]}});
+ data.books=[...document.querySelectorAll('#booksTable tbody tr')].map(r=>{let x=[...r.querySelectorAll('textarea')].map(a=>a.value);return {author:x[0],title:x[1],pub:x[2]}});
+ data.web=[...document.querySelectorAll('#webTable tbody tr')].map(r=>({link:r.querySelector('.web-link').value,desc:r.querySelector('.web-desc').value}));
+ data.formativeAssessment=[...document.querySelectorAll('.dyn-list[data-type="formativeAssessment"] input')].map(i=>i.value);
+ data.summativeAssessment=[...document.querySelectorAll('.dyn-list[data-type="summativeAssessment"] input')].map(i=>i.value);
+ data.courseExperts=[...document.querySelectorAll('.dyn-list[data-type="courseExpert"] > div')].map(row=>({name:row.querySelector('.expert-name').value,designation:row.querySelector('.expert-designation').value}));
+ data.industryExperts=[...document.querySelectorAll('.dyn-list[data-type="industryExpert"] > div')].map(row=>({name:row.querySelector('.expert-name').value,designation:row.querySelector('.expert-designation').value}));
+ data.matrix=[...document.querySelectorAll('#matrixTable input[data-m]')].map(x=>[x.dataset.m,x.value]);
+ return data;
+}
+
+function saveJSON(){let blob=new Blob([JSON.stringify(collect(),null,2)],{type:'application/json'});let a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=(value('courseCode')||'curriculum')+'.json';a.click();resetSaveReminder();}
+
+const SAVE_REMINDER_INTERVAL_MS = 20 * 60 * 1000;
+let saveReminderTimer = null;
+
+function scheduleSaveReminder(){
+    if (saveReminderTimer) clearTimeout(saveReminderTimer);
+    saveReminderTimer = setTimeout(showSaveReminder, SAVE_REMINDER_INTERVAL_MS);
+}
+
+function showSaveReminder(){
+    $('saveReminder').classList.add('show');
+}
+
+function dismissSaveReminder(){
+    $('saveReminder').classList.remove('show');
+    scheduleSaveReminder();
+}
+
+function resetSaveReminder(){
+    $('saveReminder').classList.remove('show');
+    scheduleSaveReminder();
+}
+
+scheduleSaveReminder();
+
+function sanitizeFileName(str){
+ return str.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim();
+}
+function outputBaseName(d){
+ let code = (d.courseCode||'').trim();
+ let title = (d.courseTitle||'').trim();
+ let base = (code && title) ? (code + ' ' + title) : (code || title || 'Curriculum Document');
+ return sanitizeFileName(base);
+}
+function docxFileName(d){
+ return outputBaseName(d) + '.docx';
+}
+
+async function saveWord(){
+ let d = collect();
+ let bodyHTML = buildPaperHTML(d);
+
+ let docHTML = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset='utf-8'>
+<title>${esc(outputBaseName(d))}</title>
+<style>
+ @page Section1{ size:21cm 29.7cm; margin:1.5cm 1.5cm 1.5cm 1.5cm; }
+ div.Section1{ page:Section1; }
+ body, body *, p, p *, div, div *, span, span *, b, strong, i, em, td, td *, th, th *, h1, h2, h3, h4, h5, h6, li, li *, a, label, caption, caption *, thead, thead *, tbody, tbody *, tfoot, tfoot *, font, font * { font-family: "Times New Roman" !important; font-size: 12pt; }
+ table { border-collapse:collapse; width:100%; margin-bottom:10px; font-family: "Times New Roman", Times, serif !important; font-size:12pt; }
+ th, td { border:0.5pt solid #000; padding:5px; vertical-align:middle; text-align:left; word-wrap:break-word; font-family: "Times New Roman", Times, serif !important; font-size:12pt; }
+ th { text-align:center; }
+ caption, caption *, .table-title, .table-title *, .section-title, .section-title * { font-family: "Times New Roman" !important; font-size: 12pt !important; }
+ h2 { font-size:12pt !important; border-bottom:0.5pt solid #000; padding-bottom:3px; margin-top:18px; font-family: "Times New Roman", Times, serif !important; font-weight:bold; }
+ h3 { font-size:12pt !important; margin-bottom:4px; font-family: "Times New Roman", Times, serif !important; font-weight:bold; }
+ p, div { line-height:1.35; margin:4px 0; text-align:left; font-family: "Times New Roman", Times, serif !important; font-size:12pt; }
+ table.scheme-table, table.scheme-table th, table.scheme-table td { font-size:8pt !important; padding:1px 2px; font-family: "Times New Roman", Times, serif !important; }
+ table.qpp-table, table.qpp-table th, table.qpp-table td { font-size:8pt !important; padding:2px; font-family: "Times New Roman", Times, serif !important; }
+</style>
+</head>
+<body>
+<div class='Section1'>
+${bodyHTML}
+</div>
+</body>
+</html>`;
+
+ if (typeof htmlDocx !== 'undefined') {
+     try {
+         let docxBlob = htmlDocx.asBlob(docHTML, {
+             orientation: 'portrait',
+             margins: { top: 850, right: 850, bottom: 850, left: 850 }
+         });
+
+         // Patch styles.xml & document.xml inside the OpenXML package
+         if (typeof JSZip !== 'undefined') {
+             let zip = await JSZip.loadAsync(docxBlob);
+
+             // 1. Force Times New Roman & 12pt default in styles.xml
+             let stylesFile = zip.file("word/styles.xml");
+             if (stylesFile) {
+                 let stylesXml = await stylesFile.async("string");
+                 stylesXml = stylesXml
+                     .replace(/w:asciiTheme="[^"]*"/g, 'w:ascii="Times New Roman"')
+                     .replace(/w:hAnsiTheme="[^"]*"/g, 'w:hAnsi="Times New Roman"')
+                     .replace(/w:eastAsiaTheme="[^"]*"/g, 'w:eastAsia="Times New Roman"')
+                     .replace(/w:cstheme="[^"]*"/g, 'w:cs="Times New Roman"')
+                     .replace(/w:ascii="Calibri"/g, 'w:ascii="Times New Roman"')
+                     .replace(/w:hAnsi="Calibri"/g, 'w:hAnsi="Times New Roman"')
+                     .replace(/<w:sz w:val="22"\/>/g, '<w:sz w:val="24"/>')
+                     .replace(/<w:szCs w:val="22"\/>/g, '<w:szCs w:val="24"/>');
+                 zip.file("word/styles.xml", stylesXml);
+             }
+
+             // 2. Clean fallback chains in document.xml
+             let docFile = zip.file("word/document.xml");
+             if (docFile) {
+                 let docXml = await docFile.async("string");
+                 docXml = docXml
+                     .replace(/w:ascii="['"]*Times New Roman['"]*(,[^"]*)?"/gi, 'w:ascii="Times New Roman"')
+                     .replace(/w:hAnsi="['"]*Times New Roman['"]*(,[^"]*)?"/gi, 'w:hAnsi="Times New Roman"')
+                     .replace(/w:cs="['"]*Times New Roman['"]*(,[^"]*)?"/gi, 'w:cs="Times New Roman"')
+                     .replace(/w:asciiTheme="[^"]*"/g, 'w:ascii="Times New Roman"')
+                     .replace(/w:hAnsiTheme="[^"]*"/g, 'w:hAnsi="Times New Roman"');
+                 zip.file("word/document.xml", docXml);
+             }
+
+             // 3. Ensure Times New Roman exists in fontTable.xml
+             let fontFile = zip.file("word/fontTable.xml");
+             if (fontFile) {
+                 let fontXml = await fontFile.async("string");
+                 if (!fontXml.includes('name="Times New Roman"')) {
+                     fontXml = fontXml.replace('</w:fonts>', '<w:font w:name="Times New Roman"><w:pitch w:val="variable"/><w:family w:val="roman"/></w:font></w:fonts>');
+                     zip.file("word/fontTable.xml", fontXml);
+                 }
+             }
+
+             docxBlob = await zip.generateAsync({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+         }
+
+         let a = document.createElement('a');
+         a.href = URL.createObjectURL(docxBlob);
+         a.download = docxFileName(d);
+         a.click();
+         setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+         return;
+     } catch (err) {
+         console.warn("Direct docx conversion/patch failed, reverting to backup:", err);
+     }
+ }
+
+ let blob = new Blob(['\uFEFF', docHTML], {type:'application/msword'});
+ let a = document.createElement('a');
+ a.href = URL.createObjectURL(blob);
+ a.download = outputBaseName(d) + '.doc';
+ a.click();
+ setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+function loadJSON(){
+ let i=document.createElement('input');i.type='file';i.accept='.json';
+ i.onchange=()=>{
+  let f=i.files[0];if(!f)return;
+  let r=new FileReader();
+  r.onload=()=>{
+    try { loadData(JSON.parse(r.result)); }
+    catch(e) { alert("Error loading data: " + e.message); }
+  };
+  r.readAsText(f)
+ };
+ i.click()
+}
+
+function loadData(d){
+ Object.entries(d).forEach(([k,v])=>{if($(k)&&typeof v==='string')$(k).value=v});
+ ['coTable','theoryTable','labTable','equipmentTable','weightTable','booksTable','webTable'].forEach(id=>$(id).querySelector('tbody').innerHTML='');
+
+ if(d.cos) d.cos.forEach(v => addCO(v));
+ if(d.theory) d.theory.forEach(v => addTheory(v));
+ if(d.lab) d.lab.forEach(v => addLab(v));
+ if(d.equipment) d.equipment.forEach(v => addEquipment(v));
+
+ if(d.weight) {
+    let weightRows = document.querySelectorAll('#weightTable tbody tr');
+    d.weight.forEach((v, i) => {
+        if(weightRows[i]) {
+            let inputs = weightRows[i].querySelectorAll('input');
+            if(inputs[1]) inputs[1].value = v.co || '';
+            if(inputs[2]) inputs[2].value = v.hours || '';
+            if(inputs[3]) inputs[3].value = v.r || '';
+            if(inputs[4]) inputs[4].value = v.u || '';
+            if(inputs[5]) inputs[5].value = v.a || '';
+            if(inputs[6]) inputs[6].value = v.total || '';
+        }
+    });
+    updateGrandTotal();
+ }
+ if(d.books) d.books.forEach(v => addBook(v));
+ if(d.web) d.web.forEach(v => addWeb(v));
+
+ let courseExperts = d.courseExperts || [d.courseExpert1, d.courseExpert2].filter(v => v);
+ let industryExperts = d.industryExperts || [d.industryExpert1, d.industryExpert2].filter(v => v);
+ fillDynList('courseExpert', courseExperts);
+ fillDynList('industryExpert', industryExperts);
+
+ let formative = d.formativeAssessment || [];
+ let summative = d.summativeAssessment || (d.assessmentList ? d.assessmentList.map(a => a.text) : (d.assessment ? [d.assessment] : []));
+ fillDynList('formativeAssessment', formative);
+ fillDynList('summativeAssessment', summative);
+
+ buildMatrix();
+ if(d.matrix) d.matrix.forEach(([key,val])=>{let x=document.querySelector(`[data-m="${key}"]`);if(x)x.value=val});
+ syncProgrammeFromValue();
+ refreshAllLabels();
+
+ Object.entries(d).forEach(([k,v])=>{if(k.startsWith('qppT_')&&$(k)&&typeof v==='string')$(k).value=v});
+}
+
+function clearAll(){if(confirm('Clear all entered data?'))location.reload()}
+
+function tableFrom(id, heads, fn) {
+    let rows = [...document.querySelectorAll('#' + id + ' tbody tr')];
+    if (!rows.length) return '';
+    return `<table border="1" cellspacing="0" cellpadding="5" width="100%" style="border-collapse:collapse; margin-bottom:10px; width:100%; font-family: Times New Roman; font-size: 12pt;">
+        <thead><tr>${heads.map(h => `<th style="border:0.5pt solid #000; padding:5px; text-align:center; font-family: Times New Roman; font-size: 12pt;"><span style="font-family: Times New Roman; font-size: 12pt;"><b>${h}</b></span></th>`).join('')}</tr></thead>
+        <tbody>${rows.map(fn).join('')}</tbody>
+    </table>`;
+}
+
+function td(val, align = 'auto', valign = 'middle') {
+    let v = String(val ?? '').trim();
+    if (align === 'auto') {
+        let vText = v.replace(/<[^>]*>?/gm, '');
+        align = (vText !== '' && !isNaN(vText)) ? 'center' : 'left';
+    }
+    if (v.includes('<p') || v.includes('<div')) {
+        return `<td align="${align}" valign="${valign}" style="text-align: ${align} !important; vertical-align: ${valign} !important; border:0.5pt solid #000; padding:5px; font-family: Times New Roman; font-size: 12pt;">${v}</td>`;
+    }
+    return `<td align="${align}" valign="${valign}" style="text-align: ${align} !important; vertical-align: ${valign} !important; border:0.5pt solid #000; padding:5px; font-family: Times New Roman; font-size: 12pt;"><p style="margin:0; font-family: Times New Roman; font-size: 12pt; text-align: ${align};"><span style="font-family: Times New Roman; font-size: 12pt;">${v}</span></p></td>`;
+}
+
+function fmtDate(iso){
+ if(!iso) return '';
+ let parts = iso.split('-');
+ if(parts.length!==3) return esc(iso);
+ return `${parts[2]}/${parts[1]}/${parts[0]}`;
+}
+
+function buildRunningHeaderFooter(d){
+ let headerHTML = `
+  <div class="hdr-row"><span>${esc((d.courseTitle||'').toUpperCase())}</span><span>Subject Code : ${esc(d.courseCode||'')}</span></div>`;
+ let footerHTML = `<div class="ftr-row">Sharad Institute of Technology, Polytechnic, Yadrav </div>`;
+ $('pageHeader').innerHTML = headerHTML;
+ $('pageFooter').innerHTML = footerHTML;
+}
+
+function toRoman(num){
+ num = parseInt(num, 10);
+ if(!num || num < 1) return String(num);
+ const map = [[1000,'M'],[900,'CM'],[500,'D'],[400,'CD'],[100,'C'],[90,'XC'],[50,'L'],[40,'XL'],[10,'X'],[9,'IX'],[5,'V'],[4,'IV'],[1,'I']];
+ let res = '';
+ map.forEach(([v,s]) => { while(num >= v){ res += s; num -= v; } });
+ return res;
+}
+
+function buildPaperHTML(d) {
+    let p = '';
+    const tableStart = `<table border="1" cellspacing="0" cellpadding="5" width="100%" style="border-collapse:collapse; margin-bottom:10px; width:100%; font-family: Times New Roman; font-size: 12pt;">`;
+    const thStyle = `style="border:0.5pt solid #000; padding:5px; text-align:center; font-weight:bold; font-family: Times New Roman; font-size: 12pt;"`;
+
+    p += `<div style="margin-bottom:16px;">`;
+    p += `<p style="margin:3px 0; font-family: Times New Roman; font-size: 12pt;"><span style="font-family: Times New Roman; font-size: 12pt;"><b>Programme Name/s:</b> ${esc(d.programme)}</span></p>`;
+    p += `<p style="margin:3px 0; font-family: Times New Roman; font-size: 12pt;"><span style="font-family: Times New Roman; font-size: 12pt;"><b>Programme Code:</b> ${esc(d.programmeCode)}</span></p>`;
+    p += `<p style="margin:3px 0; font-family: Times New Roman; font-size: 12pt;"><span style="font-family: Times New Roman; font-size: 12pt;"><b>Semester:</b> ${esc(d.semester)}</span></p>`;
+    p += `<p style="margin:3px 0; font-family: Times New Roman; font-size: 12pt;"><span style="font-family: Times New Roman; font-size: 12pt;"><b>Course Title:</b> ${esc(d.courseTitle)}</span></p>`;
+    p += `<p style="margin:3px 0; font-family: Times New Roman; font-size: 12pt;"><span style="font-family: Times New Roman; font-size: 12pt;"><b>Course Code:</b> ${esc(d.courseCode)}</span></p>`;
+    p += `</div>`;
+
+    p += `<h2 style="font-family: Times New Roman; font-size: 12pt; border-bottom:0.5pt solid #000; padding-bottom:3px; margin-top:18px;">I. RATIONALE</h2>`;
+    p += `<p style="font-family: Times New Roman; font-size: 12pt; text-align: justify;"><span style="font-family: Times New Roman; font-size: 12pt;">${esc(d.rationale).replace(/\\n/g, '<br>')}</span></p>`;
+
+    p += `<h2 style="font-family: Times New Roman; font-size: 12pt; border-bottom:0.5pt solid #000; padding-bottom:3px; margin-top:18px;">II. INDUSTRY / EMPLOYER EXPECTED OUTCOME</h2>`;
+    p += `<p style="font-family: Times New Roman; font-size: 12pt;"><span style="font-family: Times New Roman; font-size: 12pt;">${esc(d.employer).replace(/\\n/g, '<br>')}</span></p>`;
+
+    p += `<h2 style="font-family: Times New Roman; font-size: 12pt; border-bottom:0.5pt solid #000; padding-bottom:3px; margin-top:18px;">III. COURSE LEVEL LEARNING OUTCOMES (COs)</h2>`;
+    p += `<p style="font-family: Times New Roman; font-size: 12pt;"><i><span style="font-family: Times New Roman; font-size: 12pt;">Students will be able to achieve & demonstrate the following COs on completion of course based learning</span></i></p>`;
+    p += tableFrom('coTable', ['CO', 'Course Outcome'], r => `<tr>${td(r.cells[0].textContent, 'center')}${td(esc(r.cells[1].querySelector('textarea').value))}</tr>`);
+
+    p += `<h2 style="font-family: Times New Roman; font-size: 12pt; border-bottom:0.5pt solid #000; padding-bottom:3px; margin-top:18px;">IV. TEACHING-LEARNING & ASSESSMENT SCHEME</h2>`;
+    const schemeColWidths = [6,20,5,6,3,3,3,4,4,4,5,4,4,3,3,3,3,3,3,3,3,5];
+    const schemeColgroup = '<colgroup>' + schemeColWidths.map(w => `<col style="width:${w}%">`).join('') + '</colgroup>';
+    const thStyleScheme = `style="border:0.5pt solid #000; padding:1px 2px; text-align:center; vertical-align:middle; font-weight:bold; font-size:8pt; font-family: Times New Roman;"`;
+    const tdScheme = (val) => {
+        let v = String(val ?? '').trim();
+        let align = (v !== '' && !isNaN(v)) ? 'center' : 'left';
+        return `<td align="${align}" valign="middle" style="text-align:${align} !important; vertical-align:middle !important; border:0.5pt solid #000; padding:1px 2px; font-size:8pt; font-family: Times New Roman; word-wrap:break-word; overflow-wrap:break-word; word-break:break-word;"><span style="font-family: Times New Roman;">${v}</span></td>`;
+    };
+    p += `<table border="1" cellspacing="0" cellpadding="1" width="100%" class="scheme-table" style="border-collapse:collapse; width:100%; max-width:100%; table-layout:fixed; mso-table-layout-alt:fixed; font-size:8pt; font-family: Times New Roman;">
+ ${schemeColgroup}
+ <thead>
+ <tr>
+  <th ${thStyleScheme} rowspan="5"><span style="font-family: Times New Roman;">Course Code</span></th>
+  <th ${thStyleScheme} rowspan="5"><span style="font-family: Times New Roman;">Course Title</span></th>
+  <th ${thStyleScheme} rowspan="5"><span style="font-family: Times New Roman;">Abbr</span></th>
+  <th ${thStyleScheme} rowspan="5"><span style="font-family: Times New Roman;">Course Category/s</span></th>
+  <th ${thStyleScheme} colspan="5"><span style="font-family: Times New Roman;">Learning Scheme</span></th>
+  <th ${thStyleScheme} rowspan="5"><span style="font-family: Times New Roman;">Credits</span></th>
+  <th ${thStyleScheme} rowspan="5"><span style="font-family: Times New Roman;">Paper Duration</span></th>
+  <th ${thStyleScheme} colspan="10"><span style="font-family: Times New Roman;">Assessment Scheme</span></th>
+  <th ${thStyleScheme} rowspan="5"><span style="font-family: Times New Roman;">Total Marks</span></th>
+ </tr>
+ <tr>
+  <th ${thStyleScheme} colspan="3"><span style="font-family: Times New Roman;">Actual Contact Hrs./Week</span></th>
+  <th ${thStyleScheme} rowspan="4"><span style="font-family: Times New Roman;">SLH</span></th>
+  <th ${thStyleScheme} rowspan="4"><span style="font-family: Times New Roman;">NLH</span></th>
+  <th ${thStyleScheme} colspan="4"><span style="font-family: Times New Roman;">Theory</span></th>
+  <th ${thStyleScheme} colspan="4"><span style="font-family: Times New Roman;">Based on LL &amp; TL</span></th>
+  <th ${thStyleScheme} colspan="2"><span style="font-family: Times New Roman;">Based on SL</span></th>
+ </tr>
+ <tr>
+  <th ${thStyleScheme} rowspan="3"><span style="font-family: Times New Roman;">CL</span></th>
+  <th ${thStyleScheme} rowspan="3"><span style="font-family: Times New Roman;">TL</span></th>
+  <th ${thStyleScheme} rowspan="3"><span style="font-family: Times New Roman;">LL</span></th>
+  <th ${thStyleScheme} rowspan="2"><span style="font-family: Times New Roman;">FA-TH</span></th>
+  <th ${thStyleScheme} rowspan="2"><span style="font-family: Times New Roman;">SA-TH</span></th>
+  <th ${thStyleScheme} rowspan="2" colspan="2"><span style="font-family: Times New Roman;">Total</span></th>
+  <th ${thStyleScheme} colspan="4"><span style="font-family: Times New Roman;">Practical</span></th>
+  <th ${thStyleScheme} rowspan="2" colspan="2"><span style="font-family: Times New Roman;">SLA</span></th>
+ </tr>
+ <tr>
+  <th ${thStyleScheme} colspan="2"><span style="font-family: Times New Roman;">FA-PR</span></th>
+  <th ${thStyleScheme} colspan="2"><span style="font-family: Times New Roman;">SA-PR</span></th>
+ </tr>
+ <tr>
+  <th ${thStyleScheme}><span style="font-family: Times New Roman;">Max</span></th>
+  <th ${thStyleScheme}><span style="font-family: Times New Roman;">Max</span></th>
+  <th ${thStyleScheme}><span style="font-family: Times New Roman;">Max</span></th>
+  <th ${thStyleScheme}><span style="font-family: Times New Roman;">Min</span></th>
+  <th ${thStyleScheme}><span style="font-family: Times New Roman;">Max</span></th>
+  <th ${thStyleScheme}><span style="font-family: Times New Roman;">Min</span></th>
+  <th ${thStyleScheme}><span style="font-family: Times New Roman;">Max</span></th>
+  <th ${thStyleScheme}><span style="font-family: Times New Roman;">Min</span></th>
+  <th ${thStyleScheme}><span style="font-family: Times New Roman;">Max</span></th>
+  <th ${thStyleScheme}><span style="font-family: Times New Roman;">Min</span></th>
+ </tr>
+ </thead>
+ <tbody><tr>
+  ${tdScheme(esc(d.courseCode))}
+  ${tdScheme(esc(d.courseTitle))}
+  ${tdScheme(esc(d.abbr))}
+  ${tdScheme(esc(d.category))}
+  ${tdScheme(esc(d.cl))}
+  ${tdScheme(esc(d.tl))}
+  ${tdScheme(esc(d.ll))}
+  ${tdScheme(esc(d.slh))}
+  ${tdScheme(esc(d.nlh))}
+  ${tdScheme(esc(d.credits))}
+  ${tdScheme(esc(d.duration))}
+  ${tdScheme(esc(d.fathMax))}
+  ${tdScheme(esc(d.sathMax))}
+  ${tdScheme(esc(d.totalMax))}
+  ${tdScheme(esc(d.totalMin))}
+  ${tdScheme(esc(d.faprMax))}
+  ${tdScheme(esc(d.faprMin))}
+  ${tdScheme(esc(d.saprMax))}
+  ${tdScheme(esc(d.saprMin))}
+  ${tdScheme(esc(d.slaMax))}
+  ${tdScheme(esc(d.slaMin))}
+  ${tdScheme(esc(d.totalMarks))}
+ </tr></tbody>
+ </table>`;
+
+    p += `<div style="margin-top:10px; text-align:left;">`;
+    if (d.iksHrs) p += `<p style="margin:3px 0; font-family: Times New Roman; font-size: 12pt;"><span style="font-family: Times New Roman; font-size: 12pt;"><b>Total IKS Hrs for Semester:</b> ${esc(d.iksHrs)} Hrs</span></p>`;
+    p += `<p style="margin:3px 0; font-family: Times New Roman; font-size: 12pt;"><span style="font-family: Times New Roman; font-size: 12pt;">${IKS_NOTE_HTML}</span></p>`;
+    p += `</div>`;
+
+    p += `<h2 style="font-family: Times New Roman; font-size: 12pt; border-bottom:0.5pt solid #000; padding-bottom:3px; margin-top:18px;">V. THEORY LEARNING OUTCOMES AND ALIGNED COURSE CONTENT</h2>`;
+    p += `<table border="1" cellspacing="0" cellpadding="5" width="100%" style="border-collapse:collapse; margin-bottom:10px; width:100%; table-layout:fixed; mso-table-layout-alt:fixed; font-family: Times New Roman; font-size: 12pt;">
+ <colgroup><col style="width:6%"><col style="width:20%"><col style="width:53%"><col style="width:21%"></colgroup>
+ <thead><tr><th ${thStyle}>Sr. No</th><th ${thStyle}>TLOs aligned to COs</th><th ${thStyle}>Learning content mapped with TLOs and COs</th><th ${thStyle}>Suggested Learning Pedagogies</th></tr></thead><tbody>`;
+    d.theory.forEach((t, i) => {
+        let sr = i + 1;
+        let tloStr = t.tlo.filter(x => x.trim()).map((x, j) => `<p style="margin:0 0 6px 0; font-family: Times New Roman; font-size: 12pt;"><span style="font-family: Times New Roman; font-size: 12pt;"><b>TLO ${sr}.${j + 1}</b> ${esc(x)}</span></p>`).join('');
+        let unitHeading = (t.unitTitle || '').trim() ? `<p style="margin:0 0 8px 0; font-family: Times New Roman; font-size: 12pt;"><span style="font-family: Times New Roman; font-size: 12pt;"><b>Unit - ${toRoman(sr)} ${esc(t.unitTitle)}</b></span></p>` : '';
+        let contentStr = unitHeading + t.content.filter(x => x.trim()).map((x, j) => `<p style="margin:0 0 6px 0; font-family: Times New Roman; font-size: 12pt;"><span style="font-family: Times New Roman; font-size: 12pt;"><b>${sr}.${j + 1}</b> ${esc(x)}</span></p>`).join('');
+        let pedStr = `<p style="margin:0; font-family: Times New Roman; font-size: 12pt;"><span style="font-family: Times New Roman; font-size: 12pt;">${esc(t.ped).replace(/\\n/g, '<br>')}</span></p>`;
+        p += `<tr>${td(`<b>${sr}</b>`, 'center', 'middle')}${td(tloStr, 'auto', 'top')}${td(contentStr, 'auto', 'top')}${td(pedStr, 'auto', 'middle')}</tr>`;
+    });
+    p += `</tbody></table>`;
+
+    p += `<h2 style="font-family: Times New Roman; font-size: 12pt; border-bottom:0.5pt solid #000; padding-bottom:3px; margin-top:18px;">VI. LABORATORY LEARNING OUTCOME AND ALIGNED PRACTICAL / TUTORIAL EXPERIENCES</h2>`;
+    p += `${tableStart}<thead><tr><th ${thStyle}>Sr. No</th><th ${thStyle}>Laboratory Learning Outcome</th><th ${thStyle}>Practical / Tutorial Title</th><th ${thStyle}>Hrs</th><th ${thStyle}>Relevant COs</th></tr></thead><tbody>`;
+    d.lab.forEach((l, i) => {
+        let sr = i + 1;
+        let lloStr = (l.llo || []).filter(x => x.trim()).map((x, j) => {
+            return `<p style="margin:0 0 6px 0; font-family: Times New Roman; font-size: 12pt;"><span style="font-family: Times New Roman; font-size: 12pt;"><b>LLO ${sr}.${j + 1}</b> ${esc(x)}</span></p>`;
+        }).join('');
+        let title = l.mand ? `<b>*</b> ${esc(l.title)}` : esc(l.title);
+        p += `<tr>${td(sr, 'center')}${td(lloStr)}${td(title)}${td(esc(l.hrs), 'center')}${td(esc(l.co), 'center')}</tr>`;
+    });
+    p += `</tbody></table>`;
+
+    p += `<div style="margin-top:10px; text-align:left;"><p style="margin:3px 0; font-family: Times New Roman; font-size: 12pt;"><span style="font-family: Times New Roman; font-size: 12pt;">${LAB_NOTE_HTML}</span></p></div>`;
+
+    p += `<p style="text-align:left; font-family: Times New Roman; font-size: 12pt;"><span style="font-family: Times New Roman; font-size: 12pt;"><b>VII. MICRO PROJECT / ASSIGNMENT / ACTIVITIES</b><br>${esc(d.activities).replace(/\\n/g, '<br>')}</span></p>`;
+    p += `<h2 style="font-family: Times New Roman; font-size: 12pt; border-bottom:0.5pt solid #000; padding-bottom:3px; margin-top:18px;">VIII. LABORATORY EQUIPMENT / INSTRUMENTS / TOOLS / SOFTWARE REQUIRED</h2>`;
+
+    p += tableFrom('equipmentTable', ['Sr. No', 'Equipment Name with Broad Specifications', 'Relevant LLO Number'], r => `<tr>${td(r.cells[0].textContent, 'center')}${td(esc(r.cells[1].querySelector('textarea').value))}${td(esc(r.cells[2].querySelector('input').value), 'center')}</tr>`);
+
+    p += `<h2 style="font-family: Times New Roman; font-size: 12pt; border-bottom:0.5pt solid #000; padding-bottom:3px; margin-top:18px;">IX. SUGGESTED WEIGHTAGE TO LEARNING EFFORTS & ASSESSMENT PURPOSE</h2>`;
+    p += `${tableStart}<thead><tr><th ${thStyle}>Sr. No</th><th ${thStyle}>Unit Title</th><th ${thStyle}>Aligned COs</th><th ${thStyle}>Learning Hours</th><th ${thStyle}>R-Level</th><th ${thStyle}>U-Level</th><th ${thStyle}>A-Level</th><th ${thStyle}>Total Marks</th></tr></thead><tbody>`;
+    document.querySelectorAll('#weightTable tbody tr').forEach(r => {
+        p += `<tr>${td(r.cells[0].textContent, 'center')}${td(esc(r.cells[1].querySelector('input').value))}${[2, 3, 4, 5, 6, 7].map(i => td(esc(r.cells[i].querySelector('input').value), 'center')).join('')}</tr>`;
+    });
+    p += `<tr><th colspan="3" style="text-align:right; border:0.5pt solid #000; padding:5px; font-family: Times New Roman; font-size: 12pt;"><span style="font-family: Times New Roman; font-size: 12pt;"><b>Grand Total:</b></span></th><th ${thStyle}><span style="font-family: Times New Roman; font-size: 12pt;">${$('gt-hrs').textContent}</span></th><th ${thStyle}><span style="font-family: Times New Roman; font-size: 12pt;">${$('gt-r').textContent}</span></th><th ${thStyle}><span style="font-family: Times New Roman; font-size: 12pt;">${$('gt-u').textContent}</span></th><th ${thStyle}><span style="font-family: Times New Roman; font-size: 12pt;">${$('gt-a').textContent}</span></th><th ${thStyle}><span style="font-family: Times New Roman; font-size: 12pt;">${$('gt-total').textContent}</span></th></tr></tbody></table>`;
+
+    p += `<h2 style="font-family: Times New Roman; font-size: 12pt; border-bottom:0.5pt solid #000; padding-bottom:3px; margin-top:18px;">X. ASSESSMENT METHODOLOGIES / TOOLS</h2>`;
+    p += `<h3 style="font-family: Times New Roman; font-size: 12pt;">Formative assessment (Assessment for Learning)</h3>`;
+    p += listAsTable(d.formativeAssessment, ['Sr. No', 'Methodology / Tool']);
+    p += `<h3 style="font-family: Times New Roman; font-size: 12pt;">Summative Assessment (Assessment of Learning)</h3>`;
+    p += listAsTable(d.summativeAssessment, ['Sr. No', 'Methodology / Tool']);
+
+    p += `<h2 style="font-family: Times New Roman; font-size: 12pt; border-bottom:0.5pt solid #000; padding-bottom:3px; margin-top:18px;">XI. SUGGESTED COs - POs MATRIX FORM</h2>`;
+    p += `${tableStart}<thead><tr><th ${thStyle}>CO</th><th ${thStyle}>PO1</th><th ${thStyle}>PO2</th><th ${thStyle}>PO3</th><th ${thStyle}>PO4</th><th ${thStyle}>PO5</th><th ${thStyle}>PO6</th><th ${thStyle}>PO7</th><th ${thStyle}>PO8</th><th ${thStyle}>PO9</th><th ${thStyle}>PO10</th><th ${thStyle}>PO11</th><th ${thStyle}>PSO1</th><th ${thStyle}>PSO2</th><th ${thStyle}>PSO3</th></tr></thead><tbody>`;
+
+    document.querySelectorAll('#matrixTable tbody tr').forEach((r, i) => { p += '<tr>' + td('CO' + (i + 1), 'center') + [...r.querySelectorAll('input')].map(x => td(esc(x.value), 'center')).join('') + '</tr>' });
+    p += '</tbody></table>';
+
+    p += `<h2 style="font-family: Times New Roman; font-size: 12pt; border-bottom:0.5pt solid #000; padding-bottom:3px; margin-top:18px;">XII. SUGGESTED LEARNING MATERIALS / BOOKS</h2>`;
+    p += tableFrom('booksTable', ['Sr. No', 'Author', 'Title', 'Publisher with ISBN'], r => `<tr>${td(r.cells[0].textContent, 'center')}${td(esc(r.cells[1].querySelector('textarea').value))}${td(esc(r.cells[2].querySelector('textarea').value))}${td(esc(r.cells[3].querySelector('textarea').value))}</tr>`);
+
+    p += `<h2 style="font-family: Times New Roman; font-size: 12pt; border-bottom:0.5pt solid #000; padding-bottom:3px; margin-top:18px;">XIII. LEARNING WEBSITES & PORTALS</h2>`;
+    {
+        let rows = [...document.querySelectorAll('#webTable tbody tr')];
+        if (rows.length) {
+            p += `${tableStart}<thead><tr><th ${thStyle}>Sr. No</th><th ${thStyle}>Link / Portal</th><th ${thStyle}>QR Code</th><th ${thStyle}>Description</th></tr></thead><tbody>`;
+            rows.forEach(r => {
+                let link = r.querySelector('.web-link').value.trim();
+                let qrCell = link ? `<img src="${qrUrl(link)}" width="90" height="90" alt="QR Code">` : '';
+                p += `<tr>${td(r.cells[0].textContent, 'center')}${td(esc(link))}${td(qrCell, 'center')}${td(esc(r.querySelector('.web-desc').value))}</tr>`;
+            });
+            p += `</tbody></table>`;
+        }
+    }
+
+    p += `<h2 style="font-family: Times New Roman; font-size: 12pt; border-bottom:0.5pt solid #000; padding-bottom:3px; margin-top:18px;">XIV. QUESTION PAPER PROFILE (QPP)</h2>`;
+    {
+        const qppColWidths = [5,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,8,10];
+        const qppColgroup = '<colgroup>' + qppColWidths.map(w => `<col style="width:${w}%">`).join('') + '</colgroup>';
+        const thQpp = `style="border:0.5pt solid #000; padding:2px; text-align:center; vertical-align:middle; font-weight:bold; font-size:8pt; font-family: Times New Roman;"`;
+        const tdQpp = (val) => `<td align="center" valign="middle" style="text-align:center !important; vertical-align:middle !important; border:0.5pt solid #000; padding:2px; font-size:8pt; font-family: Times New Roman;"><span style="font-family: Times New Roman; font-size:8pt;">${val}</span></td>`;
+        p += `<table border="1" cellspacing="0" cellpadding="2" width="100%" class="qpp-table" style="border-collapse:collapse; width:100%; table-layout:fixed; mso-table-layout-alt:fixed; font-size:8pt; font-family: Times New Roman;">
+ ${qppColgroup}
+ <thead>
+ <tr>
+  <th ${thQpp} rowspan="2"><span style="font-family: Times New Roman; font-size:8pt;">Category</span></th>
+  <th ${thQpp} colspan="3"><span style="font-family: Times New Roman; font-size:8pt;">Bit 1</span></th>
+  <th ${thQpp} colspan="3"><span style="font-family: Times New Roman; font-size:8pt;">Bit 2</span></th>
+  <th ${thQpp} colspan="3"><span style="font-family: Times New Roman; font-size:8pt;">Bit 3</span></th>
+  <th ${thQpp} colspan="3"><span style="font-family: Times New Roman; font-size:8pt;">Bit 4</span></th>
+  <th ${thQpp} colspan="3"><span style="font-family: Times New Roman; font-size:8pt;">Bit 5</span></th>
+  <th ${thQpp} colspan="3"><span style="font-family: Times New Roman; font-size:8pt;">Bit 6</span></th>
+  <th ${thQpp} colspan="3"><span style="font-family: Times New Roman; font-size:8pt;">Bit 7</span></th>
+  <th ${thQpp} rowspan="2"><span style="font-family: Times New Roman; font-size:8pt;">Options</span></th>
+  <th ${thQpp} rowspan="2"><span style="font-family: Times New Roman; font-size:8pt;">Marks</span></th>
+ </tr>
+ <tr>
+  <th ${thQpp}><span style="font-family: Times New Roman; font-size:8pt;">T</span></th>
+  <th ${thQpp}><span style="font-family: Times New Roman; font-size:8pt;">L</span></th>
+  <th ${thQpp}><span style="font-family: Times New Roman; font-size:8pt;">M</span></th>
+  <th ${thQpp}><span style="font-family: Times New Roman; font-size:8pt;">T</span></th>
+  <th ${thQpp}><span style="font-family: Times New Roman; font-size:8pt;">L</span></th>
+  <th ${thQpp}><span style="font-family: Times New Roman; font-size:8pt;">M</span></th>
+  <th ${thQpp}><span style="font-family: Times New Roman; font-size:8pt;">T</span></th>
+  <th ${thQpp}><span style="font-family: Times New Roman; font-size:8pt;">L</span></th>
+  <th ${thQpp}><span style="font-family: Times New Roman; font-size:8pt;">M</span></th>
+  <th ${thQpp}><span style="font-family: Times New Roman; font-size:8pt;">T</span></th>
+  <th ${thQpp}><span style="font-family: Times New Roman; font-size:8pt;">L</span></th>
+  <th ${thQpp}><span style="font-family: Times New Roman; font-size:8pt;">M</span></th>
+  <th ${thQpp}><span style="font-family: Times New Roman; font-size:8pt;">T</span></th>
+  <th ${thQpp}><span style="font-family: Times New Roman; font-size:8pt;">L</span></th>
+  <th ${thQpp}><span style="font-family: Times New Roman; font-size:8pt;">M</span></th>
+  <th ${thQpp}><span style="font-family: Times New Roman; font-size:8pt;">T</span></th>
+  <th ${thQpp}><span style="font-family: Times New Roman; font-size:8pt;">L</span></th>
+  <th ${thQpp}><span style="font-family: Times New Roman; font-size:8pt;">M</span></th>
+  <th ${thQpp}><span style="font-family: Times New Roman; font-size:8pt;">T</span></th>
+  <th ${thQpp}><span style="font-family: Times New Roman; font-size:8pt;">L</span></th>
+  <th ${thQpp}><span style="font-family: Times New Roman; font-size:8pt;">M</span></th>
+ </tr>
+ </thead>
+ <tbody>`;
+        for (let i = 1; i <= 6; i++) {
+            p += `<tr>${tdQpp(`<b>${i}</b>`)}`;
+            for (let j = 1; j <= 7; j++) {
+                p += tdQpp(esc(d['qppT_' + i + '_' + j])) + tdQpp(esc(d['qppL_' + i + '_' + j])) + tdQpp(esc(d['qppM_' + i + '_' + j]));
+            }
+            p += tdQpp(esc(d['qppOpt_' + i])) + tdQpp(esc(d['qppMarks_' + i]));
+            p += `</tr>`;
+        }
+        p += `<tr><th colspan="23" style="border:0.5pt solid #000; padding:2px; text-align:center; vertical-align:middle; font-size:7pt; font-family: Times New Roman;"><span style="font-family: Times New Roman; font-size:7pt;"><b>Total</b></span></th><td align="center" valign="middle" style="text-align:center !important; vertical-align:middle !important; border:0.5pt solid #000; padding:2px; font-size:7pt; font-family: Times New Roman;"><span style="font-family: Times New Roman; font-size:7pt;"><b>${esc(d.qppTotalMarks)}</b></span></td></tr>`;
+        p += `</tbody></table>`;
+
+        p += `<div style="margin-top:8px;"><p style="margin:2px 0; font-family: Times New Roman; font-size: 12pt;"><span style="font-family: Times New Roman; font-size: 12pt;"><b>Legends</b></span></p></div>
+<div style="margin-top:2px;"><p style="margin:2px 0; font-family: Times New Roman; font-size: 12pt;"><span style="font-family: Times New Roman; font-size: 12pt;">T= Unit Number (Topic and Sub - Topics) &nbsp;&nbsp;&nbsp; L= Level of Question &nbsp;&nbsp;&nbsp; M= Marks</span></p></div>
+<div><p style="margin:2px 0; font-family: Times New Roman; font-size: 12pt;"><span style="font-family: Times New Roman; font-size: 12pt;">R= Remembering &nbsp;&nbsp;&nbsp; U= Understanding &nbsp;&nbsp;&nbsp; A= Application and above</span></p></div>`;
+    }
+
+    p += `<div style="margin-top:20px;"><p style="margin:3px 0; font-family: Times New Roman; font-size: 12pt;"><span style="font-family: Times New Roman; font-size: 12pt;"><b>Prepared by:</b></span></p></div>`;
+    p += `<div style="margin-top:6px;">${preparedByLines(d)}</div>`;
+
+    return p;
+}
+
+function expertNameDesignation(v) {
+    if (v && typeof v === 'object') return { name: v.name || '', designation: v.designation || '' };
+    return { name: v || '', designation: '' };
+}
+
+function preparedByLines(d) {
+    let num = 1;
+    let lines = '';
+    (d.courseExperts || []).map(expertNameDesignation).filter(e => e.name.trim()).forEach(e => {
+        lines += `<p style="margin:3px 0; font-family: Times New Roman; font-size: 12pt;"><span style="font-family: Times New Roman; font-size: 12pt;">${num}. Name of Course Expert: ${esc(e.name)}${e.designation.trim() ? ', ' + esc(e.designation) : ''}</span></p>`;
+        num++;
+    });
+    (d.industryExperts || []).map(expertNameDesignation).filter(e => e.name.trim()).forEach(e => {
+        lines += `<p style="margin:3px 0; font-family: Times New Roman; font-size: 12pt;"><span style="font-family: Times New Roman; font-size: 12pt;">${num}. Name of Industry Expert: ${esc(e.name)}${e.designation.trim() ? ', ' + esc(e.designation) : ''}</span></p>`;
+        num++;
+    });
+    return lines;
+}
+
+function listAsTable(items, heads) {
+    let list = (items || []).filter(v => v && v.trim());
+    if (!list.length) return '';
+    return `<table border="1" cellspacing="0" cellpadding="5" width="100%" style="border-collapse:collapse; margin-bottom:10px; width:100%; font-family: Times New Roman; font-size: 12pt;">
+        <thead><tr>${heads.map(h => `<th style="border:0.5pt solid #000; padding:5px; text-align:center; font-family: Times New Roman; font-size: 12pt;"><span style="font-family: Times New Roman; font-size: 12pt;"><b>${h}</b></span></th>`).join('')}</tr></thead>
+        <tbody>${list.map((v, i) => `<tr>${td(i + 1, 'center')}${td(esc(v))}</tr>`).join('')}</tbody>
+    </table>`;
+}
+
+function showPreview(){
+ let d=collect();
+
+ buildRunningHeaderFooter(d);
+ $('paper').innerHTML = buildPaperHTML(d);
+ $('form').style.display='none';
+ $('preview').style.display='block';
+ $('editBtn').style.display='inline-block';
+ $('printHint').style.display='inline-flex';
+
+ document.title = outputBaseName(d);
+ window.scrollTo(0,0);
+}
+
+function doPrint(){
+ document.title = outputBaseName(collect());
+ if($('preview').style.display!=='block') showPreview();
+ setTimeout(function(){ window.print(); }, 300);
+}
+
+function exitPreview(){
+ $('form').style.display='block';
+ $('preview').style.display='none';
+ $('editBtn').style.display='none';
+ $('printHint').style.display='none';
+ document.title = 'Autonomy 2026';
+}
+
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('preview').style.display==='block')exitPreview()});
+buildProgrammePanel();
+for(let i=0;i<5;i++)addCO();
+for(let i=0;i<5;i++)addTheory();
+for(let i=0;i<3;i++)addLab();
+initDynList('formativeAssessment',2);
+initDynList('summativeAssessment',2);
+initDynList('courseExpert',2);
+initDynList('industryExpert',2);
+buildMatrix();
+refreshAllLabels();
+
+function liveUpdateTitle(){
+ if($('preview').style.display!=='block'){
+  let code=(value('courseCode')||'').trim();
+  let title=(value('courseTitle')||'').trim();
+  document.title = sanitizeFileName((code && title) ? (code+' '+title) : (code||title)) || 'Autonomy 2026';
+ }
+}
+$('courseCode') && $('courseCode').addEventListener('input', liveUpdateTitle);
+$('courseTitle') && $('courseTitle').addEventListener('input', liveUpdateTitle);
+
+// ===== Google Sheets Online Save / Load =====
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxxG_0OTue9ovCJU00FwMag1iPtyWCCrEX-fWgfNos18ZKs5QB9ciEkNqmTpHvSj8ohlg/exec";
+
+async function saveOnline() {
+    try {
+        const data = collect();
+        data.formType = "curriculum";
+        if (!data.courseCode || !data.courseCode.trim()) {
+            alert("Please enter the Subject/Course Code before saving online.");
+            return;
+        }
+
+        setOnlineStatus("Saving online...", false);
+        const response = await fetch(GOOGLE_SCRIPT_URL, {
+            method: "POST",
+            body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            setOnlineStatus("Saved online successfully.", false);
+            alert("Data saved online successfully.");
+        } else {
+            throw new Error(result.message || "Unable to save data.");
+        }
+    } catch (error) {
+        setOnlineStatus("Online save failed.", true);
+        alert("Online save failed: " + error.message);
+    }
+}
+
+async function loadOnline() {
+    const subjectCode = prompt("Enter the Subject/Course Code to load:");
+    if (!subjectCode || !subjectCode.trim()) return;
+
+    try {
+        setOnlineStatus("Loading online data...", false);
+        const response = await fetch(
+            GOOGLE_SCRIPT_URL + "?subjectCode=" + encodeURIComponent(subjectCode.trim())
+        );
+
+        const result = await response.json();
+        if (!result.success) {
+            throw new Error(result.message || "Unable to load data.");
+        }
+
+        if (!result.data) {
+            alert("No saved record found for course code: " + subjectCode);
+            setOnlineStatus("No record found.", true);
+            return;
+        }
+
+        const confirmed = confirm(
+            "Loading this record will replace the current form data. Continue?"
+        );
+
+        if (!confirmed) {
+            setOnlineStatus("Loading cancelled.", false);
+            return;
+        }
+
+        loadData(result.data);
+        setOnlineStatus("Data loaded online successfully.", false);
+        alert("Data loaded online successfully.");
+    } catch (error) {
+        setOnlineStatus("Online load failed.", true);
+        alert("Online load failed: " + error.message);
+    }
+}
+
+function setOnlineStatus(message, isError) {
+    const el = document.getElementById("onlineStatus");
+    if (!el) return;
+    el.textContent = message;
+    el.style.color = isError ? "#b91c1c" : "#166534";
+}
+</script>
+</body>
+</html>
