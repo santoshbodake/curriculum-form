@@ -827,10 +827,10 @@ It's been 20 minutes since your last save. Click "Save Data" to avoid losing you
     <option value="Sixth">Sixth</option>
 </select></div>
 <div class="field"><label>Scheme (e.g. K)</label><input id="curriculumScheme" value="K"></div>
-<div class="field"><label>Course Title</label><input id="courseTitle"></div>
+<div class="field"><label>Course Title</label><input id="courseTitle" oninput="toUpperInput(this)" style="text-transform:uppercase;"></div>
 <div class="field"><label>Course Code</label><input id="courseCode"></div>
 <div class="field"><label>Course Category / Abbreviation</label><input id="category" value="DSC"></div>
-<div class="field"><label>Abbr (short course code, e.g. IRO)</label><input id="abbr"></div>
+<div class="field"><label>Abbr (short course code, e.g. IRO)</label><input id="abbr" oninput="toUpperInput(this)" style="text-transform:uppercase;"></div>
 
 <div class="field full"><label class="section-title-label">1. I. Rationale</label><textarea id="rationale"></textarea></div>
 <div class="field full"><label class="section-title-label">2. II. Industry / Employer Expected Outcome</label><textarea id="employer"></textarea></div>
@@ -1075,6 +1075,7 @@ R= Remembering &nbsp;&nbsp;&nbsp; U= Understanding &nbsp;&nbsp;&nbsp; A= Applica
 <script>
 const $=id=>document.getElementById(id);
 function esc(v){return String(v??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function toUpperInput(el){ const s=el.selectionStart, en=el.selectionEnd; el.value=el.value.toUpperCase(); try{ el.setSelectionRange(s,en); }catch(e){} }
 
 const IKS_NOTE_HTML = `Abbreviations: CL- Class Room Learning, TL- Tutorial Learning, LL-Laboratory Learning, SLH-Self Learning
 Hours, NLH-Notional Learning Hours, FA - Formative Assessment, SA -Summative assessment, IKS - Indian
@@ -1197,7 +1198,7 @@ function addTheory(d={}){
 
     let tloHTML = `<div class="dyn-list" data-type="tlo">` + tlos.map(v => dynRowHTML(v)).join('') + `</div><button type="button" class="add-btn" onclick="addDynItem(this)">+ TLO</button>`;
 
-    let contentHTML = `<label style="display:block; font-weight:600; font-size:12px; margin-bottom:6px; color:#475569; text-transform:uppercase; letter-spacing:0.05em;">Chapter / Unit Name</label><input class="unit-title" oninput="syncWeightage()" placeholder="e.g. Introduction to Robotics" value="${esc(d.unitTitle||'')}" style="font-weight:700; margin-bottom:10px;">` + `<div class="dyn-list" data-type="content">` + contents.map(v => dynRowHTML(v)).join('') + `</div><button type="button" class="add-btn" onclick="addDynItem(this)">+ Topic</button>`;
+    let contentHTML = `<label style="display:block; font-weight:600; font-size:12px; margin-bottom:6px; color:#475569; text-transform:uppercase; letter-spacing:0.05em;">Chapter / Unit Name</label><input class="unit-title" oninput="syncWeightage()" placeholder="e.g. Unit 1 — Introduction to Robotics" value="${esc(d.unitTitle||'')}" style="font-weight:700; margin-bottom:10px;">` + `<div class="dyn-list" data-type="content">` + contents.map(v => dynRowHTML(v)).join('') + `</div><button type="button" class="add-btn" onclick="addDynItem(this)">+ Topic</button>`;
 
     $('theoryTable').querySelector('tbody').insertAdjacentHTML('beforeend',
     `<tr>
@@ -2105,7 +2106,8 @@ async function saveOnline() {
             return;
         }
 
-        setOnlineStatus("Saving online...", false);
+        setOnlineStatus("⏳ Saving online...", false);
+        setToolbarBusy(true);
         const response = await fetch(GOOGLE_SCRIPT_URL, {
             method: "POST",
             body: JSON.stringify(data)
@@ -2114,19 +2116,21 @@ async function saveOnline() {
         const result = await response.json();
         if (handleAuthFailure_(result)) return;
         if (result.success) {
-            setOnlineStatus("Saved online successfully.", false);
+            setOnlineStatus("✅ Saved online successfully.", false);
             hasUnsavedOnlineChanges = false;
             alert("Data saved online successfully.");
         } else if (result.locked) {
             applyLockState(true);
-            setOnlineStatus("Save blocked - form is locked.", true);
+            setOnlineStatus("❌ Save blocked - form is locked.", true);
             alert(result.message || "This record is locked and cannot be edited.");
         } else {
             throw new Error(result.message || "Unable to save data.");
         }
     } catch (error) {
-        setOnlineStatus("Online save failed.", true);
+        setOnlineStatus("❌ Online save failed.", true);
         alert("Online save failed: " + error.message);
+    } finally {
+        setToolbarBusy(false);
     }
 }
 
@@ -2157,7 +2161,8 @@ async function submitToModerator() {
     data.action = "submitToModerator";
 
     try {
-        setOnlineStatus("Submitting to moderator...", false);
+        setOnlineStatus("⏳ Submitting to moderator...", false);
+        setToolbarBusy(true);
         const response = await fetch(GOOGLE_SCRIPT_URL, {
             method: "POST",
             body: JSON.stringify(data)
@@ -2167,19 +2172,21 @@ async function submitToModerator() {
         if (handleAuthFailure_(result)) return;
         if (result.success) {
             applyLockState(true);
-            setOnlineStatus("Submitted to moderator. Form is now locked.", false);
+            setOnlineStatus("✅ Submitted to moderator. Form is now locked.", false);
             hasUnsavedOnlineChanges = false;
             alert("Data submitted to moderator successfully. The form is now locked for further edits.");
         } else if (result.locked) {
             applyLockState(true);
-            setOnlineStatus("Already locked.", true);
+            setOnlineStatus("❌ Already locked.", true);
             alert(result.message || "This record is already locked.");
         } else {
             throw new Error(result.message || "Unable to submit data.");
         }
     } catch (error) {
-        setOnlineStatus("Submission failed.", true);
+        setOnlineStatus("❌ Submission failed.", true);
         alert("Submission failed: " + error.message);
+    } finally {
+        setToolbarBusy(false);
     }
 }
 
@@ -2198,7 +2205,8 @@ async function loadOnline() {
     if (!subjectCode || !subjectCode.trim()) return;
 
     try {
-        setOnlineStatus("Loading online data...", false);
+        setOnlineStatus("⏳ Loading online data...", false);
+        setToolbarBusy(true);
         const response = await fetch(
             GOOGLE_SCRIPT_URL + "?subjectCode=" + encodeURIComponent(subjectCode.trim())
                 + "&token=" + encodeURIComponent(getSessionToken_())
@@ -2212,7 +2220,7 @@ async function loadOnline() {
 
         if (!result.data) {
             alert("No saved record found for course code: " + subjectCode);
-            setOnlineStatus("No record found.", true);
+            setOnlineStatus("❌ No record found.", true);
             return;
         }
 
@@ -2228,21 +2236,41 @@ async function loadOnline() {
         loadData(result.data);
         applyLockState(!!result.locked);
         hasUnsavedOnlineChanges = false;
-        setOnlineStatus(result.locked ? "Data loaded. This record is LOCKED." : "Data loaded online successfully.", false);
+        setOnlineStatus(result.locked ? "✅ Data loaded. This record is LOCKED." : "✅ Data loaded online successfully.", false);
         alert(result.locked
             ? "Data loaded online successfully. Note: this record is locked (already submitted to moderator) and cannot be overwritten."
             : "Data loaded online successfully.");
     } catch (error) {
-        setOnlineStatus("Online load failed.", true);
+        setOnlineStatus("❌ Online load failed.", true);
         alert("Online load failed: " + error.message);
+    } finally {
+        setToolbarBusy(false);
     }
 }
 
 function setOnlineStatus(message, isError) {
     const el = document.getElementById("onlineStatus");
     if (!el) return;
+    if (!message) {
+        el.style.display = "none";
+        el.textContent = "";
+        return;
+    }
     el.textContent = message;
     el.style.color = isError ? "#b91c1c" : "#166534";
+    el.style.background = isError
+        ? "linear-gradient(to right, #fef2f2, #fee2e2)"
+        : "linear-gradient(to right, #eff6ff, #e0e7ff)";
+    el.style.borderLeftColor = isError ? "#dc2626" : "#4f46e5";
+    el.style.display = "inline-flex";
+}
+
+function setToolbarBusy(busy) {
+    document.querySelectorAll('.toolbar button, #submitModeratorBtn').forEach(b => { b.disabled = busy; });
+    if (!busy && isFormLocked) {
+        const submitBtn = document.getElementById('submitModeratorBtn');
+        if (submitBtn) submitBtn.disabled = true;
+    }
 }
 </script>
 </body>
