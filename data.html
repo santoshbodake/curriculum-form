@@ -1197,7 +1197,7 @@ function addTheory(d={}){
 
     let tloHTML = `<div class="dyn-list" data-type="tlo">` + tlos.map(v => dynRowHTML(v)).join('') + `</div><button type="button" class="add-btn" onclick="addDynItem(this)">+ TLO</button>`;
 
-    let contentHTML = `<label style="display:block; font-weight:600; font-size:12px; margin-bottom:6px; color:#475569; text-transform:uppercase; letter-spacing:0.05em;">Chapter / Unit Name</label><input class="unit-title" oninput="syncWeightage()" placeholder="e.g. Unit 1 — Introduction to Robotics" value="${esc(d.unitTitle||'')}" style="font-weight:700; margin-bottom:10px;">` + `<div class="dyn-list" data-type="content">` + contents.map(v => dynRowHTML(v)).join('') + `</div><button type="button" class="add-btn" onclick="addDynItem(this)">+ Topic</button>`;
+    let contentHTML = `<label style="display:block; font-weight:600; font-size:12px; margin-bottom:6px; color:#475569; text-transform:uppercase; letter-spacing:0.05em;">Chapter / Unit Name</label><input class="unit-title" oninput="syncWeightage()" placeholder="e.g. Introduction to Robotics" value="${esc(d.unitTitle||'')}" style="font-weight:700; margin-bottom:10px;">` + `<div class="dyn-list" data-type="content">` + contents.map(v => dynRowHTML(v)).join('') + `</div><button type="button" class="add-btn" onclick="addDynItem(this)">+ Topic</button>`;
 
     $('theoryTable').querySelector('tbody').insertAdjacentHTML('beforeend',
     `<tr>
