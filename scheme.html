@@ -539,8 +539,10 @@ function handleAuthFailure_(result) {
   <section class="card" style="text-align:center;">
     <h2>Reports</h2>
     <button class="btn btn-report" id="btnReports">&#128202; Generate Final Reports</button>
+    <button class="btn btn-navy" id="btnAllDeptSummary" style="display:none;margin-left:10px;">&#127970; All Department Summary</button>
     <div class="hint" style="margin-top:12px;">
       Generates Curriculum at a Glance, Credit Distribution (course-category wise) and the Semester-wise Totalling &amp; Grand Total report.
+      "All Department Summary" (admin only) consolidates the latest Saved Online data across every department.
     </div>
   </section>
 
@@ -841,6 +843,11 @@ function handleAuthFailure_(result) {
         return '<option value="'+p.code+'">'+p.code+' &mdash; '+p.name+'</option>';
       }).join("");
   }
+  if (IS_ADMIN) {
+    var allDeptSummaryBtn = document.getElementById("btnAllDeptSummary");
+    if (allDeptSummaryBtn) allDeptSummaryBtn.style.display = "inline-flex";
+  }
+
   progSelect.addEventListener("change", function(){
     if (RESTRICTED_PROG) { progSelect.value = RESTRICTED_PROG.code; return; }
     state.programmeCode = progSelect.value;
@@ -1981,22 +1988,236 @@ function handleAuthFailure_(result) {
     function pad(n){ return n < 10 ? "0" + n : String(n); }
   }
 
+  /* ================= REPORT MODAL (shared by both "Generate Final Reports"
+     and the new "All Department Summary") =================
+     The modal, Print and Save-as-Word buttons are reused as-is; they now act
+     on whichever report HTML was opened last, so existing export/print
+     behaviour for the per-programme report is fully preserved. */
   var reportBackdrop = document.getElementById("reportBackdrop");
   var reportTitleEl = document.querySelector("#reportBackdrop .modal-head h3");
-  document.getElementById("btnReports").addEventListener("click", function(){
-    document.getElementById("reportBody").innerHTML = buildReportsHTML();
-    if (reportTitleEl) reportTitleEl.textContent = outputTitle("Reports");
+  var lastReportHTML = "";
+  var lastReportTitle = "Reports";
+  var lastReportFileName = "Reports";
+
+  function openReportModal(html, titleText, fileNameBase){
+    lastReportHTML = html;
+    lastReportTitle = titleText;
+    lastReportFileName = fileNameBase || titleText;
+    document.getElementById("reportBody").innerHTML = html;
+    if (reportTitleEl) reportTitleEl.textContent = titleText;
     reportBackdrop.classList.add("open");
+  }
+
+  document.getElementById("btnReports").addEventListener("click", function(){
+    openReportModal(buildReportsHTML(), outputTitle("Reports"), outputFileName("Reports"));
   });
   document.getElementById("closeReport").addEventListener("click", function(){ reportBackdrop.classList.remove("open"); });
   reportBackdrop.addEventListener("click", function(e){ if (e.target === reportBackdrop) reportBackdrop.classList.remove("open"); });
 
   document.getElementById("btnPrintReport").addEventListener("click", function(){
-    printHTML(outputTitle("Reports"), buildReportsHTML());
+    printHTML(lastReportTitle, lastReportHTML);
   });
   document.getElementById("btnReportWord").addEventListener("click", function(){
-    wordHTML(buildReportsHTML(), outputFileName("Reports") + ".doc", outputTitle("Reports"));
+    wordHTML(lastReportHTML, lastReportFileName + ".doc", lastReportTitle);
   });
+
+  /* ================= ALL DEPARTMENT SUMMARY =================
+     Pulls the latest Saved-Online record for every programme (admin only —
+     each department's data lives on the server, one record per programme
+     code, and is not otherwise available client-side), then builds six
+     consolidated tables purely from that real, existing data. Nothing here
+     touches the currently-loaded programme's in-memory state. */
+  function fetchDeptRecord_(prog){
+    var url = GOOGLE_SCRIPT_URL + "?formType=" + encodeURIComponent(FORM_TYPE)
+            + "&recordKey=" + encodeURIComponent("LAS_" + prog.code + "_AllStages")
+            + "&token=" + encodeURIComponent(getSessionToken_());
+    return fetch(url, {method:"GET", mode:"cors"})
+      .then(function(r){ return r.json(); })
+      .then(function(result){ return { prog: prog, result: result }; })
+      .catch(function(err){ console.error(err); return { prog: prog, result: null }; });
+  }
+
+  function buildAllDeptSummaryHTML(results){
+    function uniqueList(arr){
+      var seen = {}, out = [];
+      arr.forEach(function(v){
+        v = String(v === undefined || v === null ? "" : v).trim();
+        if (!v || seen[v]) return;
+        seen[v] = true;
+        out.push(v);
+      });
+      return out;
+    }
+    function groupBy(list, keyFn){
+      var map = {}, order = [];
+      list.forEach(function(item){
+        var k = keyFn(item);
+        if (!k) return;
+        if (!map[k]) { map[k] = []; order.push(k); }
+        map[k].push(item);
+      });
+      return { map: map, order: order };
+    }
+
+    // Flatten every non-empty course row across every department & stage
+    // using the same course fields / computeCourse logic as the rest of the app.
+    var rows = [];
+    results.forEach(function(item){
+      var prog = item.prog, st = item.data;
+      PAGES.forEach(function(p){
+        var page = st.pages[p.id];
+        page.courses.forEach(function(c){
+          if (!filled(c.title) && !filled(c.code)) return;
+          rows.push({
+            progCode: prog.code,
+            progName: prog.name,
+            stageId: p.id,
+            stageName: p.name,
+            code: String(c.code || "").trim().toUpperCase(),
+            title: String(c.title || "").trim().toUpperCase(),
+            credits: num(c.credits),
+            totalMarks: num(c.totalMarks)
+          });
+        });
+      });
+    });
+
+    var out = '<div class="doctitle">ALL DEPARTMENT SUMMARY</div>'
+      + '<div class="subtitle">Consolidated from Saved-Online data across ' + results.length + ' department(s)</div>';
+
+    // 1. All subjects
+    out += '<h4>1. All Subjects (All Departments &amp; Semesters)</h4>';
+    out += '<table><thead><tr><th style="width:60px;">Sr No</th><th>Course Code</th><th>Course Name</th><th>Programme</th></tr></thead><tbody>';
+    rows.forEach(function(r, i){
+      out += '<tr><td>' + (i + 1) + '</td><td>' + (r.code || DASH) + '</td><td class="left">' + (r.title || DASH)
+        + '</td><td class="left">' + r.progCode + ' - ' + r.progName + '</td></tr>';
+    });
+    if (!rows.length) out += '<tr><td colspan="4">' + DASH + '</td></tr>';
+    out += '</tbody></table>';
+
+    // 2. Unique by Course Code
+    var byCode = groupBy(rows.filter(function(r){ return r.code; }), function(r){ return r.code; });
+    out += '<h4>2. Unique Subjects by Course Code</h4>';
+    out += '<table><thead><tr><th style="width:60px;">Sr No</th><th>Course Code</th><th>Course Name</th><th>Programme(s)</th></tr></thead><tbody>';
+    byCode.order.forEach(function(code, i){
+      var items = byCode.map[code];
+      var titles = uniqueList(items.map(function(x){ return x.title; }));
+      var progs = uniqueList(items.map(function(x){ return x.progCode + ' - ' + x.progName; }));
+      out += '<tr><td>' + (i + 1) + '</td><td>' + code + '</td><td class="left">' + (titles.join(' / ') || DASH)
+        + '</td><td class="left">' + progs.join('; ') + '</td></tr>';
+    });
+    if (!byCode.order.length) out += '<tr><td colspan="4">' + DASH + '</td></tr>';
+    out += '</tbody></table>';
+
+    // 3. Unique by Course Name
+    var byName = groupBy(rows.filter(function(r){ return r.title; }), function(r){ return r.title; });
+    out += '<h4>3. Unique Subjects by Course Name</h4>';
+    out += '<table><thead><tr><th style="width:60px;">Sr No</th><th>Course Name</th><th>Course Code(s)</th><th>Programme(s)</th></tr></thead><tbody>';
+    byName.order.forEach(function(title, i){
+      var items = byName.map[title];
+      var codes = uniqueList(items.map(function(x){ return x.code; }));
+      var progs = uniqueList(items.map(function(x){ return x.progCode + ' - ' + x.progName; }));
+      out += '<tr><td>' + (i + 1) + '</td><td class="left">' + title + '</td><td>' + (codes.join(' / ') || DASH)
+        + '</td><td class="left">' + progs.join('; ') + '</td></tr>';
+    });
+    if (!byName.order.length) out += '<tr><td colspan="4">' + DASH + '</td></tr>';
+    out += '</tbody></table>';
+
+    // 4. Department-wise summary
+    out += '<h4>4. Department-wise Summary</h4>';
+    out += '<table><thead><tr><th style="width:60px;">Sr No</th><th>Department</th><th>Total Course Entries</th><th>Unique Courses (by Code)</th><th>Total Credits</th><th>Total Marks</th></tr></thead><tbody>';
+    results.forEach(function(item, i){
+      var deptRows = rows.filter(function(r){ return r.progCode === item.prog.code; });
+      var uniqCodes = uniqueList(deptRows.map(function(r){ return r.code; })).length;
+      var cr = 0, mk = 0;
+      deptRows.forEach(function(r){ cr += r.credits; mk += r.totalMarks; });
+      out += '<tr><td>' + (i + 1) + '</td><td class="left">' + item.prog.code + ' - ' + item.prog.name
+        + '</td><td>' + deptRows.length + '</td><td>' + uniqCodes + '</td><td>' + (cr ? tidy(cr) : "0")
+        + '</td><td>' + (mk ? tidy(mk) : "0") + '</td></tr>';
+    });
+    if (!results.length) out += '<tr><td colspan="6">' + DASH + '</td></tr>';
+    out += '</tbody></table>';
+
+    // 5. Semester / stage-wise summary (all departments combined)
+    out += '<h4>5. Semester / Stage-wise Summary (All Departments)</h4>';
+    out += '<table><thead><tr><th style="width:60px;">Sr No</th><th>Semester / Stage</th><th>Total Course Entries</th><th>Total Credits</th><th>Total Marks</th></tr></thead><tbody>';
+    PAGES.forEach(function(p, i){
+      var stRows = rows.filter(function(r){ return r.stageId === p.id; });
+      var cr = 0, mk = 0;
+      stRows.forEach(function(r){ cr += r.credits; mk += r.totalMarks; });
+      out += '<tr><td>' + (i + 1) + '</td><td class="left">' + p.name + '</td><td>' + stRows.length
+        + '</td><td>' + (cr ? tidy(cr) : "0") + '</td><td>' + (mk ? tidy(mk) : "0") + '</td></tr>';
+    });
+    out += '</tbody></table>';
+
+    // 6. Department comparison (credits by semester)
+    out += '<h4>6. Department Comparison &mdash; Credits by Semester</h4>';
+    out += '<table><thead><tr><th class="left">Department</th>';
+    SEM_PAGES.forEach(function(p){ out += '<th>' + p.tab + '</th>'; });
+    out += '<th>Total Credits</th><th>Total Marks</th></tr></thead><tbody>';
+    results.forEach(function(item){
+      var totalCr = 0, totalMk = 0;
+      var cells = '';
+      SEM_PAGES.forEach(function(p){
+        var stRows = rows.filter(function(r){ return r.progCode === item.prog.code && r.stageId === p.id; });
+        var cr = 0;
+        stRows.forEach(function(r){ cr += r.credits; });
+        totalCr += cr;
+        cells += '<td>' + (cr ? tidy(cr) : "0") + '</td>';
+      });
+      rows.filter(function(r){ return r.progCode === item.prog.code; }).forEach(function(r){ totalMk += r.totalMarks; });
+      out += '<tr><td class="left">' + item.prog.code + ' - ' + item.prog.name + '</td>' + cells
+        + '<td><b>' + (totalCr ? tidy(totalCr) : "0") + '</b></td><td><b>' + (totalMk ? tidy(totalMk) : "0") + '</b></td></tr>';
+    });
+    if (!results.length) out += '<tr><td colspan="' + (SEM_PAGES.length + 3) + '">' + DASH + '</td></tr>';
+    out += '</tbody></table>';
+
+    out += '<div class="note">Generated from the latest data saved online ("Save Online") for each department at the time this report was run. '
+      + 'Departments with no saved online record are not included. First Year Exit and Second Year Exit stages are included in Sections 1&ndash;5 '
+      + 'but excluded from the semester-wise comparison in Section 6 (matching the six-semester Credit Distribution report above).</div>';
+
+    return out;
+  }
+
+  function runAllDeptSummary(){
+    if (!checkOnlineURL()) return;
+    var btn = document.getElementById("btnAllDeptSummary");
+    var originalHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = "Loading all departments...";
+    setStatus("Fetching data for all departments...", false);
+
+    Promise.all(PROGRAMMES.map(fetchDeptRecord_)).then(function(items){
+      var authIssue = items.filter(function(it){ return it.result && it.result.authRequired; })[0];
+      if (authIssue) { handleAuthFailure_(authIssue.result); return; }
+
+      var results = [];
+      items.forEach(function(it){
+        var result = it.result;
+        if (result && result.success && result.data){
+          var loaded = result.data.data || result.data;
+          if (loaded && loaded.pages) results.push({ prog: it.prog, data: normaliseLoaded(loaded) });
+        }
+      });
+
+      if (!results.length){
+        setStatus("No saved online data found for any department yet.", true);
+        return;
+      }
+
+      var html = buildAllDeptSummaryHTML(results);
+      openReportModal(html, "All Department Summary \u2014 All Programmes", "All_Department_Summary");
+      setStatus("All Department Summary generated from " + results.length + " of " + PROGRAMMES.length + " department record(s).");
+    }).catch(function(err){
+      console.error(err);
+      setStatus("Could not build All Department Summary. Check the Web App URL and deployment access.", true);
+    }).finally(function(){
+      btn.disabled = false;
+      btn.innerHTML = originalHTML;
+    });
+  }
+
+  document.getElementById("btnAllDeptSummary").addEventListener("click", runAllDeptSummary);
 
   switchPage("sem1"); // init will trigger initial recordHistory pass
 
