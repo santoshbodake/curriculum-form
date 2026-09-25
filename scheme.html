@@ -566,6 +566,7 @@ function handleAuthFailure_(result) {
       <div class="spacer"></div>
       <button class="btn btn-outline" id="btnPrintReport">&#128424; Print Reports</button>
       <button class="btn btn-outline" id="btnReportWord">&#128196; Save Reports as Word</button>
+      <button class="btn btn-outline" id="btnReportExcel" style="display:none;">&#128202; Save Reports as Excel</button>
       <button class="close-x" id="closeReport">&#10005;</button>
     </div>
     <div id="reportBody"></div>
@@ -1998,13 +1999,17 @@ function handleAuthFailure_(result) {
   var lastReportHTML = "";
   var lastReportTitle = "Reports";
   var lastReportFileName = "Reports";
+  var lastReportExcelBuilder = null;
 
-  function openReportModal(html, titleText, fileNameBase){
+  function openReportModal(html, titleText, fileNameBase, excelBuilder){
     lastReportHTML = html;
     lastReportTitle = titleText;
     lastReportFileName = fileNameBase || titleText;
+    lastReportExcelBuilder = (typeof excelBuilder === "function") ? excelBuilder : null;
     document.getElementById("reportBody").innerHTML = html;
     if (reportTitleEl) reportTitleEl.textContent = titleText;
+    var excelBtn = document.getElementById("btnReportExcel");
+    if (excelBtn) excelBtn.style.display = lastReportExcelBuilder ? "" : "none";
     reportBackdrop.classList.add("open");
   }
 
@@ -2019,6 +2024,9 @@ function handleAuthFailure_(result) {
   });
   document.getElementById("btnReportWord").addEventListener("click", function(){
     wordHTML(lastReportHTML, lastReportFileName + ".doc", lastReportTitle);
+  });
+  document.getElementById("btnReportExcel").addEventListener("click", function(){
+    if (typeof lastReportExcelBuilder === "function") lastReportExcelBuilder();
   });
 
   /* ================= ALL DEPARTMENT SUMMARY =================
@@ -2037,34 +2045,37 @@ function handleAuthFailure_(result) {
       .catch(function(err){ console.error(err); return { prog: prog, result: null }; });
   }
 
-  function buildAllDeptSummaryHTML(results){
-    function uniqueList(arr){
-      var seen = {}, out = [];
-      arr.forEach(function(v){
-        v = String(v === undefined || v === null ? "" : v).trim();
-        if (!v || seen[v]) return;
-        seen[v] = true;
-        out.push(v);
-      });
-      return out;
-    }
-    function groupBy(list, keyFn){
-      var map = {}, order = [];
-      list.forEach(function(item){
-        var k = keyFn(item);
-        if (!k) return;
-        if (!map[k]) { map[k] = []; order.push(k); }
-        map[k].push(item);
-      });
-      return { map: map, order: order };
-    }
+  function allDeptUniqueList_(arr){
+    var seen = {}, out = [];
+    arr.forEach(function(v){
+      v = String(v === undefined || v === null ? "" : v).trim();
+      if (!v || seen[v]) return;
+      seen[v] = true;
+      out.push(v);
+    });
+    return out;
+  }
+  function allDeptGroupBy_(list, keyFn){
+    var map = {}, order = [];
+    list.forEach(function(item){
+      var k = keyFn(item);
+      if (!k) return;
+      if (!map[k]) { map[k] = []; order.push(k); }
+      map[k].push(item);
+    });
+    return { map: map, order: order };
+  }
 
-    // Flatten every non-empty course row across every department & stage
-    // using the same course fields / computeCourse logic as the rest of the app.
+  // Flatten every non-empty course row across every department & (real) semester
+  // using the same course fields / computeCourse logic as the rest of the app.
+  // First Year Exit and Second Year Exit stages are intentionally excluded —
+  // only SEM_PAGES (the six actual semesters) are considered, matching the
+  // six-semester Credit Distribution report elsewhere in this file.
+  function buildAllDeptRows_(results){
     var rows = [];
     results.forEach(function(item){
       var prog = item.prog, st = item.data;
-      PAGES.forEach(function(p){
+      SEM_PAGES.forEach(function(p){
         var page = st.pages[p.id];
         page.courses.forEach(function(c){
           if (!filled(c.title) && !filled(c.code)) return;
@@ -2081,16 +2092,21 @@ function handleAuthFailure_(result) {
         });
       });
     });
+    return rows;
+  }
+
+  function buildAllDeptSummaryHTML(results, rows){
+    var uniqueList = allDeptUniqueList_, groupBy = allDeptGroupBy_;
 
     var out = '<div class="doctitle">ALL DEPARTMENT SUMMARY</div>'
-      + '<div class="subtitle">Consolidated from Saved-Online data across ' + results.length + ' department(s)</div>';
+      + '<div class="subtitle">Consolidated from Saved-Online data across ' + results.length + ' department(s) &mdash; six semesters only</div>';
 
     // 1. All subjects
     out += '<h4>1. All Subjects (All Departments &amp; Semesters)</h4>';
     out += '<table><thead><tr><th style="width:60px;">Sr No</th><th>Course Code</th><th>Course Name</th><th>Programme</th></tr></thead><tbody>';
     rows.forEach(function(r, i){
       out += '<tr><td>' + (i + 1) + '</td><td>' + (r.code || DASH) + '</td><td class="left">' + (r.title || DASH)
-        + '</td><td class="left">' + r.progCode + ' - ' + r.progName + '</td></tr>';
+        + '</td><td>' + r.progCode + '</td></tr>';
     });
     if (!rows.length) out += '<tr><td colspan="4">' + DASH + '</td></tr>';
     out += '</tbody></table>';
@@ -2102,9 +2118,9 @@ function handleAuthFailure_(result) {
     byCode.order.forEach(function(code, i){
       var items = byCode.map[code];
       var titles = uniqueList(items.map(function(x){ return x.title; }));
-      var progs = uniqueList(items.map(function(x){ return x.progCode + ' - ' + x.progName; }));
+      var progs = uniqueList(items.map(function(x){ return x.progCode; }));
       out += '<tr><td>' + (i + 1) + '</td><td>' + code + '</td><td class="left">' + (titles.join(' / ') || DASH)
-        + '</td><td class="left">' + progs.join('; ') + '</td></tr>';
+        + '</td><td>' + progs.join(', ') + '</td></tr>';
     });
     if (!byCode.order.length) out += '<tr><td colspan="4">' + DASH + '</td></tr>';
     out += '</tbody></table>';
@@ -2116,9 +2132,9 @@ function handleAuthFailure_(result) {
     byName.order.forEach(function(title, i){
       var items = byName.map[title];
       var codes = uniqueList(items.map(function(x){ return x.code; }));
-      var progs = uniqueList(items.map(function(x){ return x.progCode + ' - ' + x.progName; }));
+      var progs = uniqueList(items.map(function(x){ return x.progCode; }));
       out += '<tr><td>' + (i + 1) + '</td><td class="left">' + title + '</td><td>' + (codes.join(' / ') || DASH)
-        + '</td><td class="left">' + progs.join('; ') + '</td></tr>';
+        + '</td><td>' + progs.join(', ') + '</td></tr>';
     });
     if (!byName.order.length) out += '<tr><td colspan="4">' + DASH + '</td></tr>';
     out += '</tbody></table>';
@@ -2138,10 +2154,10 @@ function handleAuthFailure_(result) {
     if (!results.length) out += '<tr><td colspan="6">' + DASH + '</td></tr>';
     out += '</tbody></table>';
 
-    // 5. Semester / stage-wise summary (all departments combined)
-    out += '<h4>5. Semester / Stage-wise Summary (All Departments)</h4>';
-    out += '<table><thead><tr><th style="width:60px;">Sr No</th><th>Semester / Stage</th><th>Total Course Entries</th><th>Total Credits</th><th>Total Marks</th></tr></thead><tbody>';
-    PAGES.forEach(function(p, i){
+    // 5. Semester-wise summary (all departments combined, six semesters only)
+    out += '<h4>5. Semester-wise Summary (All Departments)</h4>';
+    out += '<table><thead><tr><th style="width:60px;">Sr No</th><th>Semester</th><th>Total Course Entries</th><th>Total Credits</th><th>Total Marks</th></tr></thead><tbody>';
+    SEM_PAGES.forEach(function(p, i){
       var stRows = rows.filter(function(r){ return r.stageId === p.id; });
       var cr = 0, mk = 0;
       stRows.forEach(function(r){ cr += r.credits; mk += r.totalMarks; });
@@ -2173,10 +2189,88 @@ function handleAuthFailure_(result) {
     out += '</tbody></table>';
 
     out += '<div class="note">Generated from the latest data saved online ("Save Online") for each department at the time this report was run. '
-      + 'Departments with no saved online record are not included. First Year Exit and Second Year Exit stages are included in Sections 1&ndash;5 '
-      + 'but excluded from the semester-wise comparison in Section 6 (matching the six-semester Credit Distribution report above).</div>';
+      + 'Departments with no saved online record are not included. First Year Exit and Second Year Exit stage data is not considered anywhere in this summary &mdash; '
+      + 'only the six regular semesters.</div>';
 
     return out;
+  }
+
+  function buildAllDeptSummaryWorkbook_(results, rows){
+    var uniqueList = allDeptUniqueList_, groupBy = allDeptGroupBy_;
+    var wb = XLSX.utils.book_new();
+    function addSheet(name, header, dataRows){
+      var ws = XLSX.utils.aoa_to_sheet([header].concat(dataRows));
+      ws['!cols'] = header.map(function(){ return { wch: 22 }; });
+      XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31));
+    }
+
+    addSheet("All Subjects", ["Sr No", "Course Code", "Course Name", "Programme"],
+      rows.map(function(r, i){ return [i + 1, r.code, r.title, r.progCode]; }));
+
+    var byCode = groupBy(rows.filter(function(r){ return r.code; }), function(r){ return r.code; });
+    addSheet("Unique by Code", ["Sr No", "Course Code", "Course Name", "Programme(s)"],
+      byCode.order.map(function(code, i){
+        var items = byCode.map[code];
+        return [i + 1, code, uniqueList(items.map(function(x){ return x.title; })).join(" / "),
+          uniqueList(items.map(function(x){ return x.progCode; })).join(", ")];
+      }));
+
+    var byName = groupBy(rows.filter(function(r){ return r.title; }), function(r){ return r.title; });
+    addSheet("Unique by Name", ["Sr No", "Course Name", "Course Code(s)", "Programme(s)"],
+      byName.order.map(function(title, i){
+        var items = byName.map[title];
+        return [i + 1, title, uniqueList(items.map(function(x){ return x.code; })).join(" / "),
+          uniqueList(items.map(function(x){ return x.progCode; })).join(", ")];
+      }));
+
+    addSheet("Department-wise", ["Sr No", "Department", "Total Course Entries", "Unique Courses (by Code)", "Total Credits", "Total Marks"],
+      results.map(function(item, i){
+        var deptRows = rows.filter(function(r){ return r.progCode === item.prog.code; });
+        var cr = 0, mk = 0;
+        deptRows.forEach(function(r){ cr += r.credits; mk += r.totalMarks; });
+        return [i + 1, item.prog.code + " - " + item.prog.name, deptRows.length,
+          uniqueList(deptRows.map(function(r){ return r.code; })).length, cr, mk];
+      }));
+
+    addSheet("Semester-wise", ["Sr No", "Semester", "Total Course Entries", "Total Credits", "Total Marks"],
+      SEM_PAGES.map(function(p, i){
+        var stRows = rows.filter(function(r){ return r.stageId === p.id; });
+        var cr = 0, mk = 0;
+        stRows.forEach(function(r){ cr += r.credits; mk += r.totalMarks; });
+        return [i + 1, p.name, stRows.length, cr, mk];
+      }));
+
+    var compHeader = ["Department"].concat(SEM_PAGES.map(function(p){ return p.tab; })).concat(["Total Credits", "Total Marks"]);
+    addSheet("Dept Comparison", compHeader,
+      results.map(function(item){
+        var totalCr = 0, totalMk = 0;
+        var cells = SEM_PAGES.map(function(p){
+          var stRows = rows.filter(function(r){ return r.progCode === item.prog.code && r.stageId === p.id; });
+          var cr = 0;
+          stRows.forEach(function(r){ cr += r.credits; });
+          totalCr += cr;
+          return cr;
+        });
+        rows.filter(function(r){ return r.progCode === item.prog.code; }).forEach(function(r){ totalMk += r.totalMarks; });
+        return [item.prog.code + " - " + item.prog.name].concat(cells).concat([totalCr, totalMk]);
+      }));
+
+    return wb;
+  }
+
+  function downloadAllDeptSummaryExcel_(results, rows){
+    if (typeof XLSX === "undefined"){
+      setStatus("The Excel library could not load. Connect to the internet and reload the page.", true);
+      return;
+    }
+    try {
+      var wb = buildAllDeptSummaryWorkbook_(results, rows);
+      XLSX.writeFile(wb, "All_Department_Summary.xlsx");
+      setStatus("All Department Summary exported to Excel (6 sheets).");
+    } catch(err){
+      console.error(err);
+      setStatus("Could not build the Excel file. " + (err && err.message ? err.message : ""), true);
+    }
   }
 
   function runAllDeptSummary(){
@@ -2205,8 +2299,11 @@ function handleAuthFailure_(result) {
         return;
       }
 
-      var html = buildAllDeptSummaryHTML(results);
-      openReportModal(html, "All Department Summary \u2014 All Programmes", "All_Department_Summary");
+      var rows = buildAllDeptRows_(results);
+      var html = buildAllDeptSummaryHTML(results, rows);
+      openReportModal(html, "All Department Summary \u2014 All Programmes", "All_Department_Summary", function(){
+        downloadAllDeptSummaryExcel_(results, rows);
+      });
       setStatus("All Department Summary generated from " + results.length + " of " + PROGRAMMES.length + " department record(s).");
     }).catch(function(err){
       console.error(err);
