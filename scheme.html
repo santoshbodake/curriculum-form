@@ -2077,8 +2077,18 @@ function handleAuthFailure_(result) {
       var prog = item.prog, st = item.data;
       SEM_PAGES.forEach(function(p){
         var page = st.pages[p.id];
+        // Courses that share the same Sr No are an "Elective (Any - One)" group
+        // (see renderCourseTable / pageSums / semStats above) — only the first
+        // one is an actually-taken subject, so count that group once per stage,
+        // same as the existing per-programme totals and reports already do.
+        var seenSr = {};
         page.courses.forEach(function(c){
           if (!filled(c.title) && !filled(c.code)) return;
+          var sr = String(c.srNo).trim();
+          if (sr !== "") {
+            if (seenSr[sr]) return;
+            seenSr[sr] = true;
+          }
           rows.push({
             progCode: prog.code,
             progName: prog.name,
