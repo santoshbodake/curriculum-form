@@ -231,9 +231,48 @@
     .illustration .laptop { width: 90px; }
     .formSide { padding: 8px 32px 30px; }
   }
+
+  /* ===== Global Loading Overlay (modern spinner) ===== */
+  .gl-overlay {
+    position: fixed; inset: 0; z-index: 9999;
+    display: none; align-items: center; justify-content: center;
+    background: rgba(30, 20, 60, 0.35);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    opacity: 0; transition: opacity 0.25s ease;
+  }
+  .gl-overlay.show { display: flex; opacity: 1; }
+  .gl-box {
+    background: #fff; border-radius: 18px; padding: 26px 34px;
+    display: flex; flex-direction: column; align-items: center; gap: 14px;
+    box-shadow: 0 25px 60px rgba(76, 29, 149, 0.35);
+    transform: translateY(8px) scale(0.96); transition: transform 0.25s ease;
+    min-width: 200px;
+  }
+  .gl-overlay.show .gl-box { transform: translateY(0) scale(1); }
+  .gl-ring {
+    width: 44px; height: 44px; border-radius: 50%;
+    border: 4px solid rgba(124, 58, 237, 0.15);
+    border-top-color: #7c3aed; border-right-color: #db2777;
+    animation: gl-spin 0.85s linear infinite;
+  }
+  @keyframes gl-spin { to { transform: rotate(360deg); } }
+  .gl-text {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 13px; font-weight: 600; color: #4c1d95;
+    letter-spacing: 0.02em; text-align: center;
+    animation: gl-pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes gl-pulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
 </style>
 </head>
 <body>
+
+<div class="gl-overlay" id="glOverlay" aria-hidden="true">
+  <div class="gl-box">
+    <div class="gl-ring"></div>
+    <div class="gl-text" id="glText">Loading...</div>
+  </div>
+</div>
 
 <div class="card">
 
@@ -314,6 +353,17 @@ function getAuth() {
   catch (e) { return null; }
 }
 
+function showLoader(msg) {
+  var ov = document.getElementById('glOverlay');
+  var t = document.getElementById('glText');
+  if (t) t.textContent = msg || 'Loading...';
+  if (ov) ov.classList.add('show');
+}
+function hideLoader() {
+  var ov = document.getElementById('glOverlay');
+  if (ov) ov.classList.remove('show');
+}
+
 function showDashboard(username) {
   document.getElementById('loginBox').style.display = 'none';
   document.getElementById('dashboard').style.display = 'flex';
@@ -344,6 +394,7 @@ async function doLogin(event) {
 
   btn.disabled = true;
   setMsg('Checking credentials...', '');
+  showLoader('Signing in...');
 
   try {
     const response = await fetch(GOOGLE_SCRIPT_URL, {
@@ -363,6 +414,7 @@ async function doLogin(event) {
     setMsg('Login failed: ' + error.message, 'error');
   } finally {
     btn.disabled = false;
+    hideLoader();
   }
   return false;
 }

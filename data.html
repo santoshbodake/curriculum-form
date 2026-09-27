@@ -643,9 +643,49 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.6; }
  .pagebreak { page-break-before: always; }
  @page { size: A4; margin: 15mm; }
 }
+
+/* ===== Global Loading Overlay (modern spinner) ===== */
+.gl-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  display: none; align-items: center; justify-content: center;
+  background: rgba(30, 20, 60, 0.35);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  opacity: 0; transition: opacity 0.25s ease;
+}
+.gl-overlay.show { display: flex; opacity: 1; }
+.gl-box {
+  background: #fff; border-radius: 18px; padding: 26px 34px;
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  box-shadow: 0 25px 60px rgba(76, 29, 149, 0.35);
+  transform: translateY(8px) scale(0.96); transition: transform 0.25s ease;
+  min-width: 200px;
+}
+.gl-overlay.show .gl-box { transform: translateY(0) scale(1); }
+.gl-ring {
+  width: 44px; height: 44px; border-radius: 50%;
+  border: 4px solid rgba(124, 58, 237, 0.15);
+  border-top-color: #7c3aed; border-right-color: #db2777;
+  animation: gl-spin 0.85s linear infinite;
+}
+@keyframes gl-spin { to { transform: rotate(360deg); } }
+.gl-text {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 13px; font-weight: 600; color: #4f46e5;
+  letter-spacing: 0.02em; text-align: center;
+  animation: gl-pulse 1.6s ease-in-out infinite;
+}
+@keyframes gl-pulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
+@media print { .gl-overlay { display: none !important; } }
 </style>
 </head>
 <body>
+
+<div class="gl-overlay" id="glOverlay" aria-hidden="true">
+  <div class="gl-box">
+    <div class="gl-ring"></div>
+    <div class="gl-text" id="glText">Loading...</div>
+  </div>
+</div>
 
 <nav id="sectionNav">
   <div class="navHeader">
@@ -1074,6 +1114,16 @@ R= Remembering &nbsp;&nbsp;&nbsp; U= Understanding &nbsp;&nbsp;&nbsp; A= Applica
 
 <script>
 const $=id=>document.getElementById(id);
+function showLoader(msg) {
+  var ov = document.getElementById('glOverlay');
+  var t = document.getElementById('glText');
+  if (t) t.textContent = msg || 'Loading...';
+  if (ov) ov.classList.add('show');
+}
+function hideLoader() {
+  var ov = document.getElementById('glOverlay');
+  if (ov) ov.classList.remove('show');
+}
 function esc(v){return String(v??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function toUpperInput(el){ const s=el.selectionStart, en=el.selectionEnd; el.value=el.value.toUpperCase(); try{ el.setSelectionRange(s,en); }catch(e){} }
 
@@ -1413,7 +1463,21 @@ function collect(){
  return data;
 }
 
-function saveJSON(){let blob=new Blob([JSON.stringify(collect(),null,2)],{type:'application/json'});let a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=(value('courseCode')||'curriculum')+'.json';a.click();resetSaveReminder();}
+function saveJSON(){
+ showLoader("Saving to your computer...");
+ setTimeout(function(){
+   try {
+     let blob=new Blob([JSON.stringify(collect(),null,2)],{type:'application/json'});
+     let a=document.createElement('a');
+     a.href=URL.createObjectURL(blob);
+     a.download=(value('courseCode')||'curriculum')+'.json';
+     a.click();
+     resetSaveReminder();
+   } finally {
+     hideLoader();
+   }
+ }, 30);
+}
 
 const SAVE_REMINDER_INTERVAL_MS = 20 * 60 * 1000;
 let saveReminderTimer = null;
@@ -1453,6 +1517,8 @@ function docxFileName(d){
 }
 
 async function saveWord(){
+ showLoader("Generating Word document...");
+ try {
  let d = collect();
  let excludeQPP = !!($('excludeQPPToggle') && $('excludeQPPToggle').checked);
  let bodyHTML = buildPaperHTML(d, {excludeQPP: excludeQPP});
@@ -1554,17 +1620,23 @@ ${bodyHTML}
  a.download = outputBaseName(d) + '.doc';
  a.click();
  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+ } finally {
+   hideLoader();
+ }
 }
 
 function loadJSON(){
  let i=document.createElement('input');i.type='file';i.accept='.json';
  i.onchange=()=>{
   let f=i.files[0];if(!f)return;
+  showLoader("Loading file...");
   let r=new FileReader();
   r.onload=()=>{
     try { loadData(JSON.parse(r.result)); markUnsavedOnlineChanges(); }
     catch(e) { alert("Error loading data: " + e.message); }
+    finally { hideLoader(); }
   };
+  r.onerror=()=>{ hideLoader(); };
   r.readAsText(f)
  };
  i.click()
@@ -1978,6 +2050,9 @@ function listAsTable(items, heads) {
 }
 
 function showPreview(){
+ showLoader("Generating preview...");
+ setTimeout(function(){
+ try {
  let d=collect();
  let excludeQPP = !!($('excludeQPPToggle') && $('excludeQPPToggle').checked);
 
@@ -1990,6 +2065,10 @@ function showPreview(){
 
  document.title = outputBaseName(d);
  window.scrollTo(0,0);
+ } finally {
+   hideLoader();
+ }
+ }, 30);
 }
 
 function doPrint(){
@@ -2108,6 +2187,7 @@ async function saveOnline() {
 
         setOnlineStatus("⏳ Saving online...", false);
         setToolbarBusy(true);
+        showLoader("Saving online...");
         const response = await fetch(GOOGLE_SCRIPT_URL, {
             method: "POST",
             body: JSON.stringify(data)
@@ -2131,6 +2211,7 @@ async function saveOnline() {
         alert("Online save failed: " + error.message);
     } finally {
         setToolbarBusy(false);
+        hideLoader();
     }
 }
 
@@ -2163,6 +2244,7 @@ async function submitToModerator() {
     try {
         setOnlineStatus("⏳ Submitting to moderator...", false);
         setToolbarBusy(true);
+        showLoader("Submitting to moderator...");
         const response = await fetch(GOOGLE_SCRIPT_URL, {
             method: "POST",
             body: JSON.stringify(data)
@@ -2187,6 +2269,7 @@ async function submitToModerator() {
         alert("Submission failed: " + error.message);
     } finally {
         setToolbarBusy(false);
+        hideLoader();
     }
 }
 
@@ -2207,6 +2290,7 @@ async function loadOnline() {
     try {
         setOnlineStatus("⏳ Loading online data...", false);
         setToolbarBusy(true);
+        showLoader("Loading online data...");
         const response = await fetch(
             GOOGLE_SCRIPT_URL + "?subjectCode=" + encodeURIComponent(subjectCode.trim())
                 + "&token=" + encodeURIComponent(getSessionToken_())
@@ -2245,6 +2329,7 @@ async function loadOnline() {
         alert("Online load failed: " + error.message);
     } finally {
         setToolbarBusy(false);
+        hideLoader();
     }
 }
 

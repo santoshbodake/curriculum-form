@@ -361,10 +361,49 @@ function handleAuthFailure_(result) {
   #docPreview .schemeNotes p { margin: 0 0 6px; }
   #docPreview .schemeNotes ol { margin: 4px 0 0 18px; padding: 0; }
   #docPreview .schemeNotes li { margin-bottom: 3px; }
+
+  /* ===== Global Loading Overlay (modern spinner) ===== */
+  .gl-overlay {
+    position: fixed; inset: 0; z-index: 9999;
+    display: none; align-items: center; justify-content: center;
+    background: rgba(30, 20, 60, 0.35);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    opacity: 0; transition: opacity 0.25s ease;
+  }
+  .gl-overlay.show { display: flex; opacity: 1; }
+  .gl-box {
+    background: #fff; border-radius: 18px; padding: 26px 34px;
+    display: flex; flex-direction: column; align-items: center; gap: 14px;
+    box-shadow: 0 25px 60px rgba(76, 29, 149, 0.35);
+    transform: translateY(8px) scale(0.96); transition: transform 0.25s ease;
+    min-width: 200px;
+  }
+  .gl-overlay.show .gl-box { transform: translateY(0) scale(1); }
+  .gl-ring {
+    width: 44px; height: 44px; border-radius: 50%;
+    border: 4px solid rgba(124, 58, 237, 0.15);
+    border-top-color: var(--primary, #7c3aed); border-right-color: var(--accent, #db2777);
+    animation: gl-spin 0.85s linear infinite;
+  }
+  @keyframes gl-spin { to { transform: rotate(360deg); } }
+  .gl-text {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 13px; font-weight: 600; color: var(--primary-dark, #4f46e5);
+    letter-spacing: 0.02em; text-align: center;
+    animation: gl-pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes gl-pulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
+
+<div class="gl-overlay" id="glOverlay" aria-hidden="true">
+  <div class="gl-box">
+    <div class="gl-ring"></div>
+    <div class="gl-text" id="glText">Loading...</div>
+  </div>
+</div>
 
 <header class="appbar" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
   <div>
@@ -539,10 +578,8 @@ function handleAuthFailure_(result) {
   <section class="card" style="text-align:center;">
     <h2>Reports</h2>
     <button class="btn btn-report" id="btnReports">&#128202; Generate Final Reports</button>
-    <button class="btn btn-navy" id="btnAllDeptSummary" style="display:none;margin-left:10px;">&#127970; All Department Summary</button>
     <div class="hint" style="margin-top:12px;">
       Generates Curriculum at a Glance, Credit Distribution (course-category wise) and the Semester-wise Totalling &amp; Grand Total report.
-      "All Department Summary" (admin only) consolidates the latest Saved Online data across every department.
     </div>
   </section>
 
@@ -566,7 +603,6 @@ function handleAuthFailure_(result) {
       <div class="spacer"></div>
       <button class="btn btn-outline" id="btnPrintReport">&#128424; Print Reports</button>
       <button class="btn btn-outline" id="btnReportWord">&#128196; Save Reports as Word</button>
-      <button class="btn btn-outline" id="btnReportExcel" style="display:none;">&#128202; Save Reports as Excel</button>
       <button class="close-x" id="closeReport">&#10005;</button>
     </div>
     <div id="reportBody"></div>
@@ -586,6 +622,19 @@ function handleAuthFailure_(result) {
 <script>
 (function(){
   "use strict";
+
+  function showLoader(msg) {
+    var ov = document.getElementById('glOverlay');
+    var t = document.getElementById('glText');
+    if (t) t.textContent = msg || 'Loading...';
+    if (ov) ov.classList.add('show');
+  }
+  function hideLoader() {
+    var ov = document.getElementById('glOverlay');
+    if (ov) ov.classList.remove('show');
+  }
+  window.showLoader = showLoader;
+  window.hideLoader = hideLoader;
 
   var DASH = "\u2013";
 
@@ -844,11 +893,6 @@ function handleAuthFailure_(result) {
         return '<option value="'+p.code+'">'+p.code+' &mdash; '+p.name+'</option>';
       }).join("");
   }
-  if (IS_ADMIN) {
-    var allDeptSummaryBtn = document.getElementById("btnAllDeptSummary");
-    if (allDeptSummaryBtn) allDeptSummaryBtn.style.display = "inline-flex";
-  }
-
   progSelect.addEventListener("change", function(){
     if (RESTRICTED_PROG) { progSelect.value = RESTRICTED_PROG.code; return; }
     state.programmeCode = progSelect.value;
@@ -1180,6 +1224,7 @@ function handleAuthFailure_(result) {
   document.getElementById("btnSaveLocal").addEventListener("click", saveLocal);
   function saveLocal(){
     if (ACCESS_DENIED) { setStatus("Access denied — your login is not linked to any programme.", true); return; }
+    showLoader("Saving to your computer...");
     var payload = {
       formType: "LAS_ALL_STAGES",
       savedAt: new Date().toISOString(),
@@ -1197,6 +1242,7 @@ function handleAuthFailure_(result) {
     URL.revokeObjectURL(url);
     markSaved();
     setStatus("All eight stages saved to your downloads folder in one file.");
+    hideLoader();
   }
 
   document.getElementById("btnLoadLocal").addEventListener("click", function(){
@@ -1212,6 +1258,7 @@ function handleAuthFailure_(result) {
   document.getElementById("fileInput").addEventListener("change", function(e){
     var file = e.target.files[0];
     if (!file) return;
+    showLoader("Loading file...");
     var reader = new FileReader();
     reader.onload = function(){
       try{
@@ -1231,8 +1278,11 @@ function handleAuthFailure_(result) {
         setStatus("All stages loaded from the local file.");
       }catch(err){
         setStatus("Could not read that file — is it a saved all-stages JSON?", true);
+      } finally {
+        hideLoader();
       }
     };
+    reader.onerror = function(){ hideLoader(); };
     reader.readAsText(file);
     e.target.value = "";
   });
@@ -1291,6 +1341,7 @@ function handleAuthFailure_(result) {
     }
     var payload = buildOnlinePayload();
     setStatus("Saving online...", false);
+    showLoader("Saving online...");
     fetch(GOOGLE_SCRIPT_URL, {
       method:"POST", mode:"cors",
       headers:{"Content-Type":"text/plain;charset=utf-8"},
@@ -1306,7 +1357,8 @@ function handleAuthFailure_(result) {
     .catch(function(error){
       console.error(error);
       setStatus("Online save failed. Check the Web App URL and deployment access.", true);
-    });
+    })
+    .finally(function(){ hideLoader(); });
   }
 
   document.getElementById("btnSubmitModerator").addEventListener("click", submitToModerator);
@@ -1329,6 +1381,7 @@ function handleAuthFailure_(result) {
     var payload = buildOnlinePayload();
     payload.action = "submitToModerator";
     setStatus("Submitting to moderator...", false);
+    showLoader("Submitting to moderator...");
     fetch(GOOGLE_SCRIPT_URL, {
       method:"POST", mode:"cors",
       headers:{"Content-Type":"text/plain;charset=utf-8"},
@@ -1356,7 +1409,8 @@ function handleAuthFailure_(result) {
       console.error(error);
       setStatus("Submission failed. Check the Web App URL and deployment access.", true);
       alert("Submission failed: " + error.message);
-    });
+    })
+    .finally(function(){ hideLoader(); });
   }
 
   document.getElementById("btnLoadOnline").addEventListener("click", function(){
@@ -1374,6 +1428,7 @@ function handleAuthFailure_(result) {
             + "&recordKey=" + encodeURIComponent(onlineRecordKey())
             + "&token=" + encodeURIComponent(getSessionToken_());
     setStatus("Loading online data...", false);
+    showLoader("Loading online data...");
     fetch(url, {method:"GET", mode:"cors"})
       .then(function(r){ return r.json(); })
       .then(function(result){
@@ -1402,7 +1457,8 @@ function handleAuthFailure_(result) {
       .catch(function(error){
         console.error(error);
         setStatus("Online load failed. Check the Web App URL and deployment access.", true);
-      });
+      })
+      .finally(function(){ hideLoader(); });
   });
 
   var REMIND_MS = 20 * 60 * 1000;
@@ -1558,10 +1614,18 @@ function handleAuthFailure_(result) {
     modalBackdrop.classList.add("open");
   }
   document.getElementById("btnPreview").addEventListener("click", function(){
-    openPreview(buildStageHTML(state.current), outputTitle("Preview - " + pageById(state.current).name));
+    showLoader("Generating preview...");
+    setTimeout(function(){
+      try { openPreview(buildStageHTML(state.current), outputTitle("Preview - " + pageById(state.current).name)); }
+      finally { hideLoader(); }
+    }, 30);
   });
   document.getElementById("btnPreviewAll").addEventListener("click", function(){
-    openPreview(buildAllHTML(), outputTitle("Preview - All Stages"));
+    showLoader("Generating preview for all stages...");
+    setTimeout(function(){
+      try { openPreview(buildAllHTML(), outputTitle("Preview - All Stages")); }
+      finally { hideLoader(); }
+    }, 30);
   });
   document.getElementById("closeModal").addEventListener("click", function(){ modalBackdrop.classList.remove("open"); });
   modalBackdrop.addEventListener("click", function(e){ if (e.target === modalBackdrop) modalBackdrop.classList.remove("open"); });
@@ -1624,11 +1688,22 @@ function handleAuthFailure_(result) {
   }
 
   document.getElementById("btnPrint").addEventListener("click", function(){
-    printHTML(outputTitle("Print"), buildAllHTML());
+    showLoader("Preparing print view...");
+    setTimeout(function(){
+      try { printHTML(outputTitle("Print"), buildAllHTML()); }
+      finally { hideLoader(); }
+    }, 30);
   });
   document.getElementById("btnDocx").addEventListener("click", function(){
-    wordHTML(buildAllHTML(true), outputFileName("Word Document") + ".doc", outputTitle("Word Document"));
-    setStatus("Word file with all eight stages downloaded.");
+    showLoader("Generating Word document...");
+    setTimeout(function(){
+      try {
+        wordHTML(buildAllHTML(true), outputFileName("Word Document") + ".doc", outputTitle("Word Document"));
+        setStatus("Word file with all eight stages downloaded.");
+      } finally {
+        hideLoader();
+      }
+    }, 30);
   });
 
   var EXCEL_COLUMNS = [
@@ -1727,6 +1802,7 @@ function handleAuthFailure_(result) {
   document.getElementById("excelInput").addEventListener("change", function(e){
     var file = e.target.files[0];
     if (!file) return;
+    showLoader("Importing Excel data...");
     var reader = new FileReader();
     reader.onload = function(){
       try{
@@ -1768,8 +1844,11 @@ function handleAuthFailure_(result) {
       }catch(err){
         console.error(err);
         setStatus("Could not read that file. Save it as .xlsx or .csv and try again.", true);
+      } finally {
+        hideLoader();
       }
     };
+    reader.onerror = function(){ hideLoader(); };
     reader.readAsArrayBuffer(file);
     e.target.value = "";
   });
@@ -1808,6 +1887,8 @@ function handleAuthFailure_(result) {
 
   document.getElementById("btnSaveExcel").addEventListener("click", function(){
     if (!excelReady()) return;
+    showLoader("Generating Excel workbook...");
+    setTimeout(function(){
     try {
       var wb = XLSX.utils.book_new();
       PAGES.forEach(function(p){
@@ -1836,7 +1917,10 @@ function handleAuthFailure_(result) {
     } catch(err){
       console.error(err);
       setStatus("Could not build the Excel file. " + (err && err.message ? err.message : ""), true);
+    } finally {
+      hideLoader();
     }
+    }, 30);
   });
 
   function semStats(){
@@ -1989,342 +2073,37 @@ function handleAuthFailure_(result) {
     function pad(n){ return n < 10 ? "0" + n : String(n); }
   }
 
-  /* ================= REPORT MODAL (shared by both "Generate Final Reports"
-     and the new "All Department Summary") =================
-     The modal, Print and Save-as-Word buttons are reused as-is; they now act
-     on whichever report HTML was opened last, so existing export/print
-     behaviour for the per-programme report is fully preserved. */
   var reportBackdrop = document.getElementById("reportBackdrop");
   var reportTitleEl = document.querySelector("#reportBackdrop .modal-head h3");
-  var lastReportHTML = "";
-  var lastReportTitle = "Reports";
-  var lastReportFileName = "Reports";
-  var lastReportExcelBuilder = null;
-
-  function openReportModal(html, titleText, fileNameBase, excelBuilder){
-    lastReportHTML = html;
-    lastReportTitle = titleText;
-    lastReportFileName = fileNameBase || titleText;
-    lastReportExcelBuilder = (typeof excelBuilder === "function") ? excelBuilder : null;
-    document.getElementById("reportBody").innerHTML = html;
-    if (reportTitleEl) reportTitleEl.textContent = titleText;
-    var excelBtn = document.getElementById("btnReportExcel");
-    if (excelBtn) excelBtn.style.display = lastReportExcelBuilder ? "" : "none";
-    reportBackdrop.classList.add("open");
-  }
-
   document.getElementById("btnReports").addEventListener("click", function(){
-    openReportModal(buildReportsHTML(), outputTitle("Reports"), outputFileName("Reports"));
+    showLoader("Generating final reports...");
+    setTimeout(function(){
+      try {
+        document.getElementById("reportBody").innerHTML = buildReportsHTML();
+        if (reportTitleEl) reportTitleEl.textContent = outputTitle("Reports");
+        reportBackdrop.classList.add("open");
+      } finally {
+        hideLoader();
+      }
+    }, 30);
   });
   document.getElementById("closeReport").addEventListener("click", function(){ reportBackdrop.classList.remove("open"); });
   reportBackdrop.addEventListener("click", function(e){ if (e.target === reportBackdrop) reportBackdrop.classList.remove("open"); });
 
   document.getElementById("btnPrintReport").addEventListener("click", function(){
-    printHTML(lastReportTitle, lastReportHTML);
+    showLoader("Preparing print view...");
+    setTimeout(function(){
+      try { printHTML(outputTitle("Reports"), buildReportsHTML()); }
+      finally { hideLoader(); }
+    }, 30);
   });
   document.getElementById("btnReportWord").addEventListener("click", function(){
-    wordHTML(lastReportHTML, lastReportFileName + ".doc", lastReportTitle);
+    showLoader("Generating Word document...");
+    setTimeout(function(){
+      try { wordHTML(buildReportsHTML(), outputFileName("Reports") + ".doc", outputTitle("Reports")); }
+      finally { hideLoader(); }
+    }, 30);
   });
-  document.getElementById("btnReportExcel").addEventListener("click", function(){
-    if (typeof lastReportExcelBuilder === "function") lastReportExcelBuilder();
-  });
-
-  /* ================= ALL DEPARTMENT SUMMARY =================
-     Pulls the latest Saved-Online record for every programme (admin only —
-     each department's data lives on the server, one record per programme
-     code, and is not otherwise available client-side), then builds six
-     consolidated tables purely from that real, existing data. Nothing here
-     touches the currently-loaded programme's in-memory state. */
-  function fetchDeptRecord_(prog){
-    var url = GOOGLE_SCRIPT_URL + "?formType=" + encodeURIComponent(FORM_TYPE)
-            + "&recordKey=" + encodeURIComponent("LAS_" + prog.code + "_AllStages")
-            + "&token=" + encodeURIComponent(getSessionToken_());
-    return fetch(url, {method:"GET", mode:"cors"})
-      .then(function(r){ return r.json(); })
-      .then(function(result){ return { prog: prog, result: result }; })
-      .catch(function(err){ console.error(err); return { prog: prog, result: null }; });
-  }
-
-  function allDeptUniqueList_(arr){
-    var seen = {}, out = [];
-    arr.forEach(function(v){
-      v = String(v === undefined || v === null ? "" : v).trim();
-      if (!v || seen[v]) return;
-      seen[v] = true;
-      out.push(v);
-    });
-    return out;
-  }
-  function allDeptGroupBy_(list, keyFn){
-    var map = {}, order = [];
-    list.forEach(function(item){
-      var k = keyFn(item);
-      if (!k) return;
-      if (!map[k]) { map[k] = []; order.push(k); }
-      map[k].push(item);
-    });
-    return { map: map, order: order };
-  }
-
-  // Flatten every non-empty course row across every department & (real) semester
-  // using the same course fields / computeCourse logic as the rest of the app.
-  // First Year Exit and Second Year Exit stages are intentionally excluded —
-  // only SEM_PAGES (the six actual semesters) are considered, matching the
-  // six-semester Credit Distribution report elsewhere in this file.
-  function buildAllDeptRows_(results){
-    var rows = [];
-    results.forEach(function(item){
-      var prog = item.prog, st = item.data;
-      SEM_PAGES.forEach(function(p){
-        var page = st.pages[p.id];
-        // Courses that share the same Sr No are an "Elective (Any - One)" group
-        // (see renderCourseTable / pageSums / semStats above) — only the first
-        // one is an actually-taken subject, so count that group once per stage,
-        // same as the existing per-programme totals and reports already do.
-        var seenSr = {};
-        page.courses.forEach(function(c){
-          if (!filled(c.title) && !filled(c.code)) return;
-          var sr = String(c.srNo).trim();
-          if (sr !== "") {
-            if (seenSr[sr]) return;
-            seenSr[sr] = true;
-          }
-          rows.push({
-            progCode: prog.code,
-            progName: prog.name,
-            stageId: p.id,
-            stageName: p.name,
-            code: String(c.code || "").trim().toUpperCase(),
-            title: String(c.title || "").trim().toUpperCase(),
-            credits: num(c.credits),
-            totalMarks: num(c.totalMarks)
-          });
-        });
-      });
-    });
-    return rows;
-  }
-
-  function buildAllDeptSummaryHTML(results, rows){
-    var uniqueList = allDeptUniqueList_, groupBy = allDeptGroupBy_;
-
-    var out = '<div class="doctitle">ALL DEPARTMENT SUMMARY</div>'
-      + '<div class="subtitle">Consolidated from Saved-Online data across ' + results.length + ' department(s) &mdash; six semesters only</div>';
-
-    // 1. All subjects
-    out += '<h4>1. All Subjects (All Departments &amp; Semesters)</h4>';
-    out += '<table><thead><tr><th style="width:60px;">Sr No</th><th>Course Code</th><th>Course Name</th><th>Programme</th></tr></thead><tbody>';
-    rows.forEach(function(r, i){
-      out += '<tr><td>' + (i + 1) + '</td><td>' + (r.code || DASH) + '</td><td class="left">' + (r.title || DASH)
-        + '</td><td>' + r.progCode + '</td></tr>';
-    });
-    if (!rows.length) out += '<tr><td colspan="4">' + DASH + '</td></tr>';
-    out += '</tbody></table>';
-
-    // 2. Unique by Course Code
-    var byCode = groupBy(rows.filter(function(r){ return r.code; }), function(r){ return r.code; });
-    out += '<h4>2. Unique Subjects by Course Code</h4>';
-    out += '<table><thead><tr><th style="width:60px;">Sr No</th><th>Course Code</th><th>Course Name</th><th>Programme(s)</th></tr></thead><tbody>';
-    byCode.order.forEach(function(code, i){
-      var items = byCode.map[code];
-      var titles = uniqueList(items.map(function(x){ return x.title; }));
-      var progs = uniqueList(items.map(function(x){ return x.progCode; }));
-      out += '<tr><td>' + (i + 1) + '</td><td>' + code + '</td><td class="left">' + (titles.join(' / ') || DASH)
-        + '</td><td>' + progs.join(', ') + '</td></tr>';
-    });
-    if (!byCode.order.length) out += '<tr><td colspan="4">' + DASH + '</td></tr>';
-    out += '</tbody></table>';
-
-    // 3. Unique by Course Name
-    var byName = groupBy(rows.filter(function(r){ return r.title; }), function(r){ return r.title; });
-    out += '<h4>3. Unique Subjects by Course Name</h4>';
-    out += '<table><thead><tr><th style="width:60px;">Sr No</th><th>Course Name</th><th>Course Code(s)</th><th>Programme(s)</th></tr></thead><tbody>';
-    byName.order.forEach(function(title, i){
-      var items = byName.map[title];
-      var codes = uniqueList(items.map(function(x){ return x.code; }));
-      var progs = uniqueList(items.map(function(x){ return x.progCode; }));
-      out += '<tr><td>' + (i + 1) + '</td><td class="left">' + title + '</td><td>' + (codes.join(' / ') || DASH)
-        + '</td><td>' + progs.join(', ') + '</td></tr>';
-    });
-    if (!byName.order.length) out += '<tr><td colspan="4">' + DASH + '</td></tr>';
-    out += '</tbody></table>';
-
-    // 4. Department-wise summary
-    out += '<h4>4. Department-wise Summary</h4>';
-    out += '<table><thead><tr><th style="width:60px;">Sr No</th><th>Department</th><th>Total Course Entries</th><th>Unique Courses (by Code)</th><th>Total Credits</th><th>Total Marks</th></tr></thead><tbody>';
-    results.forEach(function(item, i){
-      var deptRows = rows.filter(function(r){ return r.progCode === item.prog.code; });
-      var uniqCodes = uniqueList(deptRows.map(function(r){ return r.code; })).length;
-      var cr = 0, mk = 0;
-      deptRows.forEach(function(r){ cr += r.credits; mk += r.totalMarks; });
-      out += '<tr><td>' + (i + 1) + '</td><td class="left">' + item.prog.code + ' - ' + item.prog.name
-        + '</td><td>' + deptRows.length + '</td><td>' + uniqCodes + '</td><td>' + (cr ? tidy(cr) : "0")
-        + '</td><td>' + (mk ? tidy(mk) : "0") + '</td></tr>';
-    });
-    if (!results.length) out += '<tr><td colspan="6">' + DASH + '</td></tr>';
-    out += '</tbody></table>';
-
-    // 5. Semester-wise summary (all departments combined, six semesters only)
-    out += '<h4>5. Semester-wise Summary (All Departments)</h4>';
-    out += '<table><thead><tr><th style="width:60px;">Sr No</th><th>Semester</th><th>Total Course Entries</th><th>Total Credits</th><th>Total Marks</th></tr></thead><tbody>';
-    SEM_PAGES.forEach(function(p, i){
-      var stRows = rows.filter(function(r){ return r.stageId === p.id; });
-      var cr = 0, mk = 0;
-      stRows.forEach(function(r){ cr += r.credits; mk += r.totalMarks; });
-      out += '<tr><td>' + (i + 1) + '</td><td class="left">' + p.name + '</td><td>' + stRows.length
-        + '</td><td>' + (cr ? tidy(cr) : "0") + '</td><td>' + (mk ? tidy(mk) : "0") + '</td></tr>';
-    });
-    out += '</tbody></table>';
-
-    // 6. Department comparison (credits by semester)
-    out += '<h4>6. Department Comparison &mdash; Credits by Semester</h4>';
-    out += '<table><thead><tr><th class="left">Department</th>';
-    SEM_PAGES.forEach(function(p){ out += '<th>' + p.tab + '</th>'; });
-    out += '<th>Total Credits</th><th>Total Marks</th></tr></thead><tbody>';
-    results.forEach(function(item){
-      var totalCr = 0, totalMk = 0;
-      var cells = '';
-      SEM_PAGES.forEach(function(p){
-        var stRows = rows.filter(function(r){ return r.progCode === item.prog.code && r.stageId === p.id; });
-        var cr = 0;
-        stRows.forEach(function(r){ cr += r.credits; });
-        totalCr += cr;
-        cells += '<td>' + (cr ? tidy(cr) : "0") + '</td>';
-      });
-      rows.filter(function(r){ return r.progCode === item.prog.code; }).forEach(function(r){ totalMk += r.totalMarks; });
-      out += '<tr><td class="left">' + item.prog.code + ' - ' + item.prog.name + '</td>' + cells
-        + '<td><b>' + (totalCr ? tidy(totalCr) : "0") + '</b></td><td><b>' + (totalMk ? tidy(totalMk) : "0") + '</b></td></tr>';
-    });
-    if (!results.length) out += '<tr><td colspan="' + (SEM_PAGES.length + 3) + '">' + DASH + '</td></tr>';
-    out += '</tbody></table>';
-
-    out += '<div class="note">Generated from the latest data saved online ("Save Online") for each department at the time this report was run. '
-      + 'Departments with no saved online record are not included. First Year Exit and Second Year Exit stage data is not considered anywhere in this summary &mdash; '
-      + 'only the six regular semesters.</div>';
-
-    return out;
-  }
-
-  function buildAllDeptSummaryWorkbook_(results, rows){
-    var uniqueList = allDeptUniqueList_, groupBy = allDeptGroupBy_;
-    var wb = XLSX.utils.book_new();
-    function addSheet(name, header, dataRows){
-      var ws = XLSX.utils.aoa_to_sheet([header].concat(dataRows));
-      ws['!cols'] = header.map(function(){ return { wch: 22 }; });
-      XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31));
-    }
-
-    addSheet("All Subjects", ["Sr No", "Course Code", "Course Name", "Programme"],
-      rows.map(function(r, i){ return [i + 1, r.code, r.title, r.progCode]; }));
-
-    var byCode = groupBy(rows.filter(function(r){ return r.code; }), function(r){ return r.code; });
-    addSheet("Unique by Code", ["Sr No", "Course Code", "Course Name", "Programme(s)"],
-      byCode.order.map(function(code, i){
-        var items = byCode.map[code];
-        return [i + 1, code, uniqueList(items.map(function(x){ return x.title; })).join(" / "),
-          uniqueList(items.map(function(x){ return x.progCode; })).join(", ")];
-      }));
-
-    var byName = groupBy(rows.filter(function(r){ return r.title; }), function(r){ return r.title; });
-    addSheet("Unique by Name", ["Sr No", "Course Name", "Course Code(s)", "Programme(s)"],
-      byName.order.map(function(title, i){
-        var items = byName.map[title];
-        return [i + 1, title, uniqueList(items.map(function(x){ return x.code; })).join(" / "),
-          uniqueList(items.map(function(x){ return x.progCode; })).join(", ")];
-      }));
-
-    addSheet("Department-wise", ["Sr No", "Department", "Total Course Entries", "Unique Courses (by Code)", "Total Credits", "Total Marks"],
-      results.map(function(item, i){
-        var deptRows = rows.filter(function(r){ return r.progCode === item.prog.code; });
-        var cr = 0, mk = 0;
-        deptRows.forEach(function(r){ cr += r.credits; mk += r.totalMarks; });
-        return [i + 1, item.prog.code + " - " + item.prog.name, deptRows.length,
-          uniqueList(deptRows.map(function(r){ return r.code; })).length, cr, mk];
-      }));
-
-    addSheet("Semester-wise", ["Sr No", "Semester", "Total Course Entries", "Total Credits", "Total Marks"],
-      SEM_PAGES.map(function(p, i){
-        var stRows = rows.filter(function(r){ return r.stageId === p.id; });
-        var cr = 0, mk = 0;
-        stRows.forEach(function(r){ cr += r.credits; mk += r.totalMarks; });
-        return [i + 1, p.name, stRows.length, cr, mk];
-      }));
-
-    var compHeader = ["Department"].concat(SEM_PAGES.map(function(p){ return p.tab; })).concat(["Total Credits", "Total Marks"]);
-    addSheet("Dept Comparison", compHeader,
-      results.map(function(item){
-        var totalCr = 0, totalMk = 0;
-        var cells = SEM_PAGES.map(function(p){
-          var stRows = rows.filter(function(r){ return r.progCode === item.prog.code && r.stageId === p.id; });
-          var cr = 0;
-          stRows.forEach(function(r){ cr += r.credits; });
-          totalCr += cr;
-          return cr;
-        });
-        rows.filter(function(r){ return r.progCode === item.prog.code; }).forEach(function(r){ totalMk += r.totalMarks; });
-        return [item.prog.code + " - " + item.prog.name].concat(cells).concat([totalCr, totalMk]);
-      }));
-
-    return wb;
-  }
-
-  function downloadAllDeptSummaryExcel_(results, rows){
-    if (typeof XLSX === "undefined"){
-      setStatus("The Excel library could not load. Connect to the internet and reload the page.", true);
-      return;
-    }
-    try {
-      var wb = buildAllDeptSummaryWorkbook_(results, rows);
-      XLSX.writeFile(wb, "All_Department_Summary.xlsx");
-      setStatus("All Department Summary exported to Excel (6 sheets).");
-    } catch(err){
-      console.error(err);
-      setStatus("Could not build the Excel file. " + (err && err.message ? err.message : ""), true);
-    }
-  }
-
-  function runAllDeptSummary(){
-    if (!checkOnlineURL()) return;
-    var btn = document.getElementById("btnAllDeptSummary");
-    var originalHTML = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = "Loading all departments...";
-    setStatus("Fetching data for all departments...", false);
-
-    Promise.all(PROGRAMMES.map(fetchDeptRecord_)).then(function(items){
-      var authIssue = items.filter(function(it){ return it.result && it.result.authRequired; })[0];
-      if (authIssue) { handleAuthFailure_(authIssue.result); return; }
-
-      var results = [];
-      items.forEach(function(it){
-        var result = it.result;
-        if (result && result.success && result.data){
-          var loaded = result.data.data || result.data;
-          if (loaded && loaded.pages) results.push({ prog: it.prog, data: normaliseLoaded(loaded) });
-        }
-      });
-
-      if (!results.length){
-        setStatus("No saved online data found for any department yet.", true);
-        return;
-      }
-
-      var rows = buildAllDeptRows_(results);
-      var html = buildAllDeptSummaryHTML(results, rows);
-      openReportModal(html, "All Department Summary \u2014 All Programmes", "All_Department_Summary", function(){
-        downloadAllDeptSummaryExcel_(results, rows);
-      });
-      setStatus("All Department Summary generated from " + results.length + " of " + PROGRAMMES.length + " department record(s).");
-    }).catch(function(err){
-      console.error(err);
-      setStatus("Could not build All Department Summary. Check the Web App URL and deployment access.", true);
-    }).finally(function(){
-      btn.disabled = false;
-      btn.innerHTML = originalHTML;
-    });
-  }
-
-  document.getElementById("btnAllDeptSummary").addEventListener("click", runAllDeptSummary);
 
   switchPage("sem1"); // init will trigger initial recordHistory pass
 
