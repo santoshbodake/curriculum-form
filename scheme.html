@@ -498,7 +498,7 @@ function handleAuthFailure_(result) {
       </div>
       <div class="field">
         <label>Duration (this stage)</label>
-        <input type="text" id="durWeeks" placeholder="e.g. 16 WEEKS">
+        <input type="text" id="durWeeks" placeholder="e.g. 15 WEEKS">
       </div>
       <div class="field">
         <label>Scheme</label>
@@ -845,7 +845,7 @@ function handleAuthFailure_(result) {
 
   function defaultPage(id){
     var p = pageById(id);
-    return { ncrf: p.ncrf, durWeeks: p.exit ? "" : "16 WEEKS", courses: [ emptyCourse(1) ] };
+    return { ncrf: p.ncrf, durWeeks: p.exit ? "" : "15 WEEKS", courses: [ emptyCourse(1) ] };
   }
 
   function defaultState(){
@@ -1641,23 +1641,24 @@ function handleAuthFailure_(result) {
   function printHTML(title, html){
     var w = window.open("", "_blank");
     w.document.write('<html><head><title>'+title+'</title><style>'
-      + '@page{size:landscape;margin:8mm;}'
+      + '@page{size:landscape;margin:5mm;}'
       + '*{box-sizing:border-box;}'
-      + 'body{font-family:"Times New Roman",Times,serif;font-size:10pt;padding:10px;}'
-      + 'table{border-collapse:collapse;width:100%;font-family:"Times New Roman",Times,serif;font-size:10pt;margin-bottom:10pt;page-break-inside:auto;}'
+      + 'body{font-family:"Times New Roman",Times,serif;font-size:8pt;padding:2px;}'
+      + 'table{border-collapse:collapse;width:100%;font-family:"Times New Roman",Times,serif;font-size:8pt;margin-bottom:3pt;page-break-inside:auto;}'
       + 'table.schemeTable{table-layout:fixed;}'
-      + 'th,td{border:1px solid #000;padding:3px 4px;text-align:center;word-wrap:break-word;overflow-wrap:break-word;}'
+      + 'th,td{border:1px solid #000;padding:1px 2px;text-align:center;word-wrap:break-word;overflow-wrap:break-word;line-height:1.05;}'
       + 'th{background:#e6ebf1;}'
       + 'td.left{text-align:left;}'
-      + '.doctitle{text-align:center;font-weight:700;font-size:13pt;}'
-      + '.subtitle{text-align:center;font-weight:700;font-size:11pt;margin-bottom:6px;}'
-      + '.meta-table td{text-align:left;font-size:10pt;}'
-      + 'h4{margin:14px 0 6px;font-size:11pt;}'
-      + '.note{font-size:10pt;color:#444;}'
-      + '.schemeNotes{text-align:left;font-size:10pt;line-height:1.4;margin:4px 0 18px;page-break-inside:avoid;}'
-      + '.schemeNotes p{margin:0 0 5px;}'
-      + '.schemeNotes ol{margin:3px 0 0 16px;padding:0;}'
-      + '.schemeNotes li{margin-bottom:2px;}'
+      + '.doctitle{text-align:center;font-weight:700;font-size:11pt;margin:0 0 1px;}'
+      + '.subtitle{text-align:center;font-weight:700;font-size:9pt;margin-bottom:2px;}'
+      + '.meta-table{margin:0 0 2px;}'
+      + '.meta-table td{text-align:left;font-size:8pt;padding:0 2px;}'
+      + 'h4{margin:6px 0 3px;font-size:9pt;}'
+      + '.note{font-size:8pt;color:#444;}'
+      + '.schemeNotes{text-align:left;font-size:8pt;line-height:1.1;margin:2px 0 6px;page-break-inside:avoid;}'
+      + '.schemeNotes p{margin:0 0 1px;}'
+      + '.schemeNotes ol{margin:1px 0 0 12px;padding:0;}'
+      + '.schemeNotes li{margin-bottom:0.5px;}'
       + '</style></head><body>' + html + '</body></html>');
     w.document.close(); w.focus();
     setTimeout(function(){ w.print(); }, 350);
@@ -1670,22 +1671,22 @@ function handleAuthFailure_(result) {
       + "<w:DoNotOptimizeForBrowser/></w:WordDocument></xml><![endif]-->"
       + "<style>"
       + "@page Section1 {size:297.0mm 210.0mm; mso-page-orientation:landscape; "
-      + "margin-top:8.0mm; margin-bottom:8.0mm; margin-left:7.0mm; margin-right:7.0mm; "
+      + "margin-top:5.0mm; margin-bottom:5.0mm; margin-left:5.0mm; margin-right:5.0mm; "
       + "mso-header-margin:0mm; mso-footer-margin:0mm;}"
       + "div.Section1 {page:Section1;}"
-      + "body{font-family:'Times New Roman',Times,serif;font-size:9pt;margin:0;}"
-      + "table{border-collapse:collapse;width:100%;font-family:'Times New Roman',Times,serif;font-size:9pt;margin-bottom:6pt;}"
+      + "body{font-family:'Times New Roman',Times,serif;font-size:8pt;margin:0;}"
+      + "table{border-collapse:collapse;width:100%;font-family:'Times New Roman',Times,serif;font-size:8pt;margin-bottom:3pt;}"
       + "table.schemeTable{table-layout:fixed;}"
-      + "th,td{border:1px solid #000;padding:0.5pt 2pt;text-align:center;word-wrap:break-word;line-height:105%;mso-line-height-rule:exactly;}"
+      + "th,td{border:1px solid #000;padding:0.3pt 1.5pt;text-align:center;word-wrap:break-word;line-height:100%;mso-line-height-rule:exactly;}"
       + "td.left{text-align:left;}"
-      + ".doctitle{text-align:center;font-weight:bold;font-size:12pt;margin:0 0 2pt;}"
-      + ".subtitle{text-align:center;font-weight:bold;font-size:10pt;margin-bottom:4pt;}"
-      + ".meta-table{margin-bottom:4pt;}"
-      + ".meta-table td{text-align:left;font-size:9pt;padding:0.5pt 2pt;border:none;}"
-      + ".schemeNotes{text-align:left;font-size:9pt;line-height:1.2;margin:3pt 0 12pt;}"
-      + ".schemeNotes p{margin:0 0 3pt;}"
-      + ".schemeNotes ol{margin:2pt 0 0 14pt;padding:0;}"
-      + ".schemeNotes li{margin-bottom:1pt;}"
+      + ".doctitle{text-align:center;font-weight:bold;font-size:11pt;margin:0 0 1pt;}"
+      + ".subtitle{text-align:center;font-weight:bold;font-size:9pt;margin-bottom:2pt;}"
+      + ".meta-table{margin-bottom:2pt;}"
+      + ".meta-table td{text-align:left;font-size:8pt;padding:0.3pt 1.5pt;border:none;}"
+      + ".schemeNotes{text-align:left;font-size:8pt;line-height:1.05;margin:1pt 0 6pt;}"
+      + ".schemeNotes p{margin:0 0 1pt;}"
+      + ".schemeNotes ol{margin:1pt 0 0 10pt;padding:0;}"
+      + ".schemeNotes li{margin-bottom:0.5pt;}"
       + "</style></head><body><div class='Section1'>" + html + "</div></body></html>";
     var blob = new Blob(['\ufeff', full], {type:"application/msword"});
     var url = URL.createObjectURL(blob);
