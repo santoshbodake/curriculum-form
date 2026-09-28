@@ -1421,10 +1421,14 @@ function handleAuthFailure_(result) {
     .finally(function(){ hideLoader(); });
   }
 
-  document.getElementById("btnLoadOnline").addEventListener("click", function(){
+  /* Loads the saved online record for the current programme.
+     auto === true  -> silent login-time load (no overwrite confirmation, no popups).
+     auto === false -> manual "Load from Online" click (asks before overwriting). */
+  function loadOnlineRecord(auto){
     if (ACCESS_DENIED) { setStatus("Access denied — your login is not linked to any programme.", true); return; }
     if (!checkOnlineURL()) return;
-    if (!confirm(
+    if (!state.programmeCode) { setStatus("Select a programme first.", true); return; }
+    if (!auto && !confirm(
       "WARNING\n\nYou are about to load the saved online record for programme \"" +
       (state.programmeCode || "(none selected)") + "\".\n\n" +
       "This will OVERWRITE all data currently entered in all eight stages, " +
@@ -1435,8 +1439,8 @@ function handleAuthFailure_(result) {
     var url = GOOGLE_SCRIPT_URL + "?formType=" + encodeURIComponent(FORM_TYPE)
             + "&recordKey=" + encodeURIComponent(onlineRecordKey())
             + "&token=" + encodeURIComponent(getSessionToken_());
-    setStatus("Loading online data...", false);
-    showLoader("Loading online data...");
+    setStatus(auto ? "Loading your department's saved data..." : "Loading online data...", false);
+    showLoader(auto ? "Loading " + state.programmeCode + " department data..." : "Loading online data...");
     fetch(url, {method:"GET", mode:"cors"})
       .then(function(r){ return r.json(); })
       .then(function(result){
@@ -1454,12 +1458,17 @@ function handleAuthFailure_(result) {
           markSaved();
           onlineDirty = false;
           applyLockState(!!result.locked);
-          setStatus(result.locked ? "Data loaded. This record is LOCKED." : "All stages loaded from the online record.");
-          if (result.locked){
+          setStatus(result.locked
+            ? "Data loaded. This record is LOCKED (submitted to moderator)."
+            : (auto ? "Logged in as " + CURRENT_USER + " — " + RESTRICTED_PROG.code + " saved data loaded automatically."
+                    : "All stages loaded from the online record."));
+          if (result.locked && !auto){
             alert("This record is locked (already submitted to moderator) and cannot be overwritten.");
           }
         } else {
-          setStatus(result.message || "No online save found for this programme yet.", true);
+          setStatus(auto
+            ? "Logged in as " + CURRENT_USER + " — no saved online data for " + state.programmeCode + " yet. You can start entering data."
+            : (result.message || "No online save found for this programme yet."), !auto && true);
         }
       })
       .catch(function(error){
@@ -1467,21 +1476,10 @@ function handleAuthFailure_(result) {
         setStatus("Online load failed. Check the Web App URL and deployment access.", true);
       })
       .finally(function(){ hideLoader(); });
-  });
+  }
 
-  var REMIND_MS = 20 * 60 * 1000;
-  var lastSavedAt = Date.now();
-  var toast = document.getElementById("saveToast");
-  function hideToast(){ toast.classList.remove("show"); }
-  document.getElementById("toastDismiss").addEventListener("click", function(){
-    lastSavedAt = Date.now();
-    hideToast();
-  });
-  document.getElementById("toastSaveLocal").addEventListener("click", function(){ hideToast(); saveLocal(); });
-  document.getElementById("toastSaveOnline").addEventListener("click", function(){ hideToast(); saveOnline(); });
-  setInterval(function(){
-    if (Date.now() - lastSavedAt >= REMIND_MS) toast.classList.add("show");
-  }, 30000);
+  document.getElementById("btnLoadOnline").addEventListener("click", function(){ loadOnlineRecord(false); });
+
   window.addEventListener("beforeunload", function(e){
     // Warn specifically when there is data that has not yet been saved ONLINE —
     // saving locally or to a file does not clear this, since it does not reach the server.
@@ -2450,7 +2448,8 @@ function handleAuthFailure_(result) {
     applyLockState(true);
     setStatus("Your login (\"" + CURRENT_USER + "\") is not linked to any programme, so no data is accessible. Contact the admin.", true);
   } else if (RESTRICTED_PROG) {
-    setStatus("Logged in as " + CURRENT_USER + " — showing " + RESTRICTED_PROG.code + " (" + RESTRICTED_PROG.name + ") data only.");
+    // Department login (not admin): automatically pull this department's saved data from the online database.
+    loadOnlineRecord(true);
   }
 })();
 </script>
