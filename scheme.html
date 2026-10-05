@@ -1227,6 +1227,11 @@ function handleAuthFailure_(result) {
     });
   }
 
+  var lastSavedAt = 0;
+  function hideToast(){
+    var t = document.getElementById("saveToast");
+    if (t) t.classList.remove("show");
+  }
   function markSaved(){ lastSavedAt = Date.now(); hideToast(); }
 
   document.getElementById("btnSaveLocal").addEventListener("click", saveLocal);
