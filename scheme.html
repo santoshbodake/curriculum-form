@@ -1936,12 +1936,16 @@ function handleAuthFailure_(result) {
     }, 30);
   });
 
-  function semStats(){
+  /* semStats / finalReportData_ / buildReportsHTML now accept any programme's
+     state object (defaults to the currently-open programme), so the very same
+     "Final Reports" logic can be reused by the All Department Summary. */
+  function semStats(S){
+    S = S || state;
     return SEM_PAGES.map(function(p){
-      var page = state.pages[p.id];
+      var page = S.pages[p.id];
       var s = pageSums(page, p.id);
       var allValidCourses = page.courses.filter(function(c){ return filled(c.title) || filled(c.code) || filled(c.type); });
-      
+
       var uniqueCourses = [];
       var seenSr = {};
       allValidCourses.forEach(function(c){
@@ -1974,9 +1978,13 @@ function handleAuthFailure_(result) {
     return (Math.round(a / t * 10000) / 100).toFixed(2) + " : " + (Math.round(b / t * 10000) / 100).toFixed(2);
   }
 
-  function buildReportsHTML(){
-    var stats = semStats();
-    var prog = PROGRAMMES.filter(function(x){ return x.code === state.programmeCode; })[0];
+  function repPad_(n){ return n < 10 ? "0" + n : String(n); }
+
+  // All the numbers behind the three "Final Reports" tables for ONE programme.
+  function finalReportData_(S, progOverride){
+    S = S || state;
+    var stats = semStats(S);
+    var prog = progOverride || PROGRAMMES.filter(function(x){ return x.code === S.programmeCode; })[0];
     var progLabel = prog ? (prog.code + " - " + prog.name).toUpperCase() : "PROGRAMME NOT SELECTED";
 
     var grand = {};
@@ -1991,34 +1999,49 @@ function handleAuthFailure_(result) {
       totalHours     += st.totalHours;
     });
 
-    var last2 = stats.slice(4); 
+    var last2 = stats.slice(4);
     var cr56 = 0, mk56 = 0, paper56 = 0;
     last2.forEach(function(st){
       cr56 += st.sums.credits; mk56 += st.sums.totalMarks; paper56 += st.sums.saTh;
     });
 
-    var theoryHours = grand.cl;
-    var practicalHours = grand.ll;
     var theoryMarks = grand.thTotal;
     var practicalMarks = grand.faPrMax + grand.saPrMax + grand.slaMax;
-    var hoursRatio = ratio(theoryHours, practicalHours);
+    var hoursRatio = ratio(grand.cl, grand.ll);
     var marksRatio = ratio(theoryMarks, practicalMarks);
+
+    var glance = [
+      ["Total Credit", tidy(grand.credits)],
+      ["Total No. Courses", repPad_(totalCourses)],
+      ["Total No. of Electives", repPad_(totalElectives)],
+      ["No. of Courses with Theory Examination", repPad_(withTheory)],
+      ["No. of Courses with Practical / Oral Examination", repPad_(withPractical)],
+      ["No. of Courses Without Theory Examination", repPad_(totalCourses - withTheory)],
+      ["Total Marks", tidy(grand.totalMarks)],
+      ["Total Credits of Fifth and Sixth Semester", tidy(cr56)],
+      ["Total Marks of Fifth and Sixth Semester", tidy(mk56)],
+      ["Theory Paper Marks for Fifth and Sixth Semester Courses", tidy(paper56)],
+      ["Theory: Practical Ratio in proportion of hours", hoursRatio],
+      ["Theory: Practical Ratio in proportion of Marks", marksRatio]
+    ];
+
+    return {
+      stats: stats, prog: prog, progLabel: progLabel, grand: grand,
+      totalCourses: totalCourses, totalHours: totalHours,
+      hoursRatio: hoursRatio, marksRatio: marksRatio, glance: glance
+    };
+  }
+
+  function buildReportsHTML(S, progOverride){
+    var d = finalReportData_(S, progOverride);
+    var stats = d.stats, grand = d.grand, progLabel = d.progLabel;
+    var totalCourses = d.totalCourses, totalHours = d.totalHours;
+    var hoursRatio = d.hoursRatio, marksRatio = d.marksRatio;
 
     var r1 = '<div class="doctitle">CURRICULUM AT A GLANCE</div>'
       + '<div class="subtitle">' + progLabel + '</div>'
       + '<table>'
-      + glanceRow("Total Credit", tidy(grand.credits))
-      + glanceRow("Total No. Courses", pad(totalCourses))
-      + glanceRow("Total No. of Electives", pad(totalElectives))
-      + glanceRow("No. of Courses with Theory Examination", pad(withTheory))
-      + glanceRow("No. of Courses with Practical / Oral Examination", pad(withPractical))
-      + glanceRow("No. of Courses Without Theory Examination", pad(totalCourses - withTheory))
-      + glanceRow("Total Marks", tidy(grand.totalMarks))
-      + glanceRow("Total Credits of Fifth and Sixth Semester", tidy(cr56))
-      + glanceRow("Total Marks of Fifth and Sixth Semester", tidy(mk56))
-      + glanceRow("Theory Paper Marks for Fifth and Sixth Semester Courses", tidy(paper56))
-      + glanceRow("Theory: Practical Ratio in proportion of hours", hoursRatio)
-      + glanceRow("Theory: Practical Ratio in proportion of Marks", marksRatio)
+      + d.glance.map(function(g){ return glanceRow(g[0], g[1]); }).join("")
       + '</table>';
 
     var r2 = '<h4>CREDIT DISTRIBUTION &mdash; COURSE CATEGORY WISE</h4>'
@@ -2083,7 +2106,52 @@ function handleAuthFailure_(result) {
     function glanceRow(l,v){ return '<tr><td class="left">'+l+'</td><td>'+(v===""?DASH:v)+'</td></tr>'; }
     function cell(v){ return '<td>' + (v ? tidy(v) : "0") + '</td>'; }
     function tidyZero(v){ return v ? tidy(v) : "0"; }
-    function pad(n){ return n < 10 ? "0" + n : String(n); }
+  }
+
+  // Same three Final-Report tables as a flat array-of-arrays (for Excel sheets).
+  function finalReportAOA_(d){
+    var z = function(v){ return v ? Math.round(v * 100) / 100 : 0; };
+    var aoa = [];
+    aoa.push(["CURRICULUM AT A GLANCE"]);
+    aoa.push([d.progLabel]);
+    d.glance.forEach(function(g){ aoa.push([g[0], g[1] === "" ? DASH : g[1]]); });
+    aoa.push([]);
+
+    aoa.push(["CREDIT DISTRIBUTION - COURSE CATEGORY WISE"]);
+    var h1 = ["Sr.", "Course Category"], h2 = ["", ""];
+    SEM_PAGES.forEach(function(p){ h1.push(p.rep, ""); h2.push("No. of Courses", "Credits"); });
+    h1.push("Total", ""); h2.push("No. of Courses", "Credits");
+    aoa.push(h1); aoa.push(h2);
+    REPORT_CATEGORIES.forEach(function(cat, i){
+      var rn = 0, rc = 0, row = [i + 1, cat];
+      d.stats.forEach(function(st){
+        var b = st.byCat[cat]; rn += b.n; rc += b.cr;
+        row.push(b.n, z(b.cr));
+      });
+      row.push(rn, z(rc));
+      aoa.push(row);
+    });
+    var tot = ["Total Credit point", ""];
+    d.stats.forEach(function(st){ tot.push(st.courses.length, z(st.sums.credits)); });
+    tot.push(d.totalCourses, z(d.grand.credits));
+    aoa.push(tot);
+    aoa.push([]);
+
+    aoa.push(["SEMESTER WISE TOTALLING & GRAND TOTAL REPORT"]);
+    aoa.push(["Semester","Total IKS Hrs for Sem.","CL","TL","LL","Total Hours","Credits",
+              "FA TH MAX","SA TH MAX","TH Total","FA PR MAX","SA PR MAX","SLA MAX","Total Marks"]);
+    d.stats.forEach(function(st, i){
+      var s = st.sums;
+      aoa.push([i + 1, z(s.iks), z(s.cl), z(s.tl), z(s.ll), z(st.totalHours), z(s.credits),
+        z(s.faTh), z(s.saTh), z(s.thTotal), z(s.faPrMax), z(s.saPrMax), z(s.slaMax), z(s.totalMarks)]);
+    });
+    var g = d.grand;
+    aoa.push(["Grand Total", z(g.iks), z(g.cl), z(g.tl), z(g.ll), z(d.totalHours), z(g.credits),
+      z(g.faTh), z(g.saTh), z(g.thTotal), z(g.faPrMax), z(g.saPrMax), z(g.slaMax), z(g.totalMarks)]);
+    aoa.push([]);
+    aoa.push(["Ratio of Theory : Practical in Proportion of Hours", d.hoursRatio]);
+    aoa.push(["In Proportion of Marks", d.marksRatio]);
+    return aoa;
   }
 
   /* ================= REPORT MODAL (shared by both "Generate Final Reports"
@@ -2312,6 +2380,34 @@ function handleAuthFailure_(result) {
     if (!results.length) out += '<tr><td colspan="' + (SEM_PAGES.length + 3) + '">' + DASH + '</td></tr>';
     out += '</tbody></table>';
 
+    // 7. Final Reports - Curriculum at a Glance, all departments side by side
+    var finalData = results.map(function(item){ return { item: item, d: finalReportData_(item.data, item.prog) }; });
+    out += '<h4>7. Final Reports &mdash; Curriculum at a Glance (All Departments)</h4>';
+    out += '<table><thead><tr><th class="left">Particulars</th>';
+    finalData.forEach(function(fd){ out += '<th>' + fd.item.prog.code + '</th>'; });
+    out += '</tr></thead><tbody>';
+    if (finalData.length) {
+      finalData[0].d.glance.forEach(function(g, gi){
+        out += '<tr><td class="left">' + g[0] + '</td>';
+        finalData.forEach(function(fd){
+          var v = fd.d.glance[gi][1];
+          out += '<td>' + (v === "" ? DASH : v) + '</td>';
+        });
+        out += '</tr>';
+      });
+    } else {
+      out += '<tr><td>' + DASH + '</td></tr>';
+    }
+    out += '</tbody></table>';
+
+    // 8. Final Reports - complete set (Glance, Credit Distribution, Semester-wise Totalling) per department
+    out += '<h4>8. Final Reports &mdash; Department-wise (Complete)</h4>';
+    results.forEach(function(item, i){
+      out += '<div style="margin-top:14px;padding-top:6px;border-top:2px solid #7c3aed;font-weight:700;">8.' + (i + 1) + ' &nbsp;'
+        + item.prog.code + ' - ' + item.prog.name + '</div>';
+      out += buildReportsHTML(item.data, item.prog);
+    });
+
     out += '<div class="note">Generated from the latest data saved online ("Save Online") for each department at the time this report was run. '
       + 'Departments with no saved online record are not included. First Year Exit and Second Year Exit stage data is not considered anywhere in this summary &mdash; '
       + 'only the six regular semesters.</div>';
@@ -2379,6 +2475,25 @@ function handleAuthFailure_(result) {
         return [item.prog.code + " - " + item.prog.name].concat(cells).concat([totalCr, totalMk]);
       }));
 
+    // Final Reports - at a glance across departments
+    var fdAll = results.map(function(item){ return { item: item, d: finalReportData_(item.data, item.prog) }; });
+    if (fdAll.length) {
+      addSheet("Final Rpt - Glance", ["Particulars"].concat(fdAll.map(function(fd){ return fd.item.prog.code; })),
+        fdAll[0].d.glance.map(function(g, gi){
+          return [g[0]].concat(fdAll.map(function(fd){ var v = fd.d.glance[gi][1]; return v === "" ? DASH : v; }));
+        }));
+    }
+    // Final Reports - complete set, one sheet per department
+    var usedNames = {};
+    fdAll.forEach(function(fd){
+      var base = ("FR " + fd.item.prog.code).replace(/[\\\/\?\*\[\]:]/g, "").slice(0, 28), nm = base, n = 2;
+      while (usedNames[nm]) { nm = base.slice(0, 26) + "_" + n++; }
+      usedNames[nm] = true;
+      var ws = XLSX.utils.aoa_to_sheet(finalReportAOA_(fd.d));
+      ws['!cols'] = [{ wch: 48 }].concat(new Array(15).fill({ wch: 14 }));
+      XLSX.utils.book_append_sheet(wb, ws, nm);
+    });
+
     return wb;
   }
 
@@ -2390,7 +2505,7 @@ function handleAuthFailure_(result) {
     try {
       var wb = buildAllDeptSummaryWorkbook_(results, rows);
       XLSX.writeFile(wb, "All_Department_Summary.xlsx");
-      setStatus("All Department Summary exported to Excel (6 sheets).");
+      setStatus("All Department Summary exported to Excel (summary sheets + Final Reports for each department).");
     } catch(err){
       console.error(err);
       setStatus("Could not build the Excel file. " + (err && err.message ? err.message : ""), true);
