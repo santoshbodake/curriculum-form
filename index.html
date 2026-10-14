@@ -36,10 +36,46 @@
     flex: 1 1 48%;
     position: relative;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: 28px;
     padding: 40px;
   }
+  .publicLinks {
+    width: 100%;
+    max-width: 280px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    position: relative;
+    z-index: 1;
+  }
+  .publicLinks .plTitle {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #94a3b8;
+    text-align: center;
+    margin: 0 0 2px;
+  }
+  .publicLink {
+    display: block;
+    text-decoration: none;
+    padding: 12px 16px;
+    border-radius: 14px;
+    background: #f1f2f6;
+    color: #1e293b;
+    transition: all 0.2s ease;
+  }
+  .publicLink:hover {
+    background: #e9eaf1;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(124,58,237,0.12);
+  }
+  .publicLink strong { display: block; font-size: 13px; margin-bottom: 2px; }
+  .publicLink span { font-size: 11px; color: #94a3b8; }
   .illustration .circle {
     width: 220px;
     height: 220px;
@@ -226,7 +262,7 @@
 
   @media (max-width: 720px) {
     .card { flex-direction: column; max-width: 420px; }
-    .illustration { padding: 30px; flex: 0 0 auto; }
+    .illustration { padding: 30px 30px 10px; flex: 0 0 auto; gap: 20px; }
     .illustration .circle { width: 150px; height: 150px; }
     .illustration .laptop { width: 90px; }
     .formSide { padding: 8px 32px 30px; }
@@ -290,6 +326,19 @@
         <path d="M34 46c0-9 7-15 16-15s16 6 16 15" fill="none" stroke="#94a3b8" stroke-width="2.5" stroke-linecap="round"/>
         <path d="M2 58 L98 58 L90 66 L10 66 Z" fill="#cbd5e1"/>
       </svg>
+    </div>
+
+    <!-- Public tools (no login required) -->
+    <div class="publicLinks">
+      <p class="plTitle">Open Tools &middot; No Login Required</p>
+      <a class="publicLink" href="Kinematic_Pairs___Mechanisms_3D.html">
+        <strong>Kinematic Pairs &amp; Mechanisms 3D &#8599;</strong>
+        <span>Interactive 3D kinematic pairs viewer</span>
+      </a>
+      <a class="publicLink" href="Convertor.html">
+        <strong>PDF &amp; Image Toolkit &#8599;</strong>
+        <span>Convert and manage PDFs and images</span>
+      </a>
     </div>
   </div>
 
