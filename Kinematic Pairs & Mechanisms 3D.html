@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kinematic Pairs & Mechanisms 3D</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#f1f3fa;--card:#fff;--ink:#1e293b;--mut:#64748b;--line:#e2e8f0;--ac:#6d28d9;--lo:#10b981;--hi:#f59e0b;--cm:#0ea5e9;--mc:#ec4899}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f172a;--card:#1e293b;--ink:#e2e8f0;--mut:#94a3b8;--line:#334155;--ac:#a78bfa}}
+:root[data-theme="dark"]{--bg:#0f172a;--card:#1e293b;--ink:#e2e8f0;--mut:#94a3b8;--line:#334155;--ac:#a78bfa}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 Inter,system-ui,-apple-system,Segoe UI,sans-serif}
+header,main,section{max-width:1150px;margin:auto;padding:0 16px}header{padding-top:20px}
+h1{margin:0;font-size:25px}header p{margin:4px 0 12px;color:var(--mut)}
+main{display:grid;grid-template-columns:230px 1fr;gap:14px;padding-bottom:20px}
+@media(max-width:780px){main{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px}
+.gh{margin:10px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mut)}.gh:first-child{margin-top:0}
+#list{display:flex;flex-direction:column;gap:5px}
+@media(max-width:780px){#list{flex-direction:row;flex-wrap:wrap}.gh{width:100%}}
+.jb{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:6px 10px;cursor:pointer;display:flex;justify-content:space-between;gap:8px;align-items:center;text-align:left}
+.jb.on{border-color:var(--ac);box-shadow:0 0 0 2px var(--ac) inset}
+.dot{width:9px;height:9px;border-radius:50%;flex:none}
+#cv{border-radius:10px;overflow:hidden;background:linear-gradient(#dfe5f5,#f6f7fc)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]) #cv{background:linear-gradient(#0b1224,#1e293b)}}
+:root[data-theme="dark"] #cv{background:linear-gradient(#0b1224,#1e293b)}
+canvas{display:block;touch-action:none;cursor:grab}
+.bar{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:8px 0;font-size:14px;color:var(--mut)}#read{font-weight:600;color:var(--ac)}
+.row{display:grid;grid-template-columns:120px 1fr 56px 52px;gap:8px;align-items:center;margin:4px 0;font-size:14px}
+.row output{text-align:right;font-variant-numeric:tabular-nums}.lk{cursor:pointer;font-size:13px}
+table{width:100%;border-collapse:collapse;margin-top:6px}td{padding:5px 8px;border-top:1px solid var(--line);vertical-align:top}td:first-child{color:var(--mut);width:130px}
+.tag{padding:1px 9px;border-radius:999px;color:#fff;font-size:13px}
+h2{margin:8px 0 10px;font-size:19px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;padding-bottom:30px}
+.grid h3{margin:0 0 4px;font-size:15px}.grid p{margin:0;color:var(--mut);font-size:14px}
+</style>
+</head>
+<body>
+<header><h1>⚙️ Kinematic Pairs &amp; Mechanisms in 3D</h1>
+<p>Choose an item, <b>drag the 3D view to orbit</b> (scroll or pinch to zoom) and use the sliders to move parts. Tick 🔒 to lock an input.</p></header>
+<main>
+<div class="card"><div id="list"></div></div>
+<div class="card">
+<div id="cv"></div>
+<div class="bar"><span id="hint"></span><span id="read"></span></div>
+<div id="sl"></div>
+<h3 id="nm" style="margin:8px 0 0"></h3><table id="info"></table>
+</div>
+</main>
+<section><h2>Key concepts</h2><div class="grid">
+<div class="card"><h3>Lower vs higher pair</h3><p>Lower pairs touch over a surface (pin, slider, screw, sphere, plane). Higher pairs touch at a point or line (cam, gear teeth).</p></div>
+<div class="card"><h3>Constrained motion</h3><p><b>Completely:</b> one possible motion whatever the load. <b>Incompletely:</b> several motions possible. <b>Successfully:</b> a spring, weight or shoulder forces one path.</p></div>
+<div class="card"><h3>Mobility (Grübler)</h3><p>F = 3(n − 1) − 2j₁ − j₂. 3-bar: F = 0 (rigid). 4-bar: F = 1. 5-bar: F = 2, so two inputs are needed, and locking one leaves F = 1.</p></div>
+</div></section>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const $=id=>document.getElementById(id),D=Math.PI/180,T=THREE;
+const mat=c=>new T.MeshStandardMaterial({color:c,metalness:.25,roughness:.5,side:T.DoubleSide});
+const FX=mat(0x94a3b8),MV=mat(0x8b5cf6),DK=mat(0x475569),HI=mat(0xf59e0b),GR=mat(0x10b981);
+const bx=(w,h,d)=>new T.BoxGeometry(w,h,d),cyl=(r,h,o)=>new T.CylinderGeometry(r,r,h,36,1,!!o);
+function add(g,geo,m,x,y,z,ax){const o=new T.Mesh(geo,m);o.position.set(x||0,y||0,z||0);if(ax=='z')o.rotation.x=Math.PI/2;if(ax=='x')o.rotation.z=Math.PI/2;g.add(o);return o}
+function helix(r,len,turns,m){const p=[],n=turns*16;for(let i=0;i<=n;i++){const t=i/n,a=t*turns*2*Math.PI;p.push(new T.Vector3(-len/2+t*len,r*Math.cos(a),r*Math.sin(a)))}return new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(p),n*3,.07,6),m)}
+function gearGeo(R,N){const st=2*Math.PI/N,sh=new T.Shape();let f=1;for(let i=0;i<N;i++)[[0,-1],[.12,1],[.38,1],[.5,-1]].forEach(([k,q])=>{const r=R+.1*q,t=(i+k)*st,x=r*Math.cos(t),y=r*Math.sin(t);f?(sh.moveTo(x,y),f=0):sh.lineTo(x,y)});sh.closePath();const g=new T.ExtrudeGeometry(sh,{depth:.4,bevelEnabled:false});g.translate(0,0,-.2);return g}
+const link=(g,m,z)=>add(g,bx(1,.36,.26),m,0,0,z),pin=(g,z)=>add(g,cyl(.2,.9),DK,0,0,z,'z');
+const setL=(o,a,b)=>{const dx=b[0]-a[0],dy=b[1]-a[1];o.position.x=(a[0]+b[0])/2;o.position.y=(a[1]+b[1])/2;o.rotation.z=Math.atan2(dy,dx);o.scale.x=Math.hypot(dx,dy)+.5},setP=(o,p)=>{o.position.x=p[0];o.position.y=p[1]};
+function isect(A,B,r1,r2){const dx=B[0]-A[0],dy=B[1]-A[1],d=Math.hypot(dx,dy);if(d>r1+r2||d<Math.abs(r1-r2)||d<1e-6)return null;const p=(r1*r1-r2*r2+d*d)/(2*d),h=Math.sqrt(Math.max(0,r1*r1-p*p)),ux=dx/d,uy=dy/d;return[A[0]+p*ux-h*uy,A[1]+p*uy+h*ux]}
+function stands(g,x){add(g,bx(.4,1.4,1),FX,x,-.9,0);add(g,bx(7.4,.2,1.4),FX,0,-1.7,0)}
+const roundBar=g=>{stands(g,-3.6);stands(g,3.6);add(g,cyl(.35,7.2),FX,0,0,0,'x');const S=new T.Group();g.add(S);add(S,cyl(.62,1.4,1),MV,0,0,0,'x');add(S,bx(.4,.5,.15),HI,0,.75,0);return s=>{S.position.x=s.x;S.rotation.x=s.r*D}};
+const SL={x:{k:'x',l:'Slide',min:-2.5,max:2.5,v:0,st:.05,u:''},r:{k:'r',l:'Rotate',min:-180,max:180,v:0}};
+const S=[
+{id:'rev',g:'Joints',n:'Turning (Revolute)',c:'lo',t:'Lower pair',dof:'1 (rotation)',cl:'Self closed',mo:'Completely constrained',ex:'Hinge, crank pin, shaft in bearing',hint:'Rotates about the pin axis',sl:[{k:'a',l:'Angle',min:-180,max:180,v:30}],
+build:g=>{add(g,bx(2.6,.3,1.6),FX,0,-1.5,0);add(g,bx(.8,1.6,.6),FX,0,-.7,-.1);const L=new T.Group();g.add(L);add(L,bx(3.2,.5,.4),MV,1.2,0,.5);add(g,cyl(.28,1.6),DK,0,0,0,'z');return s=>{L.rotation.z=s.a*D}}},
+{id:'pri',g:'Joints',n:'Sliding (Prismatic)',c:'lo',t:'Lower pair',dof:'1 (translation)',cl:'Self closed',mo:'Completely constrained',ex:'Piston in cylinder, machine slideway',hint:'Slides along the guide rails',sl:[{...SL.x,l:'Slide',min:-2,max:2}],
+build:g=>{add(g,bx(7,.3,2),FX,0,-.6,0);add(g,bx(7,.5,.3),FX,0,-.2,.75);add(g,bx(7,.5,.3),FX,0,-.2,-.75);const B=add(g,bx(1.6,.8,1.18),MV,0,.0,0);return s=>{B.position.x=s.x}}},
+{id:'scr',g:'Joints',n:'Screw (Helical)',c:'lo',t:'Lower pair',dof:'1 (turn and advance are coupled)',cl:'Self closed',mo:'Completely constrained',ex:'Lead screw, bolt and nut, vice',hint:'Turn the screw: the nut advances 1 unit per turn',sl:[{k:'a',l:'Screw turn',min:-1080,max:1080,v:0,st:5}],
+build:g=>{stands(g,-3.9);stands(g,3.9);const R=new T.Group();g.add(R);add(R,cyl(.4,7.4),FX,0,0,0,'x');R.add(helix(.42,6.6,6.6,HI));const N=add(g,cyl(.75,1,1),MV,0,0,0,'x');add(N,bx(.2,.2,.2),HI,0,0,0);return s=>{R.rotation.x=s.a*D;N.position.x=s.a/360}}},
+{id:'cyl',g:'Joints',n:'Cylindrical',c:'lo',t:'Lower pair',dof:'2 (slide + rotate, independent)',cl:'Self closed',mo:'Incompletely constrained',ex:'Sleeve sliding and turning on a shaft',hint:'Slide and rotate the sleeve on the rod',sl:[SL.x,SL.r],build:roundBar},
+{id:'sph',g:'Joints',n:'Spherical (Ball)',c:'lo',t:'Lower pair',dof:'3 (rotation about 3 axes)',cl:'Self closed',mo:'Incompletely constrained',ex:'Ball joint, hip joint, camera head',hint:'Tilt about x and z, twist about the rod',sl:[{k:'rx',l:'Tilt X',min:-55,max:55,v:25},{k:'rz',l:'Tilt Z',min:-55,max:55,v:-20},{k:'ty',l:'Twist',min:-180,max:180,v:0}],
+build:g=>{add(g,cyl(.5,1.4),FX,0,-1.4,0);add(g,cyl(1.3,.2),FX,0,-2.1,0);add(g,new T.SphereGeometry(.78,32,16,0,6.283,1.1,2.04),FX,0,0,0);const B=new T.Group();B.rotation.order='YXZ';g.add(B);add(B,new T.SphereGeometry(.62,32,16),MV);add(B,cyl(.15,3),MV,0,1.7,0);add(B,bx(1,.15,.15),HI,0,3,0);return s=>B.rotation.set(s.rx*D,s.ty*D,s.rz*D)}},
+{id:'pla',g:'Joints',n:'Planar',c:'lo',t:'Lower pair',dof:'3 (x, z, and rotation about y)',cl:'Force closed (gravity)',mo:'Incompletely constrained',ex:'Block on a table, air-hockey puck',hint:'Move in the plane and rotate about the normal',sl:[{...SL.x,k:'x',l:'Move X',min:-2.5,max:2.5},{...SL.x,k:'z',l:'Move Z',min:-1.6,max:1.6},SL.r],
+build:g=>{add(g,bx(7,.3,5),FX,0,-.15,0);const B=new T.Group();g.add(B);add(B,bx(1.4,.7,1),MV,0,.35,0);add(B,bx(.5,.2,.2),HI,.7,.6,0);return s=>{B.position.set(s.x,0,s.z);B.rotation.y=s.r*D}}},
+{id:'cam',g:'Joints',n:'Cam and follower',c:'hi',t:'Higher pair',dof:'1 (cam drives follower; line contact)',cl:'Force closed (spring or gravity)',mo:'Successfully constrained',ex:'Valve train, automatic machine feed',hint:'Turn the eccentric cam to lift the flat follower',sl:[{k:'a',l:'Cam angle',min:0,max:360,v:60}],
+build:g=>{const C=new T.Group();g.add(C);add(C,cyl(1.2,.5),MV,.5,0,0,'z');add(C,bx(.3,.3,.56),HI,1.1,0,0);add(g,cyl(.18,1.5),DK,0,0,-.3,'z');add(g,bx(.4,6,.4),FX,0,.6,-.9);add(g,bx(4,.3,3),FX,0,-2.5,0);add(g,bx(.5,.5,1),FX,0,3.4,-.4);add(g,bx(.8,.9,.8),FX,0,3.4,0);const F=new T.Group();g.add(F);add(F,bx(1.8,.15,.8),HI);add(F,cyl(.18,3),HI,0,1.6,0);return s=>{C.rotation.z=s.a*D;F.position.y=.5*Math.sin(s.a*D)+1.275}}},
+{id:'gea',g:'Joints',n:'Gear pair',c:'hi',t:'Higher pair',dof:'1 (fixed ratio 2:1)',cl:'Self closed by tooth form',mo:'Completely constrained',ex:'Gearbox, clock train',hint:'Turn the big gear; the small one turns twice as fast the other way',sl:[{k:'a',l:'Big gear',min:-360,max:360,v:20}],
+build:g=>{const A=new T.Mesh(gearGeo(1.4,16),MV),B=new T.Mesh(gearGeo(.7,8),HI);A.position.x=-.9;B.position.x=1.2;g.add(A,B);add(g,bx(5,2.6,.12),FX,.2,0,-.45);add(g,cyl(.15,1.2),DK,-.9,0,0,'z');add(g,cyl(.15,1.2),DK,1.2,0,0,'z');const s1=Math.PI/8,s2=Math.PI/4;return s=>{const a=s.a*D;A.rotation.z=a-.25*s1;B.rotation.z=Math.PI-.75*s2-2*a}}},
+{id:'cc',g:'Constrained motion',n:'Completely constrained',c:'cm',t:'Constrained motion',dof:'1 (slide only)',cl:'Form closed',mo:'Completely constrained',ex:'Square bar in a square hole, piston in cylinder',hint:'Try to rotate the bar: the square section blocks it',sl:[{...SL.x,l:'Slide',min:-1.5,max:1.5},{k:'q',l:'Try to rotate',min:-90,max:90,v:0,b:1}],
+build:g=>{add(g,bx(3,.3,1.6),FX,0,.65,0);add(g,bx(3,.3,1.6),FX,0,-.65,0);add(g,bx(3,1,.3),FX,0,0,.65);add(g,bx(3,1,.3),FX,0,0,-.65);const B=add(g,bx(4.6,.96,.96),MV);return s=>{B.position.x=s.x}}},
+{id:'ic',g:'Constrained motion',n:'Incompletely constrained',c:'cm',t:'Constrained motion',dof:'2 (slide and rotate)',cl:'Not closed against turning',mo:'Incompletely constrained',ex:'Round bar in a round hole',hint:'Two motions possible, so the bar is only incompletely constrained',sl:[SL.x,SL.r],build:roundBar},
+{id:'sc',g:'Constrained motion',n:'Successfully constrained',c:'cm',t:'Constrained motion',dof:'Rotation; lifting is stopped by the load',cl:'Force closed (load or spring)',mo:'Successfully constrained',ex:'Shaft in a footstep bearing, valve on its seat',hint:'Lift the shaft, then lock Lift 🔒 as if the load holds it down',sl:[{k:'l',l:'Lift (🔒 = load)',min:0,max:1.5,v:0,st:.05,u:''},SL.r],
+build:g=>{add(g,bx(2.6,.6,2.6),FX,0,-1.6,0);const A=new T.Group();g.add(A);add(A,cyl(.4,3.4),MV,0,.3,0);add(A,cyl(.9,.3),HI,0,-1.15,0);add(A,bx(1.4,.6,1.4),DK,0,2.3,0);add(A,bx(.2,.2,.9),HI,0,-1.15,.6);return s=>{A.position.y=s.l;A.rotation.y=s.r*D}}},
+{id:'b3',g:'Mechanisms',n:'3-bar (structure)',c:'mc',t:'Mechanism',dof:'0 (F = 3·2 − 2·3 = 0)',cl:'Rigid frame',mo:'Locked: no relative motion',ex:'Truss, roof frame, tripod',hint:'A triangle cannot deform without changing a link length',sl:[{k:'q',l:'Try to move joint',min:-90,max:90,v:0,b:1}],
+build:g=>{const P=[[-1.5,-1],[1.5,-1],[0,1.6]],L=[[0,1,DK],[1,2,MV],[2,0,GR]].map(([a,b,m],i)=>{const o=link(g,m,i*.3-.3);setL(o,P[a],P[b]);return o});P.forEach(p=>setP(pin(g,0),p));return()=>{}}},
+{id:'b4',g:'Mechanisms',n:'4-bar linkage',c:'mc',t:'Mechanism',dof:'1 (F = 3·3 − 2·4 = 1)',cl:'Closed chain',mo:'Completely constrained (one input)',ex:'Wiper, crank-rocker, pantograph',hint:'Turn the crank: the coupler and rocker follow a fixed path',sl:[{k:'a',l:'Crank angle',min:0,max:360,v:50}],
+build:g=>{const O=[-2,-1],Q=[2,-1],gb=link(g,DK,-.3),cr=link(g,MV,0),cp=link(g,HI,.35),rk=link(g,GR,0),p=[0,1,2,3].map(()=>pin(g,.1));setL(gb,O,Q);setP(p[0],O);setP(p[3],Q);return s=>{const a=s.a*D,B=[O[0]+1.2*Math.cos(a),O[1]+1.2*Math.sin(a)],C=isect(B,Q,3.6,2.8);if(!C)return'Out of reach';setL(cr,O,B);setL(cp,B,C);setL(rk,Q,C);setP(p[1],B);setP(p[2],C)}}},
+{id:'b5',g:'Mechanisms',n:'5-bar with locks',c:'mc',t:'Mechanism',dof:'2 (F = 3·4 − 2·5 = 2); lock one input for F = 1',cl:'Closed chain',mo:'Incompletely constrained; locking one crank makes it completely constrained',ex:'Parallel robot arm, haptic device',hint:'Two cranks drive the joint P. Lock one crank with 🔒 to leave a 1-DOF mechanism',sl:[{k:'a',l:'Left crank',min:0,max:180,v:60},{k:'b',l:'Right crank',min:0,max:180,v:120}],
+build:g=>{const O=[-1.6,-1],Q=[1.6,-1],gb=link(g,DK,-.3),l=[MV,MV,HI,HI].map((m,i)=>link(g,m,i>1?.35:0)),p=[0,1,2,3,4].map(()=>pin(g,.1));setL(gb,O,Q);setP(p[0],O);setP(p[4],Q);return s=>{const A=[O[0]+1.8*Math.cos(s.a*D),O[1]+1.8*Math.sin(s.a*D)],B=[Q[0]+1.8*Math.cos(s.b*D),Q[1]+1.8*Math.sin(s.b*D)],P=isect(A,B,2.6,2.6);if(!P)return'Out of reach: cranks too far apart';setL(l[0],O,A);setL(l[1],Q,B);setL(l[2],A,P);setL(l[3],B,P);setP(p[1],A);setP(p[2],B);setP(p[3],P)}}}
+];
+const col={lo:'var(--lo)',hi:'var(--hi)',cm:'var(--cm)',mc:'var(--mc)'};
+const rd=new T.WebGLRenderer({antialias:true,alpha:true}),sc=new T.Scene(),cam=new T.PerspectiveCamera(40,1.5,.1,100);
+$('cv').appendChild(rd.domElement);rd.setPixelRatio(Math.min(2,devicePixelRatio));
+sc.add(new T.AmbientLight(0xffffff,.65));const dl=new T.DirectionalLight(0xffffff,.9);dl.position.set(5,8,6);sc.add(dl);
+const gr=new T.GridHelper(14,14,0x64748b,0x94a3b8);gr.position.y=-2.6;sc.add(gr);const ax=new T.AxesHelper(1.5);ax.position.set(-6,-2.6,6);sc.add(ax);
+let th=.5,ph=1.2,R=12,cur,grp,upd,s,lk,note='',dn=0,lx,ly;
+function rs(){const w=$('cv').clientWidth,h=Math.min(450,w*.78);rd.setSize(w,h);cam.aspect=w/h;cam.updateProjectionMatrix()}
+addEventListener('resize',rs);
+const cv=rd.domElement;
+cv.addEventListener('pointerdown',e=>{dn=1;lx=e.clientX;ly=e.clientY;cv.setPointerCapture(e.pointerId)});
+cv.addEventListener('pointermove',e=>{if(!dn)return;th-=(e.clientX-lx)*.01;ph=Math.max(.15,Math.min(3,ph-(e.clientY-ly)*.01));lx=e.clientX;ly=e.clientY});
+['pointerup','pointercancel'].forEach(t=>cv.addEventListener(t,()=>dn=0));
+cv.addEventListener('wheel',e=>{e.preventDefault();R=Math.max(5,Math.min(25,R*(1+e.deltaY*.001)))},{passive:false});
+(function loop(){requestAnimationFrame(loop);cam.position.set(R*Math.sin(ph)*Math.sin(th),R*Math.cos(ph),R*Math.sin(ph)*Math.cos(th));cam.lookAt(0,0,0);rd.render(sc,cam)})();
+function refresh(){const m=upd(s)||note,free=cur.sl.filter(x=>!x.b&&!lk[x.k]).length;$('read').textContent=`Free inputs: ${free}${m?' | '+m:''}`;cur.sl.forEach((x,i)=>{$('o'+i).textContent=(+s[x.k]).toFixed(x.st&&x.st<1?2:0)+(x.u===undefined?'°':x.u)})}
+function pick(id){cur=S.find(j=>j.id===id);if(grp)sc.remove(grp);grp=new T.Group();sc.add(grp);upd=cur.build(grp);s={};lk={};note='';cur.sl.forEach(x=>s[x.k]=x.v);
+document.querySelectorAll('.jb').forEach(b=>b.classList.toggle('on',b.dataset.id===id));
+$('nm').textContent=cur.n;$('hint').textContent=cur.hint;
+$('info').innerHTML=`<tr><td>Type</td><td><span class="tag" style="background:${col[cur.c]}">${cur.t}</span></td></tr><tr><td>Degrees of freedom</td><td>${cur.dof}</td></tr><tr><td>Closure</td><td>${cur.cl}</td></tr><tr><td>Motion class</td><td>${cur.mo}</td></tr><tr><td>Examples</td><td>${cur.ex}</td></tr>`;
+$('sl').innerHTML=cur.sl.map((x,i)=>`<div class="row"><label>${x.l}</label><input type="range" min="${x.min}" max="${x.max}" step="${x.st||1}" value="${x.v}" data-i="${i}"><output id="o${i}"></output>${x.b?'<span></span>':`<label class="lk"><input type="checkbox" data-l="${i}">🔒</label>`}</div>`).join('');
+th=.5;ph=cur.g=='Mechanisms'?1.35:1.2;R=12;refresh()}
+$('sl').addEventListener('input',e=>{const t=e.target,i=t.dataset.i;if(i===undefined)return;const x=cur.sl[i];if(x.b){t.value=0;note='Blocked: the constraint prevents this motion';}else{s[x.k]=+t.value;note=''}refresh()});
+$('sl').addEventListener('change',e=>{const t=e.target,i=t.dataset.l;if(i===undefined)return;const x=cur.sl[i];lk[x.k]=t.checked;document.querySelector(`input[data-i="${i}"]`).disabled=t.checked;refresh()});
+let h='';S.forEach(j=>{if(j.g!==h){h=j.g;$('list').insertAdjacentHTML('beforeend',`<div class="gh">${h}</div>`)}$('list').insertAdjacentHTML('beforeend',`<button class="jb" data-id="${j.id}">${j.n}<span class="dot" style="background:${col[j.c]}"></span></button>`)});
+document.querySelectorAll('.jb').forEach(b=>b.onclick=()=>pick(b.dataset.id));
+rs();pick('rev');
+</script>
+</body>
+</html>
