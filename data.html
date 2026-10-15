@@ -1064,7 +1064,7 @@ It's been 20 minutes since your last save. Click "Save Data" to avoid losing you
 <td style="text-align:center;"><input readonly id="qppOpt_6" style="width:64px;text-align:center;padding:4px;"></td><td style="text-align:center;"><input readonly id="qppMarks_6" style="width:72px;text-align:center;padding:4px;"></td></tr>
 </tbody>
 <tfoot>
-<tr><td colspan="24" style="text-align:center;"><b>Total</b></td><td style="text-align:center;"><input id="qppTotalMarks" style="width:72px;text-align:center;padding:4px;"></td></tr>
+<tr><td colspan="24" style="text-align:center;"><b>Total</b></td><td style="text-align:center;"><input readonly id="qppTotalMarks" style="width:72px;text-align:center;padding:4px;"></td></tr>
 </tfoot>
 </table>
 </div>
@@ -1332,10 +1332,20 @@ function calcQppRow(i) {
         if (j <= comp) compMarks += m;
     }
     let optEl = document.getElementById('qppOpt_' + i), mkEl = document.getElementById('qppMarks_' + i);
-    if (!comp || !offered) { optEl.value = ''; mkEl.value = ''; return; }
+    if (!comp || !offered) { optEl.value = ''; mkEl.value = ''; calcQppTotal(); return; }
     let c = Math.min(comp, offered);
     optEl.value = c + '(' + offered + ')';
     mkEl.value = compMarks + '(' + totalMarks + ')';
+    calcQppTotal();
+}
+function calcQppTotal() {
+    let comp = 0, tot = 0, any = false;
+    for (let i = 1; i <= 6; i++) {
+        let v = document.getElementById('qppMarks_' + i).value;
+        let m = v.match(/^([\d.]+)\(([\d.]+)\)$/);
+        if (m) { comp += parseFloat(m[1]); tot += parseFloat(m[2]); any = true; }
+    }
+    document.getElementById('qppTotalMarks').value = any ? comp + '(' + tot + ')' : '';
 }
 function calcQppAll() { for (let i = 1; i <= 6; i++) calcQppRow(i); }
 document.addEventListener('input', function (e) {
