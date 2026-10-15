@@ -676,9 +676,20 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.6; }
 }
 @keyframes gl-pulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
 @media print { .gl-overlay { display: none !important; } }
+
+/* ===== Viewer mode (?view=all): only the "View All Filled Curriculum" list, no data-entry controls ===== */
+body.viewer-mode .toolbar,
+body.viewer-mode #sectionNav,
+body.viewer-mode #saveReminder,
+body.viewer-mode #form > *:not(#viewAllCard),
+body.viewer-mode header button[onclick*="scheme"] { display: none !important; }
+body.viewer-mode header, body.viewer-mode .container { margin-left: 0 !important; }
+#viewerBackBar { display: none; position: sticky; top: 0; z-index: 50; background: #fff; border-bottom: 1px solid #e2e8f0; padding: 8px 16px; }
+@media print { #viewerBackBar { display: none !important; } }
 </style>
 </head>
 <body>
+<script>if(/[?&]view=all\b/.test(location.search))document.body.classList.add("viewer-mode");</script>
 
 <div class="gl-overlay" id="glOverlay" aria-hidden="true">
   <div class="gl-box">
@@ -1101,8 +1112,8 @@ R= Remembering &nbsp;&nbsp;&nbsp; U= Understanding &nbsp;&nbsp;&nbsp; A= Applica
 
 <div class="card" id="viewAllCard" style="text-align:center;">
 <h2 style="justify-content:center;">View All Filled Curriculum</h2>
-<p class="hint" style="margin:0 0 16px;">Loads every curriculum saved online. Preview, Print / Save PDF or download Word for any of them without touching the form you are working on.</p>
-<button type="button" class="green" id="viewAllBtn" onclick="loadAllCurriculum()" style="padding:12px 28px; font-size:14px;">View all filled curriculum</button>
+<p class="hint" id="viewAllHint" style="margin:0 0 16px;">Opens every curriculum saved online in a new tab, where you can Preview, Print / Save PDF or download Word. Your current form is not affected.</p>
+<button type="button" class="green" id="viewAllBtn" onclick="openAllCurriculumTab()" style="padding:12px 28px; font-size:14px;">View all filled curriculum</button>
 <div id="allCurrWrap" style="display:none; margin-top:16px; text-align:left;">
 <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px;">
 <input type="text" placeholder="Search by course code, title, programme..." oninput="event.stopPropagation();renderAllCurr(this.value)" style="flex:1; min-width:220px; padding:8px 10px;">
@@ -1113,6 +1124,8 @@ R= Remembering &nbsp;&nbsp;&nbsp; U= Understanding &nbsp;&nbsp;&nbsp; A= Applica
 </div>
 
 </div>
+
+<div id="viewerBackBar"><button type="button" class="secondary" onclick="exitPreview()">&larr; Back to list</button></div>
 
 <div class="preview" id="preview">
 <table class="page-table">
@@ -2135,11 +2148,12 @@ function doPrint(){
 
 function exitPreview(){
  if(window.__viewingRecord) restoreFromRecordView();
+ if($('viewerBackBar')) $('viewerBackBar').style.display='none';
  $('form').style.display='block';
  $('preview').style.display='none';
  $('editBtn').style.display='none';
  $('printHint').style.display='none';
- document.title = 'Autonomy 2026';
+ document.title = (typeof VIEWER_MODE !== 'undefined' && VIEWER_MODE) ? 'All Filled Curriculum' : 'Autonomy 2026';
 }
 
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('preview').style.display==='block')exitPreview()});
@@ -2223,6 +2237,21 @@ $('courseCode') && $('courseCode').addEventListener('input', liveUpdateTitle);
 $('courseTitle') && $('courseTitle').addEventListener('input', liveUpdateTitle);
 
 // ===== View all filled curriculum =====
+const VIEWER_MODE = /[?&]view=all\b/.test(location.search);
+function openAllCurriculumTab() {
+    window.open(location.href.split('#')[0].split('?')[0] + '?view=all', '_blank');
+}
+if (VIEWER_MODE) {
+    document.title = 'All Filled Curriculum';
+    document.addEventListener('DOMContentLoaded', function () {
+        const btn = document.getElementById('viewAllBtn');
+        if (btn) { btn.textContent = 'Refresh list'; btn.onclick = loadAllCurriculum; }
+        const hint = document.getElementById('viewAllHint');
+        if (hint) hint.textContent = 'All curriculum saved online. Preview, Print / Save PDF or download Word for any record.';
+        loadAllCurriculum();
+    });
+}
+
 let allCurr = [];
 let viewSnapshot = null, viewPrevUnsaved = false;
 window.__viewingRecord = null;
@@ -2317,6 +2346,7 @@ async function viewRecord(idx, action) {
         return;
     }
     if (action === 'print') doPrint(); else showPreview();
+    if (VIEWER_MODE && $('viewerBackBar')) $('viewerBackBar').style.display = 'block';
     setOnlineStatus("👁 Viewing saved record " + rec.d.courseCode + " (read-only). Click 'Back to Edit' to return to your form.", false);
 }
 
