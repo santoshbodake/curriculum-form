@@ -1099,6 +1099,19 @@ R= Remembering &nbsp;&nbsp;&nbsp; U= Understanding &nbsp;&nbsp;&nbsp; A= Applica
 </div>
 </div>
 
+<div class="card" id="viewAllCard" style="text-align:center;">
+<h2 style="justify-content:center;">View All Filled Curriculum</h2>
+<p class="hint" style="margin:0 0 16px;">Loads every curriculum saved online. Preview, Print / Save PDF or download Word for any of them without touching the form you are working on.</p>
+<button type="button" class="green" id="viewAllBtn" onclick="loadAllCurriculum()" style="padding:12px 28px; font-size:14px;">View all filled curriculum</button>
+<div id="allCurrWrap" style="display:none; margin-top:16px; text-align:left;">
+<div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px;">
+<input type="text" placeholder="Search by course code, title, programme..." oninput="event.stopPropagation();renderAllCurr(this.value)" style="flex:1; min-width:220px; padding:8px 10px;">
+<span id="allCurrCount" class="hint"></span>
+</div>
+<div id="allCurrList" style="overflow-x:auto;"></div>
+</div>
+</div>
+
 </div>
 
 <div class="preview" id="preview">
@@ -1504,6 +1517,7 @@ function collect(){
 }
 
 function saveJSON(){
+ if(blockedWhileViewing_()) return;
  showLoader("Saving to your computer...");
  setTimeout(function(){
    try {
@@ -1666,6 +1680,7 @@ ${bodyHTML}
 }
 
 function loadJSON(){
+ if(blockedWhileViewing_()) return;
  let i=document.createElement('input');i.type='file';i.accept='.json';
  i.onchange=()=>{
   let f=i.files[0];if(!f)return;
@@ -2119,6 +2134,7 @@ function doPrint(){
 }
 
 function exitPreview(){
+ if(window.__viewingRecord) restoreFromRecordView();
  $('form').style.display='block';
  $('preview').style.display='none';
  $('editBtn').style.display='none';
@@ -2206,12 +2222,120 @@ function liveUpdateTitle(){
 $('courseCode') && $('courseCode').addEventListener('input', liveUpdateTitle);
 $('courseTitle') && $('courseTitle').addEventListener('input', liveUpdateTitle);
 
+// ===== View all filled curriculum =====
+let allCurr = [];
+let viewSnapshot = null, viewPrevUnsaved = false;
+window.__viewingRecord = null;
+
+function blockedWhileViewing_() {
+    if (window.__viewingRecord) {
+        alert("You are viewing a saved record (" + window.__viewingRecord + "). Click 'Back to Edit' to return to your own form first.");
+        return true;
+    }
+    return false;
+}
+
+function normalizeAllCurr_(result) {
+    let arr = result.records || result.data || [];
+    if (!Array.isArray(arr)) arr = Object.values(arr);
+    return arr.map(r => {
+        if (!r) return null;
+        let locked = !!(r.locked || r.isLocked);
+        let d = (r.data !== undefined && !r.courseCode) ? r.data : r;
+        if (typeof d === 'string') { try { d = JSON.parse(d); } catch (e) { return null; } }
+        if (!d || typeof d !== 'object') return null;
+        if (d.data && typeof d.data === 'object' && !d.courseCode) d = d.data;
+        if (!d.courseCode || !String(d.courseCode).trim()) return null;
+        return { d: d, locked: locked };
+    }).filter(Boolean).sort((a, b) => String(a.d.courseCode).localeCompare(String(b.d.courseCode)));
+}
+
+async function loadAllCurriculum() {
+    try {
+        setOnlineStatus("⏳ Loading all filled curriculum...", false);
+        setToolbarBusy(true);
+        showLoader("Loading all filled curriculum...");
+        const response = await fetch(GOOGLE_SCRIPT_URL + "?action=getAll&token=" + encodeURIComponent(getSessionToken_()));
+        const result = await response.json();
+        if (handleAuthFailure_(result)) return;
+        if (!result.success) throw new Error(result.message || "The server did not return the list. The Google Apps Script needs the 'getAll' action added.");
+        allCurr = normalizeAllCurr_(result);
+        document.getElementById('allCurrWrap').style.display = 'block';
+        renderAllCurr('');
+        setOnlineStatus(allCurr.length ? "✅ Loaded " + allCurr.length + " filled curriculum record(s)." : "No filled curriculum found online.", false);
+    } catch (error) {
+        setOnlineStatus("❌ Could not load curriculum list.", true);
+        alert("Could not load the curriculum list: " + error.message);
+    } finally {
+        setToolbarBusy(false);
+        hideLoader();
+    }
+}
+
+function renderAllCurr(q) {
+    q = (q || '').toLowerCase().trim();
+    const th = 'style="border:1px solid #cbd5e1; padding:6px 8px; background:#f1f5f9; text-align:left; font-size:13px;"';
+    const tdS = 'style="border:1px solid #e2e8f0; padding:6px 8px; font-size:13px; vertical-align:middle;"';
+    let rows = '', n = 0;
+    allCurr.forEach((rec, i) => {
+        const d = rec.d;
+        const hay = [d.courseCode, d.courseTitle, d.programme, d.programmeCode, d.semester].join(' ').toLowerCase();
+        if (q && hay.indexOf(q) === -1) return;
+        n++;
+        rows += '<tr>' +
+            '<td ' + tdS + '>' + n + '</td>' +
+            '<td ' + tdS + '><b>' + esc(d.courseCode) + '</b></td>' +
+            '<td ' + tdS + '>' + esc(d.courseTitle) + '</td>' +
+            '<td ' + tdS + '>' + esc(d.programme) + '</td>' +
+            '<td ' + tdS + '>' + esc(d.semester) + '</td>' +
+            '<td ' + tdS + '>' + (rec.locked ? '🔒 Submitted' : 'Draft') + '</td>' +
+            '<td ' + tdS + ' style="white-space:nowrap;"><div style="display:flex; gap:6px; flex-wrap:wrap;">' +
+            '<button type="button" class="green" onclick="viewRecord(' + i + ',\'preview\')">Preview</button>' +
+            '<button type="button" class="secondary" onclick="viewRecord(' + i + ',\'print\')">Print / PDF</button>' +
+            '<button type="button" class="secondary" onclick="viewRecord(' + i + ',\'word\')">Word</button>' +
+            '</div></td></tr>';
+    });
+    document.getElementById('allCurrCount').textContent = n + ' of ' + allCurr.length + ' shown';
+    document.getElementById('allCurrList').innerHTML = n
+        ? '<table style="width:100%; border-collapse:collapse;"><thead><tr><th ' + th + '>#</th><th ' + th + '>Course Code</th><th ' + th + '>Course Title</th><th ' + th + '>Programme</th><th ' + th + '>Sem</th><th ' + th + '>Status</th><th ' + th + '>Actions</th></tr></thead><tbody>' + rows + '</tbody></table>'
+        : '<p class="hint">No matching records.</p>';
+}
+
+async function viewRecord(idx, action) {
+    const rec = allCurr[idx];
+    if (!rec) return;
+    if (!viewSnapshot) { viewSnapshot = collect(); viewPrevUnsaved = hasUnsavedOnlineChanges; }
+    // clear the form first so fields missing from older records never show stale values
+    document.querySelectorAll('input[id],textarea[id],select[id]').forEach(e => {
+        if (e.type === 'checkbox' || e.type === 'radio' || e.type === 'button') return;
+        e.value = '';
+    });
+    loadData(rec.d);
+    window.__viewingRecord = rec.d.courseCode;
+    if (action === 'word') {
+        try { await saveWord(); } finally { restoreFromRecordView(); }
+        return;
+    }
+    if (action === 'print') doPrint(); else showPreview();
+    setOnlineStatus("👁 Viewing saved record " + rec.d.courseCode + " (read-only). Click 'Back to Edit' to return to your form.", false);
+}
+
+function restoreFromRecordView() {
+    if (!viewSnapshot) { window.__viewingRecord = null; return; }
+    loadData(viewSnapshot);
+    viewSnapshot = null;
+    window.__viewingRecord = null;
+    hasUnsavedOnlineChanges = viewPrevUnsaved;
+    setOnlineStatus('', false);
+}
+
 // ===== Google Sheets Online Save / Load =====
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxxG_0OTue9ovCJU00FwMag1iPtyWCCrEX-fWgfNos18ZKs5QB9ciEkNqmTpHvSj8ohlg/exec";
 
 let isFormLocked = false;
 
 async function saveOnline() {
+    if (blockedWhileViewing_()) return;
     try {
         if (isFormLocked) {
             alert("This form has already been submitted to the moderator and is locked. Ask the admin to unlock it before saving further changes.");
@@ -2257,6 +2381,7 @@ async function saveOnline() {
 }
 
 async function submitToModerator() {
+    if (blockedWhileViewing_()) return;
     if (isFormLocked) {
         alert("This form is already locked (previously submitted to the moderator). Ask the admin to unlock it if changes are needed.");
         return;
@@ -2322,9 +2447,11 @@ function applyLockState(locked) {
     if (submitBtn) submitBtn.disabled = locked;
     document.querySelectorAll("#form input, #form textarea, #form select, #form button.add, #form button.add-btn, #form button.red")
         .forEach(el => { el.disabled = locked; });
+    document.querySelectorAll('#viewAllCard input, #viewAllCard button').forEach(el => { el.disabled = false; });
 }
 
 async function loadOnline() {
+    if (blockedWhileViewing_()) return;
     const subjectCode = prompt("Enter the Subject/Course Code to load:");
     if (!subjectCode || !subjectCode.trim()) return;
 
