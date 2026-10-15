@@ -307,6 +307,16 @@
     font-size: 13px;
     color: #888;
   }
+  .ws-bar { position: sticky; top: 0; z-index: 10; background: #f7f7f8; padding: 10px 0 6px; margin-top: 10px; }
+  .ws-bar .drop-zone { padding: 18px; }
+  .ws-bar.loaded .drop-zone { border-style: solid; border-color: #6b5bff; padding: 10px 16px; font-size: 14px; }
+  .ws-bar .drop-zone p { margin: 0; }
+  .ws-bar .controls { margin-top: 8px; }
+  .pdf-panel .drop-zone { display: none; }
+  body:not(.has-doc) .pdf-panel > *:not(.tool-desc) { opacity: .4; pointer-events: none; }
+  body:not(.has-doc) .pdf-panel .tool-desc::after { content: " Upload a PDF above to use this tool."; color: #d33; font-weight: 600; }
+  .tab-sep { flex: 0 0 1px; background: #ddd; margin: 6px 8px; }
+  .org-card { cursor: pointer; }
 </style>
 </head>
 <body>
@@ -314,23 +324,35 @@
 <h1>PDF &amp; Image Toolkit</h1>
 <p class="subtitle">Everything runs locally in your browser — no files are uploaded anywhere.</p>
 
+<div class="ws-bar" id="wsBar">
+  <div class="drop-zone" id="wsDropZone" tabindex="0">
+    <p id="wsDropText">Click to choose a PDF, or drag and drop it here<span class="hint-small">Upload once — every PDF tool below works on this document and edits stack up. You can also paste (Ctrl+V).</span></p>
+    <input type="file" id="wsFileInput" accept="application/pdf">
+  </div>
+  <div class="controls">
+    <button class="primary" id="wsDownload" disabled>Download PDF</button>
+    <button class="secondary" id="wsUndo" disabled>↶ Undo last change</button>
+    <button class="secondary" id="wsRevert" disabled>Revert to original</button>
+    <span class="status" id="wsStatus" style="margin:0"></span>
+  </div>
+</div>
+
 <div class="tabs">
-  <button class="tab-btn active" data-tab="pdf2jpg">PDF → JPG</button>
-  <button class="tab-btn" data-tab="merge">Merge PDF</button>
-  <button class="tab-btn" data-tab="splitpdf">Split PDF</button>
-  <button class="tab-btn" data-tab="organize">Organize Pages</button>
-  <button class="tab-btn" data-tab="rotate">Rotate</button>
+  <button class="tab-btn active" data-tab="organize">Pages</button>
   <button class="tab-btn" data-tab="pagenum">Page Numbers</button>
   <button class="tab-btn" data-tab="watermark">Watermark</button>
+  <button class="tab-btn" data-tab="merge">Merge / Images → PDF</button>
+  <button class="tab-btn" data-tab="splitpdf">Split</button>
   <button class="tab-btn" data-tab="compress">Compress</button>
-  <button class="tab-btn" data-tab="jpg2pdf">JPG → PDF</button>
-  <button class="tab-btn" data-tab="ocrimage">OCR Image</button>
+  <button class="tab-btn" data-tab="pdf2jpg">PDF → JPG</button>
   <button class="tab-btn" data-tab="ocrpdf">OCR PDF</button>
+  <span class="tab-sep"></span>
+  <button class="tab-btn" data-tab="ocrimage">OCR Image</button>
   <button class="tab-btn" data-tab="qrcode">QR Code</button>
 </div>
 
 <!-- ===================== TAB 1: PDF -> JPG ===================== -->
-<section id="tab-pdf2jpg" class="tab-panel active">
+<section id="tab-pdf2jpg" class="tab-panel pdf-panel">
   <p class="tool-desc">Convert every page of a PDF into JPG images.</p>
 
   <div class="drop-zone" id="p2jDropZone" tabindex="0">
@@ -362,7 +384,7 @@
 </section>
 
 <!-- ===================== TAB 2: Split PDF ===================== -->
-<section id="tab-splitpdf" class="tab-panel">
+<section id="tab-splitpdf" class="tab-panel pdf-panel">
   <p class="tool-desc">Extract a page range into a new PDF, or split every page into its own PDF file.</p>
 
   <div class="drop-zone" id="splitDropZone" tabindex="0">
@@ -391,13 +413,17 @@
 
 <!-- ===================== NEW: Merge PDF ===================== -->
 <section id="tab-merge" class="tab-panel">
-  <p class="tool-desc">Combine several PDFs (and JPG/PNG images) into one file. Use the arrows to set the order.</p>
+  <p class="tool-desc">Combine PDFs and JPG/PNG images into one document (works with or without a PDF loaded above). Use the arrows to set the order; the result becomes your current document.</p>
   <div class="drop-zone" id="mrgDropZone" tabindex="0">
     <p id="mrgDropText">Click to choose PDFs / images, or drag and drop them here<span class="hint-small">You can also paste (Ctrl+V) copied files</span></p>
     <input type="file" id="mrgFileInput" accept="application/pdf,image/jpeg,image/png" multiple>
   </div>
   <div class="controls">
-    <button class="primary" id="mrgMergeBtn" disabled>Merge into one PDF</button>
+    <label for="mrgCur">Current PDF:</label>
+    <select id="mrgCur"><option value="first" selected>Put first</option><option value="last">Put last</option><option value="none">Don't include</option></select>
+    <label for="mrgPage">Image page size:</label>
+    <select id="mrgPage"><option value="fit" selected>Fit to each image</option><option value="a4">A4</option><option value="letter">Letter</option></select>
+    <button class="primary" id="mrgMergeBtn" disabled>Merge</button>
     <button class="secondary" id="mrgClearBtn" disabled>Clear All</button>
   </div>
   <div class="status" id="mrgStatus"></div>
@@ -405,52 +431,41 @@
 </section>
 
 <!-- ===================== NEW: Organize pages ===================== -->
-<section id="tab-organize" class="tab-panel">
-  <p class="tool-desc">Reorder pages by dragging (or with the arrows), rotate individual pages, or delete pages you don't need.</p>
+<section id="tab-organize" class="tab-panel pdf-panel active">
+  <p class="tool-desc">Click pages to select them, then rotate or delete the selection — or rotate every page at once. Each card also has its own ↻ rotate and ✕ delete; drag cards (or use ◀ ▶) to reorder. Changes are applied to your document when you click Apply changes or switch tabs.</p>
   <div class="drop-zone" id="orgDropZone" tabindex="0">
     <p id="orgDropText">Click to choose a PDF, or drag and drop it here<span class="hint-small">You can also paste (Ctrl+V) a copied PDF</span></p>
     <input type="file" id="orgFileInput" accept="application/pdf">
   </div>
   <div class="controls">
-    <button class="primary" id="orgSaveBtn" disabled>Save PDF</button>
-    <button class="secondary" id="orgResetBtn" disabled>Reset</button>
+    <button class="primary" id="orgSaveBtn" disabled>Apply changes</button>
+    <button class="secondary" id="orgResetBtn" disabled>Discard changes</button>
+    <label>Rotate ALL pages:</label>
+    <button class="secondary" id="orgAllCW">↻ 90°</button>
+    <button class="secondary" id="orgAllCCW">↺ 90°</button>
+    <button class="secondary" id="orgAll180">180°</button>
+  </div>
+  <div class="controls">
+    <label for="orgSelRange">Select pages:</label>
+    <input type="text" id="orgSelRange" placeholder="e.g. 1-3, 5, odd, even">
+    <button class="secondary" id="orgSelBtn">Select</button>
+    <button class="secondary" id="orgSelAll">All</button>
+    <button class="secondary" id="orgSelNone">None</button>
+    <button class="secondary" id="orgSelInv">Invert</button>
+  </div>
+  <div class="controls">
+    <label>With selected:</label>
+    <button class="secondary" id="orgSelCW">↻ Rotate 90°</button>
+    <button class="secondary" id="orgSelCCW">↺ Rotate 90°</button>
+    <button class="secondary icon-btn danger" id="orgSelDel">✕ Delete selected</button>
   </div>
   <div class="status" id="orgStatus"></div>
   <div class="org-grid" id="orgGrid"></div>
 </section>
 
-<!-- ===================== NEW: Rotate ===================== -->
-<section id="tab-rotate" class="tab-panel">
-  <p class="tool-desc">Rotate all pages, or only selected pages, of a PDF.</p>
-  <div class="drop-zone" id="rotDropZone" tabindex="0">
-    <p id="rotDropText">Click to choose a PDF, or drag and drop it here<span class="hint-small">You can also paste (Ctrl+V) a copied PDF</span></p>
-    <input type="file" id="rotFileInput" accept="application/pdf">
-  </div>
-  <div class="controls">
-    <label for="rotAngle">Rotate:</label>
-    <select id="rotAngle">
-      <option value="90" selected>90° clockwise</option>
-      <option value="180">180°</option>
-      <option value="270">90° counter-clockwise</option>
-    </select>
-    <label for="rotRange">Pages:</label>
-    <input type="text" id="rotRange" placeholder="all  (or e.g. 1-3, 5, odd, even)">
-    <button class="primary" id="rotApplyBtn" disabled>Rotate &amp; Download</button>
-  </div>
-  <div class="status" id="rotStatus"></div>
-  <div class="preview-box" id="rotPreview">
-    <div class="preview-nav">
-      <button type="button" class="secondary icon-btn" data-nav="prev">◀</button>
-      <span class="pv-label">Preview</span>
-      <button type="button" class="secondary icon-btn" data-nav="next">▶</button>
-    </div>
-    <canvas></canvas>
-  </div>
-</section>
-
 <!-- ===================== NEW: Page numbers ===================== -->
-<section id="tab-pagenum" class="tab-panel">
-  <p class="tool-desc">Stamp page numbers onto every page (or a chosen range) of a PDF.</p>
+<section id="tab-pagenum" class="tab-panel pdf-panel">
+  <p class="tool-desc">Add or change page numbers: choose the start number, style (1, i, I, custom text) and position. To replace numbers already printed on the pages, drag a box over the old number in the preview to hide it first.</p>
   <div class="drop-zone" id="pnDropZone" tabindex="0">
     <p id="pnDropText">Click to choose a PDF, or drag and drop it here<span class="hint-small">You can also paste (Ctrl+V) a copied PDF</span></p>
     <input type="file" id="pnFileInput" accept="application/pdf">
@@ -472,9 +487,14 @@
       <option value="pageof">Page 1 of N</option>
       <option value="slash">1 / N</option>
       <option value="dash">- 1 -</option>
+      <option value="roman">i, ii, iii</option>
+      <option value="ROMAN">I, II, III</option>
+      <option value="custom">Custom…</option>
     </select>
   </div>
   <div class="controls">
+    <label for="pnCustom">Custom text:</label>
+    <input type="text" id="pnCustom" value="Page {n} of {total}" title="Used when Format = Custom. Placeholders: {n} {total} {roman}">
     <label for="pnFont">Font:</label>
     <select id="pnFont">
       <option value="times" selected>Times New Roman</option>
@@ -497,6 +517,12 @@
     <label class="check-label"><input type="checkbox" id="pnSkipFirst"> Skip first page (cover)</label>
     <button class="primary" id="pnApplyBtn" disabled>Add Numbers &amp; Download</button>
   </div>
+  <div class="controls">
+    <label for="pnCoverColor">Hide old numbers:</label>
+    <input type="color" id="pnCoverColor" value="#ffffff">
+    <button type="button" class="secondary" id="pnCoverClear">Clear box</button>
+    <span class="hint-line" style="margin:0">Drag a box on the preview over the existing number; it is covered on every selected page (the old text is hidden, not deleted).</span>
+  </div>
   <div class="status" id="pnStatus"></div>
   <div class="preview-box" id="pnPreview">
     <div class="preview-nav">
@@ -509,7 +535,7 @@
 </section>
 
 <!-- ===================== NEW: Watermark ===================== -->
-<section id="tab-watermark" class="tab-panel">
+<section id="tab-watermark" class="tab-panel pdf-panel">
   <p class="tool-desc">Add a diagonal text watermark such as "CONFIDENTIAL" or "DRAFT" to your PDF.</p>
   <div class="drop-zone" id="wmDropZone" tabindex="0">
     <p id="wmDropText">Click to choose a PDF, or drag and drop it here<span class="hint-small">You can also paste (Ctrl+V) a copied PDF</span></p>
@@ -552,7 +578,7 @@
 </section>
 
 <!-- ===================== NEW: Compress ===================== -->
-<section id="tab-compress" class="tab-panel">
+<section id="tab-compress" class="tab-panel pdf-panel">
   <p class="tool-desc">Shrink a PDF by re-rendering each page as a compressed image. Best for scanned documents and photo-heavy files.</p>
   <div class="drop-zone" id="cmpDropZone" tabindex="0">
     <p id="cmpDropText">Click to choose a PDF, or drag and drop it here<span class="hint-small">You can also paste (Ctrl+V) a copied PDF</span></p>
@@ -587,30 +613,6 @@
   <p class="hint-line">Note: the output pages are images, so text will no longer be selectable or searchable (run OCR afterwards if you need that).</p>
 </section>
 
-<!-- ===================== TAB 3: JPG -> PDF ===================== -->
-<section id="tab-jpg2pdf" class="tab-panel">
-  <p class="tool-desc">Combine one or more JPG/PNG images into a single PDF, in the order you add them.</p>
-
-  <div class="drop-zone" id="j2pDropZone" tabindex="0">
-    <p id="j2pDropText">Click to choose images, or drag and drop them here<span class="hint-small">You can also paste (Ctrl+V) copied image(s)</span></p>
-    <input type="file" id="j2pFileInput" accept="image/jpeg,image/png" multiple>
-  </div>
-
-  <div class="controls">
-    <label for="j2pPageSize">Page size:</label>
-    <select id="j2pPageSize">
-      <option value="fit" selected>Fit to each image</option>
-      <option value="a4">A4</option>
-      <option value="letter">Letter</option>
-    </select>
-    <button class="primary" id="j2pConvertBtn" disabled>Convert to PDF</button>
-    <button class="secondary" id="j2pClearBtn" disabled>Clear All</button>
-  </div>
-
-  <div class="status" id="j2pStatus"></div>
-  <div class="file-list" id="j2pFileList"></div>
-</section>
-
 <!-- ===================== TAB 4: OCR Image ===================== -->
 <section id="tab-ocrimage" class="tab-panel">
   <p class="tool-desc">Extract text from a photo or scanned image using OCR.</p>
@@ -643,7 +645,7 @@
 </section>
 
 <!-- ===================== TAB 5: OCR PDF ===================== -->
-<section id="tab-ocrpdf" class="tab-panel">
+<section id="tab-ocrpdf" class="tab-panel pdf-panel">
   <p class="tool-desc">Extract text from every page of a scanned PDF using OCR. Large PDFs can take a while.</p>
 
   <div class="drop-zone" id="ocrpDropZone" tabindex="0">
@@ -811,7 +813,7 @@
   document.addEventListener("paste", (e) => {
     const activePanel = document.querySelector(".tab-panel.active");
     if (!activePanel) return;
-    const handler = pasteHandlers[activePanel.id];
+    const handler = activePanel.classList.contains("pdf-panel") ? (f) => loadDoc(f[0]) : pasteHandlers[activePanel.id];
     if (!handler) return;
 
     const items = (e.clipboardData || window.clipboardData || {}).items;
@@ -837,8 +839,87 @@
       document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
       btn.classList.add("active");
       document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
+      switchedTo("tab-" + btn.dataset.tab);
     });
   });
+
+  /* ========================================================
+     SHARED PDF WORKSPACE: upload once, use every PDF tool
+     ======================================================== */
+  const WS = { file: null, orig: null, name: "", pages: 0, hist: [], flush: null, discard: null };
+  const docListeners = [];
+  const gid = (id) => document.getElementById(id);
+  const activePanelId = () => document.querySelector(".tab-panel.active").id;
+  let lastPanel = activePanelId();
+
+  // Run `fn(file)` whenever the document changes — immediately if the tab is open, otherwise when it is next opened.
+  function onDoc(zoneEl, fn) { docListeners.push({ panel: zoneEl.closest(".tab-panel").id, fn, stale: false }); }
+  function runStale(panelId) {
+    docListeners.forEach((l) => { if (l.panel === panelId && l.stale) { l.stale = false; l.fn(WS.file); } });
+  }
+  async function switchedTo(panelId) {
+    if (panelId !== lastPanel) { lastPanel = panelId; if (WS.flush) await WS.flush(); }
+    runStale(panelId);
+  }
+  function announce() {
+    document.body.classList.add("has-doc");
+    gid("wsBar").classList.add("loaded");
+    gid("wsDropText").firstChild.textContent = `${WS.name} — ${WS.pages} page${WS.pages === 1 ? "" : "s"}, ${fmtBytes(WS.file.size)}${WS.hist.length ? " (edited)" : ""} · click or drop to replace`;
+    gid("wsDownload").disabled = false;
+    gid("wsUndo").disabled = !WS.hist.length;
+    gid("wsRevert").disabled = !WS.hist.length;
+    docListeners.forEach((l) => { l.stale = true; });
+    runStale(activePanelId());
+  }
+  const countPages = async (f) => (await PDFLib.PDFDocument.load(await f.arrayBuffer(), { ignoreEncryption: true })).getPageCount();
+
+  async function loadDoc(file) {
+    const st = gid("wsStatus");
+    if (!file) return;
+    if (!isPdfFile(file)) { st.textContent = "Please select a valid PDF file."; return; }
+    if (WS.hist.length && !confirm("Replace the current PDF? Your edits will be lost.")) return;
+    st.textContent = "Reading PDF...";
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const doc = await PDFLib.PDFDocument.load(bytes, { ignoreEncryption: true });
+      if (WS.discard) WS.discard();
+      WS.name = file.name; WS.pages = doc.getPageCount(); WS.hist = [];
+      WS.file = WS.orig = new File([bytes], file.name, { type: "application/pdf" });
+      st.textContent = "";
+      announce();
+    } catch (err) {
+      console.error(err);
+      st.textContent = "Error reading PDF: " + err.message;
+    }
+    gid("wsFileInput").value = "";
+  }
+
+  // Tools call this with their result instead of downloading, so edits chain.
+  async function commitPdf(bytes, newName) {
+    const fresh = !WS.file;
+    if (fresh) { WS.name = newName || "document.pdf"; WS.hist = []; }
+    else { WS.hist.push(WS.file); if (WS.hist.length > 15) WS.hist.shift(); }
+    WS.file = new File([bytes], WS.name, { type: "application/pdf" });
+    if (fresh) WS.orig = WS.file;
+    WS.pages = await countPages(WS.file);
+    announce();
+  }
+  async function restore(file) {
+    WS.file = file; WS.pages = await countPages(file);
+    if (WS.discard) WS.discard();
+    announce();
+  }
+
+  setupDropZone(gid("wsDropZone"), gid("wsFileInput"), (files) => loadDoc(files[0]));
+  gid("wsDownload").onclick = async () => {
+    if (WS.flush) await WS.flush();
+    if (!WS.file) return;
+    downloadBlob(WS.file, WS.hist.length ? WS.name.replace(/\.pdf$/i, "") + "-edited.pdf" : WS.name);
+  };
+  gid("wsUndo").onclick = () => { if (WS.hist.length) restore(WS.hist.pop()); };
+  gid("wsRevert").onclick = () => {
+    if (WS.hist.length && confirm("Discard all edits and go back to the original PDF?")) { WS.hist = []; restore(WS.orig); }
+  };
 
   /* ========================================================
      TAB 1: PDF -> JPG
@@ -855,6 +936,7 @@
     let selectedFile = null;
 
     setupDropZone(dropZone, fileInput, (files) => handleFile(files[0]));
+    onDoc(dropZone, handleFile);
 
     function handleFile(file) {
       if (file.type !== "application/pdf") {
@@ -995,6 +1077,7 @@
     let totalPages = 0;
 
     setupDropZone(dropZone, fileInput, (files) => handleFile(files[0]));
+    onDoc(dropZone, handleFile);
 
     async function handleFile(file) {
       if (file.type !== "application/pdf") {
@@ -1127,120 +1210,6 @@
   })();
 
   /* ========================================================
-     TAB 3: JPG -> PDF
-     ======================================================== */
-  (function () {
-    const dropZone = document.getElementById("j2pDropZone");
-    const dropText = document.getElementById("j2pDropText");
-    const fileInput = document.getElementById("j2pFileInput");
-    const convertBtn = document.getElementById("j2pConvertBtn");
-    const clearBtn = document.getElementById("j2pClearBtn");
-    const statusEl = document.getElementById("j2pStatus");
-    const fileListEl = document.getElementById("j2pFileList");
-    const pageSizeSel = document.getElementById("j2pPageSize");
-
-    let files = [];
-
-    setupDropZone(dropZone, fileInput, (fileListArg) => addFiles(fileListArg));
-
-    function addFiles(fileListArg) {
-      const valid = [...fileListArg].filter((f) => f.type === "image/jpeg" || f.type === "image/png");
-      if (!valid.length) {
-        statusEl.textContent = "Please select JPG or PNG image files.";
-        return;
-      }
-      files = files.concat(valid);
-      renderFileList();
-      statusEl.textContent = "";
-      fileInput.value = "";
-    }
-
-    function renderFileList() {
-      fileListEl.innerHTML = "";
-      files.forEach((file, idx) => {
-        const item = document.createElement("div");
-        item.className = "file-item";
-
-        const img = document.createElement("img");
-        img.src = URL.createObjectURL(file);
-        img.onload = () => URL.revokeObjectURL(img.src);
-
-        const name = document.createElement("div");
-        name.className = "file-name";
-        name.textContent = `${idx + 1}. ${file.name}`;
-
-        const removeBtn = document.createElement("button");
-        removeBtn.className = "remove-btn";
-        removeBtn.textContent = "×";
-        removeBtn.onclick = () => {
-          files.splice(idx, 1);
-          renderFileList();
-        };
-
-        item.appendChild(img);
-        item.appendChild(name);
-        item.appendChild(removeBtn);
-        fileListEl.appendChild(item);
-      });
-
-      dropText.textContent = files.length
-        ? `${files.length} image(s) selected — click to add more`
-        : "Click to choose images, or drag and drop them here";
-      convertBtn.disabled = files.length === 0;
-      clearBtn.disabled = files.length === 0;
-    }
-
-    clearBtn.addEventListener("click", () => {
-      files = [];
-      renderFileList();
-      statusEl.textContent = "";
-    });
-
-    async function embedImage(pdfDoc, file) {
-      const bytes = await file.arrayBuffer();
-      if (file.type === "image/png") return await pdfDoc.embedPng(bytes);
-      return await pdfDoc.embedJpg(bytes);
-    }
-
-    convertBtn.addEventListener("click", async () => {
-      if (!files.length) return;
-      convertBtn.disabled = true;
-      try {
-        const pdfDoc = await PDFLib.PDFDocument.create();
-        const mode = pageSizeSel.value;
-
-        for (let i = 0; i < files.length; i++) {
-          statusEl.textContent = `Adding image ${i + 1} of ${files.length}...`;
-          const img = await embedImage(pdfDoc, files[i]);
-          const { width, height } = img;
-
-          if (mode === "fit") {
-            const page = pdfDoc.addPage([width, height]);
-            page.drawImage(img, { x: 0, y: 0, width, height });
-          } else {
-            const [pw, ph] = mode === "a4" ? [595.28, 841.89] : [612, 792];
-            const page = pdfDoc.addPage([pw, ph]);
-            const scale = Math.min(pw / width, ph / height);
-            const w = width * scale;
-            const h = height * scale;
-            page.drawImage(img, { x: (pw - w) / 2, y: (ph - h) / 2, width: w, height: h });
-          }
-        }
-
-        statusEl.textContent = "Saving PDF...";
-        const bytes = await pdfDoc.save();
-        downloadBlob(new Blob([bytes], { type: "application/pdf" }), "images-to-pdf.pdf");
-        statusEl.textContent = `Done — created a PDF with ${files.length} page(s).`;
-      } catch (err) {
-        console.error(err);
-        statusEl.textContent = "Error creating PDF: " + err.message;
-      } finally {
-        convertBtn.disabled = false;
-      }
-    });
-  })();
-
-  /* ========================================================
      TAB 4: OCR Image
      ======================================================== */
   (function () {
@@ -1333,6 +1302,7 @@
     let selectedFile = null;
 
     setupDropZone(dropZone, fileInput, (files) => handleFile(files[0]));
+    onDoc(dropZone, handleFile);
 
     function handleFile(file) {
       if (file.type !== "application/pdf") {
@@ -1570,30 +1540,11 @@
     });
   }
 
-  // Wires up a single-PDF drop zone using ids: <prefix>DropZone / DropText / FileInput / Status
+  // Tools share one document: `st.file` / `st.pages` always reflect the current workspace PDF.
   function bindSinglePdf(prefix, onLoaded) {
-    const zone = $(prefix + "DropZone"), text = $(prefix + "DropText");
-    const input = $(prefix + "FileInput"), status = $(prefix + "Status");
-    const state = { file: null, pages: 0 };
-    setupDropZone(zone, input, async (files) => {
-      const f = files[0];
-      if (!f) return;
-      if (!isPdfFile(f)) { status.textContent = "Please select a valid PDF file."; return; }
-      status.textContent = "Reading PDF...";
-      try {
-        const doc = await loadPdfLib(f);
-        state.file = f;
-        state.pages = doc.getPageCount();
-        text.textContent = `Selected: ${f.name} (${state.pages} page${state.pages === 1 ? "" : "s"})`;
-        status.textContent = `Loaded — ${state.pages} page${state.pages === 1 ? "" : "s"} total.`;
-        if (onLoaded) onLoaded(state);
-      } catch (err) {
-        console.error(err);
-        status.textContent = "Error reading PDF: " + err.message;
-      }
-      input.value = "";
-    });
-    return state;
+    const st = { get file() { return WS.file; }, get pages() { return WS.pages; } };
+    onDoc($(prefix + "DropZone"), () => { if (onLoaded) onLoaded(st); });
+    return st;
   }
 
   /* ========================================================
@@ -1701,8 +1652,17 @@
     const statusEl = $("mrgStatus"), listEl = $("mrgList");
     const defaultText = text.innerHTML;
     let items = [];
+    const withCurrent = () => {
+      const m = $("mrgCur").value;
+      if (!WS.file || m === "none") return items.slice();
+      const cur = { file: WS.file, kind: "pdf", pages: WS.pages };
+      return m === "last" ? [...items, cur] : [cur, ...items];
+    };
+    const canMerge = () => items.length >= 1 && withCurrent().length >= 2;
 
     setupDropZone(zone, input, addFiles);
+    onDoc(zone, () => render());
+    $("mrgCur").addEventListener("change", () => render());
 
     async function pdfThumb(file) {
       try {
@@ -1773,7 +1733,7 @@
       const total = items.reduce((s, it) => s + it.pages, 0);
       text.innerHTML = defaultText;
       if (items.length) text.firstChild.textContent = `${items.length} file(s), ${total} page(s) — click to add more`;
-      mergeBtn.disabled = items.length < 2;
+      mergeBtn.disabled = !canMerge();
       clearBtn.disabled = items.length === 0;
     }
 
@@ -1783,28 +1743,33 @@
       mergeBtn.disabled = true;
       try {
         const out = await PDFLib.PDFDocument.create();
-        for (let i = 0; i < items.length; i++) {
-          const it = items[i];
-          statusEl.textContent = `Merging ${i + 1} of ${items.length}: ${it.file.name}`;
+        const list = withCurrent();
+        for (let i = 0; i < list.length; i++) {
+          const it = list[i];
+          statusEl.textContent = `Merging ${i + 1} of ${list.length}: ${it.file.name}`;
           if (it.kind === "pdf") {
             const src = await loadPdfLib(it.file);
             (await out.copyPages(src, src.getPageIndices())).forEach((p) => out.addPage(p));
           } else {
             const bytes = await it.file.arrayBuffer();
             const img = /png/i.test(it.file.type) || /\.png$/i.test(it.file.name) ? await out.embedPng(bytes) : await out.embedJpg(bytes);
-            const page = out.addPage([img.width, img.height]);
-            page.drawImage(img, { x: 0, y: 0, width: img.width, height: img.height });
+            const mode = $("mrgPage").value;
+            const [pw, ph] = mode === "a4" ? [595.28, 841.89] : mode === "letter" ? [612, 792] : [img.width, img.height];
+            const page = out.addPage([pw, ph]);
+            const k = Math.min(pw / img.width, ph / img.height), w = img.width * k, h = img.height * k;
+            page.drawImage(img, { x: (pw - w) / 2, y: (ph - h) / 2, width: w, height: h });
           }
         }
         statusEl.textContent = "Saving...";
         const bytes = await out.save();
-        downloadBlob(new Blob([bytes], { type: "application/pdf" }), "merged.pdf");
-        statusEl.textContent = `Done — merged ${items.length} file(s) into ${out.getPageCount()} page(s) (${fmtBytes(bytes.length)}).`;
+        await commitPdf(bytes, "merged.pdf");
+        items = []; render();
+        statusEl.textContent = `Done — merged ${list.length} file(s) into ${out.getPageCount()} page(s). Use "Download PDF" at the top to save.`;
       } catch (err) {
         console.error(err);
         statusEl.textContent = "Error merging: " + err.message;
       } finally {
-        mergeBtn.disabled = items.length < 2;
+        mergeBtn.disabled = !canMerge();
       }
     });
   })();
@@ -1866,7 +1831,7 @@
 
     async function loadThumbs() {
       gridEl.innerHTML = "";
-      saveBtn.disabled = true; resetBtn.disabled = true;
+      saveBtn.disabled = true; resetBtn.disabled = true; pages = [];
       try {
         const pdf = await pdfjsLib.getDocument({ data: await st.file.arrayBuffer() }).promise;
         thumbs = [];
@@ -1880,7 +1845,7 @@
           thumbs.push(c.toDataURL("image/jpeg", 0.6));
         }
         reset();
-        statusEl.textContent = `${st.pages} page(s) — drag cards or use the buttons, then click Save PDF.`;
+        
       } catch (err) {
         console.error(err);
         statusEl.textContent = "Error rendering pages: " + err.message;
@@ -1888,7 +1853,7 @@
     }
 
     function reset() {
-      pages = thumbs.map((_, i) => ({ idx: i, rot: 0, del: false }));
+      pages = thumbs.map((_, i) => ({ idx: i, rot: 0, del: false, sel: false }));
       render();
       saveBtn.disabled = false; resetBtn.disabled = false;
     }
@@ -1903,7 +1868,7 @@
     function btn(label, title, fn, cls) {
       const b = document.createElement("button");
       b.type = "button"; b.className = "secondary icon-btn" + (cls ? " " + cls : "");
-      b.textContent = label; b.title = title; b.onclick = fn;
+      b.textContent = label; b.title = title; b.onclick = (e) => { e.stopPropagation(); fn(); };
       return b;
     }
 
@@ -1911,7 +1876,8 @@
       gridEl.innerHTML = "";
       pages.forEach((p, pos) => {
         const card = document.createElement("div");
-        card.className = "org-card" + (p.del ? " deleted" : "");
+        card.className = "org-card" + (p.del ? " deleted" : "") + (p.sel ? " sel" : "");
+        card.onclick = () => { p.sel = !p.sel; card.classList.toggle("sel", p.sel); updateCount(); };
         card.draggable = true;
         card.addEventListener("dragstart", (e) => { dragFrom = pos; card.classList.add("dragging"); e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", String(pos)); } catch (_) {} });
         card.addEventListener("dragend", () => { card.classList.remove("dragging"); });
@@ -1938,11 +1904,28 @@
         card.append(thumb, label, actions);
         gridEl.appendChild(card);
       });
+      updateCount();
     }
 
     resetBtn.addEventListener("click", reset);
+    function updateCount() {
+      statusEl.textContent = pages.length ? `${pages.length} page(s) · ${pages.filter((p) => p.sel).length} selected · ${pages.filter((p) => p.del).length} marked for deletion` : "";
+    }
+    const isDirty = () => pages.some((p, i) => p.idx !== i || p.rot || p.del);
+    const select = (fn) => { pages.forEach((p, i) => { p.sel = fn(p, i); }); render(); };
+    const rotate = (a, onlySel) => { pages.forEach((p) => { if (!onlySel || p.sel) p.rot = (p.rot + a) % 360; }); render(); };
+    $("orgSelBtn").onclick = () => { const set = new Set(parseRangeList($("orgSelRange").value, pages.length)); select((p, i) => set.has(i)); };
+    $("orgSelAll").onclick = () => select(() => true);
+    $("orgSelNone").onclick = () => select(() => false);
+    $("orgSelInv").onclick = () => select((p) => !p.sel);
+    $("orgAllCW").onclick = () => rotate(90);
+    $("orgAllCCW").onclick = () => rotate(270);
+    $("orgAll180").onclick = () => rotate(180);
+    $("orgSelCW").onclick = () => rotate(90, true);
+    $("orgSelCCW").onclick = () => rotate(270, true);
+    $("orgSelDel").onclick = () => { pages.forEach((p) => { if (p.sel) { p.del = true; p.sel = false; } }); render(); };
 
-    saveBtn.addEventListener("click", async () => {
+    async function applyEdits() {
       const kept = pages.filter((p) => !p.del);
       if (!kept.length) { statusEl.textContent = "All pages are deleted — keep at least one page."; return; }
       saveBtn.disabled = true;
@@ -1956,64 +1939,18 @@
           out.addPage(pg);
         });
         const bytes = await out.save();
-        downloadBlob(new Blob([bytes], { type: "application/pdf" }), `${baseNameOf(st.file)}-organized.pdf`);
-        statusEl.textContent = `Done — saved ${kept.length} page(s).`;
+        pages = [];
+        await commitPdf(bytes);
       } catch (err) {
         console.error(err);
         statusEl.textContent = "Error saving PDF: " + err.message;
       } finally {
-        saveBtn.disabled = false;
+        saveBtn.disabled = !pages.length;
       }
-    });
-  })();
-
-  /* ========================================================
-     ROTATE
-     ======================================================== */
-  (function () {
-    const btn = $("rotApplyBtn"), statusEl = $("rotStatus");
-    const st = bindSinglePdf("rot", () => { btn.disabled = false; pv.load(); });
-    const pv = makePreview("rot", st, {
-      draw: (ctx, canvas, base, info) => {
-        const targets = parseRangeList($("rotRange").value, info.total);
-        const a = targets.includes(info.page) ? parseInt($("rotAngle").value, 10) : 0;
-        const swap = a === 90 || a === 270;
-        canvas.width = swap ? base.height : base.width;
-        canvas.height = swap ? base.width : base.height;
-        const c = canvas.getContext("2d");
-        c.save();
-        c.translate(canvas.width / 2, canvas.height / 2);
-        c.rotate((a * Math.PI) / 180);
-        c.drawImage(base, -base.width / 2, -base.height / 2);
-        c.restore();
-        return a ? ` · rotated ${a}°` : " · not rotated";
-      },
-    });
-
-    btn.addEventListener("click", async () => {
-      if (!st.file) return;
-      btn.disabled = true;
-      statusEl.textContent = "Rotating...";
-      try {
-        const doc = await loadPdfLib(st.file);
-        const pages = doc.getPages();
-        const targets = parseRangeList($("rotRange").value, pages.length);
-        if (!targets.length) { statusEl.textContent = "Enter a valid page range, e.g. 1-3, 5, odd."; return; }
-        const angle = parseInt($("rotAngle").value, 10);
-        targets.forEach((i) => {
-          const cur = pages[i].getRotation().angle;
-          pages[i].setRotation(PDFLib.degrees((cur + angle) % 360));
-        });
-        const bytes = await doc.save();
-        downloadBlob(new Blob([bytes], { type: "application/pdf" }), `${baseNameOf(st.file)}-rotated.pdf`);
-        statusEl.textContent = `Done — rotated ${targets.length} page(s).`;
-      } catch (err) {
-        console.error(err);
-        statusEl.textContent = "Error rotating PDF: " + err.message;
-      } finally {
-        btn.disabled = false;
-      }
-    });
+    }
+    saveBtn.addEventListener("click", applyEdits);
+    WS.flush = async () => { if (isDirty()) await applyEdits(); };
+    WS.discard = () => { pages = []; thumbs = []; gridEl.innerHTML = ""; };
   })();
 
   /* ========================================================
@@ -2021,10 +1958,22 @@
      ======================================================== */
   (function () {
     const btn = $("pnApplyBtn"), statusEl = $("pnStatus");
+    let cover = null; // {fx, fy, fw, fh} as fractions of the displayed page, y from top
     const st = bindSinglePdf("pn", () => { btn.disabled = false; pv.load(); });
+
+    function toRoman(n) {
+      if (n <= 0 || n > 3999) return String(n);
+      let r = "";
+      [[1000, "m"], [900, "cm"], [500, "d"], [400, "cd"], [100, "c"], [90, "xc"], [50, "l"], [40, "xl"], [10, "x"], [9, "ix"], [5, "v"], [4, "iv"], [1, "i"]]
+        .forEach(([v, t]) => { while (n >= v) { r += t; n -= v; } });
+      return r;
+    }
 
     function label(fmt, n, last) {
       switch (fmt) {
+        case "roman": return toRoman(n);
+        case "ROMAN": return toRoman(n).toUpperCase();
+        case "custom": return $("pnCustom").value.replace(/\{n\}/g, n).replace(/\{total\}/g, last).replace(/\{roman\}/g, toRoman(n));
         case "page": return `Page ${n}`;
         case "pageof": return `Page ${n} of ${last}`;
         case "slash": return `${n} / ${last}`;
@@ -2053,6 +2002,11 @@
         const o = settings(info.total);
         const k = o.targets.indexOf(info.page);
         if (k < 0) return;
+        if (cover) {
+          const bx = cover.fx * info.width, by = cover.fy * info.height, bw = cover.fw * info.width, bh = cover.fh * info.height;
+          ctx.fillStyle = $("pnCoverColor").value; ctx.fillRect(bx, by, bw, bh);
+          ctx.save(); ctx.strokeStyle = "#e33"; ctx.setLineDash([5, 3]); ctx.strokeRect(bx, by, bw, bh); ctx.restore();
+        }
         const text = label(o.fmt, o.first + k, o.last);
         ctx.font = cssFont(o.font, o.bold, o.size * info.scale);
         const w = ctx.measureText(text).width / info.scale;
@@ -2063,6 +2017,20 @@
         ctx.fillText(text, p.x * info.scale, (Hd - p.y) * info.scale);
       },
     });
+
+    const cv = $("pnPreview").querySelector("canvas");
+    cv.style.cursor = "crosshair"; cv.style.touchAction = "none";
+    let dragStart = null;
+    const rel = (e) => { const r = cv.getBoundingClientRect(); return { x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) }; };
+    cv.addEventListener("pointerdown", (e) => { dragStart = rel(e); cv.setPointerCapture(e.pointerId); });
+    cv.addEventListener("pointermove", (e) => {
+      if (!dragStart) return;
+      const p = rel(e);
+      cover = { fx: Math.min(dragStart.x, p.x), fy: Math.min(dragStart.y, p.y), fw: Math.abs(p.x - dragStart.x), fh: Math.abs(p.y - dragStart.y) };
+      pv.refresh();
+    });
+    cv.addEventListener("pointerup", () => { dragStart = null; if (cover && (cover.fw < 0.005 || cover.fh < 0.005)) { cover = null; pv.refresh(); } });
+    $("pnCoverClear").onclick = () => { cover = null; pv.refresh(); };
 
     btn.addEventListener("click", async () => {
       if (!st.file) return;
@@ -2082,6 +2050,11 @@
           const r = normRot(page.getRotation().angle);
           const { width: W, height: H } = page.getSize();
           const d = displaySize(r, W, H);
+          if (cover) {
+            const a = displayToRaw(r, W, H, cover.fx * d.w, d.h - (cover.fy + cover.fh) * d.h);
+            const b = displayToRaw(r, W, H, (cover.fx + cover.fw) * d.w, d.h - cover.fy * d.h);
+            page.drawRectangle({ x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width: Math.abs(a.x - b.x), height: Math.abs(a.y - b.y), color: hexToRgb($("pnCoverColor").value), borderWidth: 0 });
+          }
           const w = font.widthOfTextAtSize(text, o.size);
           const p = stampOrigin(o.pos, d.w, d.h, w, o.size, o.margin);
           const raw = displayToRaw(r, W, H, p.x, p.y);
@@ -2089,8 +2062,8 @@
         });
 
         const bytes = await doc.save();
-        downloadBlob(new Blob([bytes], { type: "application/pdf" }), `${baseNameOf(st.file)}-numbered.pdf`);
-        statusEl.textContent = `Done — numbered ${o.targets.length} page(s).`;
+        await commitPdf(bytes);
+        statusEl.textContent = `Done — numbered ${o.targets.length} page(s). Use "Download PDF" at the top to save.`;
       } catch (err) {
         console.error(err);
         statusEl.textContent = "Error adding page numbers: " + err.message;
@@ -2164,8 +2137,8 @@
         });
 
         const bytes = await doc.save();
-        downloadBlob(new Blob([bytes], { type: "application/pdf" }), `${baseNameOf(st.file)}-watermarked.pdf`);
-        statusEl.textContent = `Done — watermarked ${o.targets.length} page(s).`;
+        await commitPdf(bytes);
+        statusEl.textContent = `Done — watermarked ${o.targets.length} page(s). Use "Download PDF" at the top to save.`;
       } catch (err) {
         console.error(err);
         statusEl.textContent = /encode|WinAnsi/i.test(err.message)
@@ -2236,10 +2209,10 @@
         const before = st.file.size, after = bytes.length;
         const pct = Math.round((1 - after / before) * 100);
         if (after >= before) {
-          resultEl.textContent = `Result is ${fmtBytes(after)} vs. original ${fmtBytes(before)} — no saving, so the file was not downloaded. Try a lower quality/resolution.`;
+          resultEl.textContent = `Result is ${fmtBytes(after)} vs. original ${fmtBytes(before)} — no saving, so it was not applied. Try a lower quality/resolution.`;
           statusEl.textContent = "Done — no size reduction achieved.";
         } else {
-          downloadBlob(new Blob([bytes], { type: "application/pdf" }), `${baseNameOf(st.file)}-compressed.pdf`);
+          await commitPdf(bytes);
           resultEl.textContent = `${fmtBytes(before)} → ${fmtBytes(after)}  (${pct}% smaller)`;
           statusEl.textContent = `Done — compressed ${pdf.numPages} page(s).`;
         }
