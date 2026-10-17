@@ -317,6 +317,19 @@
   body:not(.has-doc) .pdf-panel .tool-desc::after { content: " Upload a PDF above to use this tool."; color: #d33; font-weight: 600; }
   .tab-sep { flex: 0 0 1px; background: #ddd; margin: 6px 8px; }
   .org-card { cursor: pointer; }
+  :root { --cl: max(250px, calc(50% - 310px)); }
+  .side-actions { margin-top: 10px; }
+  .side-actions .controls { margin-top: 0; }
+  @media (min-width: 1100px) {
+    body { margin-left: var(--cl); margin-right: auto; }
+    .side { position: fixed; top: 40px; left: calc(var(--cl) - 235px); width: 215px; max-height: calc(100vh - 60px); overflow-y: auto; }
+    .side-actions { margin-top: 0; }
+    .side-actions .controls { flex-direction: column; align-items: stretch; gap: 8px; }
+    .side .tabs { flex-direction: column; flex-wrap: nowrap; border-bottom: 0; margin-top: 16px; gap: 2px; }
+    .side .tab-btn { text-align: left; border-radius: 6px; border-bottom: 0; margin: 0; }
+    .side .tab-btn.active { background: #f1efff; border-bottom: 0; }
+    .side .tab-sep { flex: 0 0 1px; height: 1px; width: auto; margin: 6px 0; }
+  }
 </style>
 </head>
 <body>
@@ -329,6 +342,10 @@
     <p id="wsDropText">Click to choose a PDF, or drag and drop it here<span class="hint-small">Upload once — every PDF tool below works on this document and edits stack up. You can also paste (Ctrl+V).</span></p>
     <input type="file" id="wsFileInput" accept="application/pdf">
   </div>
+</div>
+
+<aside class="side">
+<div class="side-actions">
   <div class="controls">
     <button class="primary" id="wsDownload" disabled>Download PDF</button>
     <button class="secondary" id="wsUndo" disabled>↶ Undo last change</button>
@@ -336,7 +353,6 @@
     <span class="status" id="wsStatus" style="margin:0"></span>
   </div>
 </div>
-
 <div class="tabs">
   <button class="tab-btn active" data-tab="organize">Pages</button>
   <button class="tab-btn" data-tab="pagenum">Page Numbers</button>
@@ -350,6 +366,7 @@
   <button class="tab-btn" data-tab="ocrimage">OCR Image</button>
   <button class="tab-btn" data-tab="qrcode">QR Code</button>
 </div>
+</aside>
 
 <!-- ===================== TAB 1: PDF -> JPG ===================== -->
 <section id="tab-pdf2jpg" class="tab-panel pdf-panel">
@@ -432,7 +449,7 @@
 
 <!-- ===================== NEW: Organize pages ===================== -->
 <section id="tab-organize" class="tab-panel pdf-panel active">
-  <p class="tool-desc">Click pages to select them, then rotate or delete the selection — or rotate every page at once. Each card also has its own ↻ rotate and ✕ delete; drag cards (or use ◀ ▶) to reorder. Changes are applied to your document when you click Apply changes or switch tabs.</p>
+  <p class="tool-desc">Click pages to select them, then rotate, delete or move the selection (also add blank pages or pages from another PDF/image) — or rotate every page at once. Each card also has its own ↻ rotate and ✕ delete; drag cards (or use ◀ ▶) to reorder. Changes are applied to your document when you click Apply changes or switch tabs.</p>
   <div class="drop-zone" id="orgDropZone" tabindex="0">
     <p id="orgDropText">Click to choose a PDF, or drag and drop it here<span class="hint-small">You can also paste (Ctrl+V) a copied PDF</span></p>
     <input type="file" id="orgFileInput" accept="application/pdf">
@@ -458,6 +475,31 @@
     <button class="secondary" id="orgSelCW">↻ Rotate 90°</button>
     <button class="secondary" id="orgSelCCW">↺ Rotate 90°</button>
     <button class="secondary icon-btn danger" id="orgSelDel">✕ Delete selected</button>
+  </div>
+  <div class="controls">
+    <label>Move selected:</label>
+    <button class="secondary" id="orgMvStart">⇤ Start</button>
+    <button class="secondary" id="orgMvLeft">◀ Left</button>
+    <button class="secondary" id="orgMvRight">Right ▶</button>
+    <button class="secondary" id="orgMvEnd">End ⇥</button>
+    <label for="orgMvPos">to position</label>
+    <input type="number" id="orgMvPos" value="1" min="1">
+    <button class="secondary" id="orgMvGo">Move</button>
+  </div>
+  <div class="controls">
+    <label for="orgAddPos">Add pages:</label>
+    <select id="orgAddPos">
+      <option value="after" selected>After selected page (or at end)</option>
+      <option value="start">At start</option>
+      <option value="end">At end</option>
+      <option value="pos">At page number →</option>
+    </select>
+    <input type="number" id="orgAddAt" value="1" min="1" title="New pages become this page number (as shown in the grid)">
+    <label for="orgBlankN">Blank pages:</label>
+    <input type="number" id="orgBlankN" value="1" min="1" max="100" title="How many blank pages to add">
+    <button class="secondary" id="orgAddBlank">+ Add blank</button>
+    <button class="secondary" id="orgAddFile">+ From PDF / image…</button>
+    <input type="file" id="orgAddInput" accept="application/pdf,image/jpeg,image/png" multiple>
   </div>
   <div class="status" id="orgStatus"></div>
   <div class="org-grid" id="orgGrid"></div>
@@ -515,13 +557,23 @@
     <label for="pnRange">Pages:</label>
     <input type="text" id="pnRange" placeholder="all  (or e.g. 2-10)">
     <label class="check-label"><input type="checkbox" id="pnSkipFirst"> Skip first page (cover)</label>
-    <button class="primary" id="pnApplyBtn" disabled>Add Numbers &amp; Download</button>
+    <button class="primary" id="pnApplyBtn" disabled>Apply page numbers</button>
   </div>
   <div class="controls">
     <label for="pnCoverColor">Hide old numbers:</label>
     <input type="color" id="pnCoverColor" value="#ffffff">
     <button type="button" class="secondary" id="pnCoverClear">Clear box</button>
     <span class="hint-line" style="margin:0">Drag a box on the preview over the existing number; it is covered on every selected page (the old text is hidden, not deleted).</span>
+  </div>
+  <div class="controls">
+    <label for="pnRemArea">Remove existing numbers:</label>
+    <select id="pnRemArea">
+      <option value="bottom" selected>Look at page bottom</option>
+      <option value="top">Look at page top</option>
+      <option value="both">Look at top &amp; bottom</option>
+    </select>
+    <button class="secondary" id="pnRemoveAuto">Auto-detect &amp; remove</button>
+    <button class="secondary" id="pnRemoveBox">Remove using drawn box</button>
   </div>
   <div class="status" id="pnStatus"></div>
   <div class="preview-box" id="pnPreview">
@@ -1825,7 +1877,7 @@
      ======================================================== */
   (function () {
     const gridEl = $("orgGrid"), saveBtn = $("orgSaveBtn"), resetBtn = $("orgResetBtn"), statusEl = $("orgStatus");
-    let pages = [], thumbs = [], dragFrom = null;
+    let pages = [], thumbs = [], dragFrom = null, baseN = 0;
 
     const st = bindSinglePdf("org", loadThumbs);
 
@@ -1844,6 +1896,7 @@
           await page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
           thumbs.push(c.toDataURL("image/jpeg", 0.6));
         }
+        baseN = thumbs.length;
         reset();
         
       } catch (err) {
@@ -1853,6 +1906,7 @@
     }
 
     function reset() {
+      thumbs.length = baseN;
       pages = thumbs.map((_, i) => ({ idx: i, rot: 0, del: false, sel: false }));
       render();
       saveBtn.disabled = false; resetBtn.disabled = false;
@@ -1883,7 +1937,7 @@
         card.addEventListener("dragend", () => { card.classList.remove("dragging"); });
         card.addEventListener("dragover", (e) => { e.preventDefault(); card.classList.add("over"); });
         card.addEventListener("dragleave", () => card.classList.remove("over"));
-        card.addEventListener("drop", (e) => { e.preventDefault(); card.classList.remove("over"); if (dragFrom !== null) move(dragFrom, pos); dragFrom = null; });
+        card.addEventListener("drop", (e) => { e.preventDefault(); card.classList.remove("over"); if (dragFrom !== null) dropAt(dragFrom, pos); dragFrom = null; });
 
         const thumb = document.createElement("div"); thumb.className = "org-thumb";
         const img = document.createElement("img");
@@ -1892,7 +1946,7 @@
         thumb.appendChild(img);
 
         const label = document.createElement("div"); label.className = "org-label";
-        label.textContent = `Page ${p.idx + 1}` + (p.del ? " (deleted)" : "");
+        label.textContent = (p.name || `Page ${p.idx + 1}`) + (p.del ? " (deleted)" : "");
 
         const actions = document.createElement("div"); actions.className = "org-actions";
         actions.append(
@@ -1911,7 +1965,7 @@
     function updateCount() {
       statusEl.textContent = pages.length ? `${pages.length} page(s) · ${pages.filter((p) => p.sel).length} selected · ${pages.filter((p) => p.del).length} marked for deletion` : "";
     }
-    const isDirty = () => pages.some((p, i) => p.idx !== i || p.rot || p.del);
+    const isDirty = () => pages.some((p, i) => p.idx !== i || p.rot || p.del || p.add);
     const select = (fn) => { pages.forEach((p, i) => { p.sel = fn(p, i); }); render(); };
     const rotate = (a, onlySel) => { pages.forEach((p) => { if (!onlySel || p.sel) p.rot = (p.rot + a) % 360; }); render(); };
     $("orgSelBtn").onclick = () => { const set = new Set(parseRangeList($("orgSelRange").value, pages.length)); select((p, i) => set.has(i)); };
@@ -1923,6 +1977,67 @@
     $("orgAll180").onclick = () => rotate(180);
     $("orgSelCW").onclick = () => rotate(90, true);
     $("orgSelCCW").onclick = () => rotate(270, true);
+    const selCount = () => pages.filter((p) => p.sel).length;
+    function moveSelTo(at) { // at = slot among the unselected pages
+      const rest = pages.filter((p) => !p.sel), sel = pages.filter((p) => p.sel);
+      if (!sel.length) return;
+      at = Math.max(0, Math.min(at, rest.length));
+      pages = [...rest.slice(0, at), ...sel, ...rest.slice(at)];
+      render();
+    }
+    function dropAt(from, pos) {
+      if (pages[from].sel && selCount() > 1) {
+        if (pages[pos].sel) return;
+        moveSelTo(pages.slice(0, pos).filter((p) => !p.sel).length + (pos > from ? 1 : 0));
+      } else move(from, pos);
+    }
+    $("orgMvStart").onclick = () => moveSelTo(0);
+    $("orgMvEnd").onclick = () => moveSelTo(1e9);
+    $("orgMvGo").onclick = () => moveSelTo((parseInt($("orgMvPos").value, 10) || 1) - 1);
+    $("orgMvLeft").onclick = () => { for (let i = 1; i < pages.length; i++) if (pages[i].sel && !pages[i - 1].sel) [pages[i - 1], pages[i]] = [pages[i], pages[i - 1]]; render(); };
+    $("orgMvRight").onclick = () => { for (let i = pages.length - 2; i >= 0; i--) if (pages[i].sel && !pages[i + 1].sel) [pages[i + 1], pages[i]] = [pages[i], pages[i + 1]]; render(); };
+
+    function insertPages(items) {
+      const mode = $("orgAddPos").value;
+      let at = pages.length;
+      if (mode === "start") at = 0;
+      else if (mode === "pos") at = Math.max(0, Math.min(pages.length, (parseInt($("orgAddAt").value, 10) || 1) - 1));
+      else if (mode === "after") { const last = pages.map((p) => p.sel).lastIndexOf(true); if (last >= 0) at = last + 1; }
+      pages.forEach((p) => { p.sel = false; });
+      pages.splice(at, 0, ...items);
+      render();
+    }
+    const newPage = (thumb, name, add) => { thumbs.push(thumb); return { idx: thumbs.length - 1, rot: 0, del: false, sel: true, name, add }; };
+    $("orgAddBlank").onclick = () => {
+      if (!pages.length) return;
+      const c = document.createElement("canvas"); c.width = 226; c.height = 320;
+      const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, 226, 320);
+      const n = Math.max(1, Math.min(100, parseInt($("orgBlankN").value, 10) || 1)), url = c.toDataURL("image/png");
+      insertPages(Array.from({ length: n }, () => newPage(url, "New blank page", { kind: "blank" })));
+    };
+    $("orgAddAt").oninput = () => { $("orgAddPos").value = "pos"; };
+    $("orgAddFile").onclick = () => { if (pages.length) $("orgAddInput").click(); };
+    $("orgAddInput").onchange = async (e) => {
+      const files = [...e.target.files]; e.target.value = "";
+      const items = [];
+      try {
+        for (const f of files) {
+          if (isPdfFile(f)) {
+            const pdf = await pdfjsLib.getDocument({ data: await f.arrayBuffer() }).promise;
+            for (let i = 1; i <= pdf.numPages; i++) {
+              statusEl.textContent = `Reading ${f.name}: page ${i} of ${pdf.numPages}...`;
+              const page = await pdf.getPage(i), vp = page.getViewport({ scale: 0.4 });
+              const c = document.createElement("canvas"); c.width = vp.width; c.height = vp.height;
+              await page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
+              items.push(newPage(c.toDataURL("image/jpeg", 0.6), `${f.name} p.${i}`, { kind: "pdf", file: f, page: i - 1 }));
+            }
+          } else if (isImgFile(f)) {
+            items.push(newPage(URL.createObjectURL(f), f.name, { kind: "img", file: f }));
+          }
+        }
+      } catch (err) { console.error(err); statusEl.textContent = "Error adding pages: " + err.message; return; }
+      if (items.length) insertPages(items);
+    };
     $("orgSelDel").onclick = () => { pages.forEach((p) => { if (p.sel) { p.del = true; p.sel = false; } }); render(); };
 
     async function applyEdits() {
@@ -1933,11 +2048,26 @@
       try {
         const src = await loadPdfLib(st.file);
         const out = await PDFLib.PDFDocument.create();
-        const copied = await out.copyPages(src, kept.map((p) => p.idx));
-        copied.forEach((pg, i) => {
-          if (kept[i].rot) pg.setRotation(PDFLib.degrees((pg.getRotation().angle + kept[i].rot) % 360));
-          out.addPage(pg);
-        });
+        const origKept = kept.filter((p) => !p.add);
+        const copied = await out.copyPages(src, origKept.map((p) => p.idx));
+        const byIdx = new Map(origKept.map((p, i) => [p.idx, copied[i]]));
+        const docs = new Map(), ref = src.getPage(0).getSize();
+        for (const p of kept) {
+          let pg;
+          if (!p.add) { pg = byIdx.get(p.idx); out.addPage(pg); }
+          else if (p.add.kind === "blank") pg = out.addPage([ref.width, ref.height]);
+          else if (p.add.kind === "pdf") {
+            if (!docs.has(p.add.file)) docs.set(p.add.file, await loadPdfLib(p.add.file));
+            [pg] = await out.copyPages(docs.get(p.add.file), [p.add.page]);
+            out.addPage(pg);
+          } else {
+            const b = await p.add.file.arrayBuffer();
+            const img = /png/i.test(p.add.file.type) || /\.png$/i.test(p.add.file.name) ? await out.embedPng(b) : await out.embedJpg(b);
+            pg = out.addPage([img.width, img.height]);
+            pg.drawImage(img, { x: 0, y: 0, width: img.width, height: img.height });
+          }
+          if (p.rot) pg.setRotation(PDFLib.degrees((pg.getRotation().angle + p.rot) % 360));
+        }
         const bytes = await out.save();
         pages = [];
         await commitPdf(bytes);
@@ -2031,6 +2161,57 @@
     });
     cv.addEventListener("pointerup", () => { dragStart = null; if (cover && (cover.fw < 0.005 || cover.fh < 0.005)) { cover = null; pv.refresh(); } });
     $("pnCoverClear").onclick = () => { cover = null; pv.refresh(); };
+
+    // ---- Remove existing page numbers (covers them with the "Hide old numbers" colour) ----
+    const NUM_RE = /^(page\s*)?\d{1,3}(\s*(of|\/)\s*\d{1,4})?$|^[-–—]\s*\d{1,3}\s*[-–—]$|^(x{0,3})(ix|iv|v?i{0,3})$/i;
+    async function findNumbers(pdf, idx, area) {
+      const page = await pdf.getPage(idx + 1), vp = page.getViewport({ scale: 1 });
+      const tc = await page.getTextContent(), out = [];
+      for (const it of tc.items) {
+        const t = (it.str || "").trim();
+        if (!t || t.length > 14 || !NUM_RE.test(t)) continue;
+        const x = it.transform[4], y = it.transform[5], h = it.height || Math.abs(it.transform[3]) || 10;
+        const p1 = vp.convertToViewportPoint(x, y), p2 = vp.convertToViewportPoint(x + it.width, y + h);
+        const q = { x0: Math.min(p1[0], p2[0]), x1: Math.max(p1[0], p2[0]), y0: Math.min(p1[1], p2[1]), y1: Math.max(p1[1], p2[1]) };
+        const yc = (q.y0 + q.y1) / 2 / vp.height;
+        if ((area !== "top" && yc > 0.88) || (area !== "bottom" && yc < 0.12)) out.push(q);
+      }
+      return out;
+    }
+    async function removeNumbers(auto) {
+      if (!st.file) return;
+      const bs = [$("pnRemoveAuto"), $("pnRemoveBox")];
+      if (!auto && !cover) { statusEl.textContent = "Draw a box on the preview over the old number first."; return; }
+      bs.forEach((b) => { b.disabled = true; });
+      try {
+        const doc = await loadPdfLib(st.file), pgs = doc.getPages(), o = settings(pgs.length);
+        if (!o.targets.length) { statusEl.textContent = "No pages selected. Check the page range."; return; }
+        const col = hexToRgb($("pnCoverColor").value), pad = auto ? 2 : 0;
+        const pdf = auto ? await pdfjsLib.getDocument({ data: await st.file.arrayBuffer() }).promise : null;
+        let n = 0, hit = 0;
+        for (const pi of o.targets) {
+          statusEl.textContent = `Checking page ${pi + 1} of ${pgs.length}...`;
+          const page = pgs[pi], r = normRot(page.getRotation().angle), { width: W, height: H } = page.getSize(), d = displaySize(r, W, H);
+          const rects = auto ? await findNumbers(pdf, pi, $("pnRemArea").value)
+            : [{ x0: cover.fx * d.w, y0: cover.fy * d.h, x1: (cover.fx + cover.fw) * d.w, y1: (cover.fy + cover.fh) * d.h }];
+          rects.forEach((q) => {
+            const a = displayToRaw(r, W, H, q.x0 - pad, d.h - q.y1 - pad), b = displayToRaw(r, W, H, q.x1 + pad, d.h - q.y0 + pad);
+            page.drawRectangle({ x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width: Math.abs(a.x - b.x), height: Math.abs(a.y - b.y), color: col, borderWidth: 0 });
+          });
+          if (rects.length) { n += rects.length; hit++; }
+        }
+        if (!n) { statusEl.textContent = "No page numbers found in that area (scanned pages have no text to detect). Try \"Remove using drawn box\"."; return; }
+        await commitPdf(await doc.save());
+        statusEl.textContent = `Covered ${n} number(s) on ${hit} page(s). Use "Download PDF" at the top to save, or Undo if something looks wrong.`;
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = "Error removing page numbers: " + err.message;
+      } finally {
+        bs.forEach((b) => { b.disabled = false; });
+      }
+    }
+    $("pnRemoveAuto").onclick = () => removeNumbers(true);
+    $("pnRemoveBox").onclick = () => removeNumbers(false);
 
     btn.addEventListener("click", async () => {
       if (!st.file) return;
