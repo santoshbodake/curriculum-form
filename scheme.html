@@ -586,11 +586,11 @@ function handleAuthFailure_(result) {
   <section class="card" style="text-align:center;">
     <h2>Reports</h2>
     <button class="btn btn-report" id="btnReports">&#128202; Generate Final Reports</button>
-    <button class="btn btn-navy" id="btnAllDeptSummary" style="display:none;margin-left:10px;">&#127970; All Department Summary</button>
-    <button class="btn btn-gold" id="btnAllDeptSchemes" style="display:none;margin-left:10px;">&#128218; All Department Schemes (Semester-wise)</button>
+    <button class="btn btn-navy" id="btnAllDeptSummary" style="margin-left:10px;">&#127970; All Department Summary</button>
+    <button class="btn btn-gold" id="btnAllDeptSchemes" style="margin-left:10px;">&#128218; All Department Schemes (Semester-wise)</button>
     <div class="hint" style="margin-top:12px;">
       Generates Curriculum at a Glance, Credit Distribution (course-category wise) and the Semester-wise Totalling &amp; Grand Total report.
-      "All Department Summary" (admin only) consolidates the latest Saved Online data across every department.
+      "All Department Summary" consolidates the latest Saved Online data across every department.
     </div>
   </section>
 
@@ -966,12 +966,8 @@ function handleAuthFailure_(result) {
       }).join("");
   }
   if (IS_ADMIN) {
-    var allDeptSummaryBtn = document.getElementById("btnAllDeptSummary");
-    if (allDeptSummaryBtn) allDeptSummaryBtn.style.display = "inline-flex";
     var commonBtn = document.getElementById("btnCommonSubjects");
     if (commonBtn) commonBtn.style.display = "inline-flex";
-    var schemesBtn = document.getElementById("btnAllDeptSchemes");
-    if (schemesBtn) schemesBtn.style.display = "inline-flex";
   }
 
   progSelect.addEventListener("change", function(){
