@@ -440,6 +440,8 @@ function handleAuthFailure_(result) {
     </div>
     <input type="file" id="fileInput" accept="application/json" style="display:none;">
     <input type="file" id="excelInput" accept=".xlsx,.xls,.csv" style="display:none;">
+    <input type="file" id="commonExcelInput" accept=".xlsx,.xls,.csv" style="display:none;">
+    <button type="button" class="btn btn-gold btn-compact" id="btnCommonSubjects" style="display:none;" title="Admin only: manage the common subject list shown as a drop-down to every user">&#128218; Common Subjects</button>
 
     <div class="dropdown" id="ddPreview">
       <button type="button" class="btn btn-gold btn-compact dropdown-toggle">&#128065; Preview <span class="caret">&#9662;</span></button>
@@ -595,6 +597,38 @@ function handleAuthFailure_(result) {
       <button class="close-x" id="closeModal">&#10005;</button>
     </div>
     <div id="docPreview"></div>
+  </div>
+</div>
+
+<datalist id="dlCommonTitles"></datalist>
+<datalist id="dlCommonCodes"></datalist>
+
+<div class="modal-backdrop" id="commonBackdrop">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>Common Subjects &mdash; shown as a drop-down to all users</h3>
+      <div class="spacer"></div>
+      <button class="close-x" id="closeCommon">&#10005;</button>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+      <button class="btn btn-navy btn-compact" id="btnCommonImport">&#128202; Import from Excel</button>
+      <button class="btn btn-outline btn-compact" id="btnCommonTemplate">&#11015; Download Template</button>
+      <button class="btn btn-gold btn-compact" id="btnCommonSave">&#9729; Save Online (publish to all users)</button>
+      <button class="btn btn-outline btn-compact" id="btnCommonClear" style="color:var(--danger);border-color:var(--danger);">&#128465; Clear All</button>
+      <span id="commonCount" style="font-size:12.5px;color:var(--text-muted);margin-left:6px;"></span>
+    </div>
+    <div class="status" id="commonStatus" style="margin-top:0;"></div>
+    <div class="hint">
+      Excel columns follow the same order as the course table (Sr No, Course Title, Abbreviation, Course Type, Course Code, IKS, CL, TL, LL, Self Learning, &hellip;, Credits, &hellip;). Use <b>Download Template</b> for the exact layout.
+      Importing adds new subjects and updates existing ones with the same Course Code (or the same Title when there is no code).
+      Changes reach other users only after <b>Save Online</b>.
+    </div>
+    <div style="overflow:auto;max-height:55vh;margin-top:12px;">
+      <table class="plainTable" style="border-collapse:collapse;width:100%;font-size:12.5px;">
+        <thead><tr id="commonHead"></tr></thead>
+        <tbody id="commonBody"></tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -860,6 +894,9 @@ function handleAuthFailure_(result) {
   }
 
   var state = defaultState();
+  var COMMON_SUBJECTS = [];          // [{title, abbr, type, code, iks, cl, ... totalMarks}]
+  var COMMON_RECORD_KEY = "LAS_COMMON_SUBJECTS";
+  var commonDirty = false;
   if (RESTRICTED_PROG) { state.programmeCode = RESTRICTED_PROG.code; }
   function cur(){ return state.pages[state.current]; }
 
@@ -899,6 +936,8 @@ function handleAuthFailure_(result) {
   if (IS_ADMIN) {
     var allDeptSummaryBtn = document.getElementById("btnAllDeptSummary");
     if (allDeptSummaryBtn) allDeptSummaryBtn.style.display = "inline-flex";
+    var commonBtn = document.getElementById("btnCommonSubjects");
+    if (commonBtn) commonBtn.style.display = "inline-flex";
   }
 
   progSelect.addEventListener("change", function(){
@@ -1055,15 +1094,32 @@ function handleAuthFailure_(result) {
       input.className = "calc";
       input.title = "Calculated automatically";
     } else {
-      input.addEventListener("input", function(){
+      if (field === "title") input.setAttribute("list", "dlCommonTitles");
+      if (field === "code")  input.setAttribute("list", "dlCommonCodes");
+      input.addEventListener("input", function(ev){
         var v = input.value;
         if (UPPER.indexOf(field) > -1 || TEXTY.indexOf(field) > -1) v = v.toUpperCase();
+        // Picking an entry from the drop-down (not typing) fills the whole row.
+        if ((field === "title" || field === "code") && commonPickEvent_(ev)) {
+          var picked = findCommon_(field, v);
+          if (picked) { applyCommonSubject_(idx, picked); return; }
+        }
         cur().courses[idx][field] = v;
         recalcAll();
         recordHistory(false);
       });
       if (TEXTY.indexOf(field) > -1){
         input.title = "Symbols such as * or # are allowed; they are ignored when adding up.";
+      }
+      // Fallback for browsers that don't flag a drop-down pick on the input event:
+      // if the rest of the row is still empty and the value is an exact common subject, fill it.
+      if (field === "title" || field === "code") {
+        input.addEventListener("change", function(){
+          var c = cur().courses[idx];
+          if (!c || !rowEmptyExcept_(c, field)) return;
+          var m = findCommon_(field, input.value);
+          if (m) applyCommonSubject_(idx, m);
+        });
       }
     }
     td.appendChild(input);
@@ -1321,7 +1377,7 @@ function handleAuthFailure_(result) {
     if (banner) banner.style.display = locked ? "block" : "none";
     if (submitBtn) submitBtn.disabled = locked;
     document.querySelectorAll("input, textarea, select").forEach(function(el){
-      if (el.id === "fileInput" || el.id === "excelInput") return;
+      if (el.id === "fileInput" || el.id === "excelInput" || el.id === "commonExcelInput") return;
       el.disabled = locked;
     });
   }
@@ -2561,6 +2617,248 @@ function handleAuthFailure_(result) {
   }
 
   document.getElementById("btnAllDeptSummary").addEventListener("click", runAllDeptSummary);
+
+
+  /* ================= COMMON SUBJECTS =================
+     Admin imports a list of common subjects from Excel and publishes it online
+     (record key LAS_COMMON_SUBJECTS). Every user's Course Title / Course Code
+     cells then offer that list as a drop-down; picking one fills the entire row
+     (everything except the row's Sr No, which controls elective grouping).
+     Typing free text still works exactly as before. */
+  var COMMON_FIELDS = FIELDS.filter(function(f){ return f !== "srNo"; });
+  var COMMON_COLUMNS = [
+    "srNo","title","abbr","type","code","iks","cl","tl","ll","selfLearning",
+    null, "credits", "paperDuration",
+    "faTh","saTh", null, null,
+    "faPrMax", null, "saPrMax", null,
+    "slaMax", null, null
+  ];
+
+  function commonPickEvent_(ev){
+    var t = ev && ev.inputType;
+    return t === undefined || t === null || t === "" || t === "insertReplacementText";
+  }
+  function rowEmptyExcept_(c, field){
+    return COMMON_FIELDS.every(function(f){ return f === field || !filled(c[f]); });
+  }
+  function findCommon_(field, value){
+    var v = String(value || "").trim().toUpperCase();
+    if (!v) return null;
+    for (var i = 0; i < COMMON_SUBJECTS.length; i++){
+      if (String(COMMON_SUBJECTS[i][field] || "").trim().toUpperCase() === v) return COMMON_SUBJECTS[i];
+    }
+    return null;
+  }
+  function applyCommonSubject_(idx, subj){
+    var c = cur().courses[idx];
+    if (!c) return;
+    COMMON_FIELDS.forEach(function(f){ c[f] = subj[f] === undefined || subj[f] === null ? "" : String(subj[f]); });
+    computeCourse(c, state.current);
+    renderCourseTable();
+    recordHistory(true);
+    setStatus('Row filled from common subject "' + (subj.title || subj.code) + '".');
+  }
+
+  function refreshCommonLists_(){
+    var dt = document.getElementById("dlCommonTitles"), dc = document.getElementById("dlCommonCodes");
+    function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;"); }
+    var tHtml = "", cHtml = "";
+    COMMON_SUBJECTS.forEach(function(s){
+      if (filled(s.title)) tHtml += '<option value="' + esc(s.title) + '" label="' + esc(s.code || "") + '"></option>';
+      if (filled(s.code))  cHtml += '<option value="' + esc(s.code) + '" label="' + esc(s.title || "") + '"></option>';
+    });
+    if (dt) dt.innerHTML = tHtml;
+    if (dc) dc.innerHTML = cHtml;
+    renderCommonTable_();
+  }
+
+  function setCommonStatus_(msg, isErr){
+    var el = document.getElementById("commonStatus");
+    el.textContent = msg || "";
+    el.className = "status" + (isErr ? " err" : "");
+  }
+
+  function renderCommonTable_(){
+    var head = document.getElementById("commonHead"), body = document.getElementById("commonBody");
+    if (!head || !body) return;
+    var cols = [["#",null],["Course Title","title"],["Abbr.","abbr"],["Type","type"],["Code","code"],
+      ["IKS","iks"],["CL","cl"],["TL","tl"],["LL","ll"],["Self","selfLearning"],["Credits","credits"],
+      ["FA-TH","faTh"],["SA-TH","saTh"],["FA-PR","faPrMax"],["SA-PR","saPrMax"],["SLA","slaMax"],["Total Marks","totalMarks"]];
+    var cell = "border:1px solid #cbd5e1;padding:4px 6px;";
+    head.innerHTML = cols.map(function(c){ return '<th style="' + cell + 'background:#f3e8ff;position:sticky;top:0;">' + c[0] + '</th>'; }).join("") +
+      '<th style="' + cell + 'background:#f3e8ff;position:sticky;top:0;"></th>';
+    body.innerHTML = "";
+    COMMON_SUBJECTS.forEach(function(s, i){
+      var tr = document.createElement("tr");
+      var h = '<td style="' + cell + 'text-align:center;">' + (i + 1) + '</td>';
+      cols.slice(1).forEach(function(c){
+        var v = s[c[1]] === undefined || s[c[1]] === null ? "" : String(s[c[1]]);
+        h += '<td style="' + cell + (c[1] === "title" ? "text-align:left;" : "text-align:center;") + '"></td>';
+      });
+      tr.innerHTML = h + '<td style="' + cell + 'text-align:center;"></td>';
+      cols.slice(1).forEach(function(c, k){
+        tr.children[k + 1].textContent = s[c[1]] === undefined || s[c[1]] === null || s[c[1]] === "" ? DASH : s[c[1]];
+      });
+      var del = document.createElement("button");
+      del.className = "rowdel"; del.textContent = "\u2715"; del.title = "Remove this subject";
+      del.addEventListener("click", function(){
+        COMMON_SUBJECTS.splice(i, 1);
+        commonDirty = true;
+        refreshCommonLists_();
+        setCommonStatus_("Subject removed. Click Save Online to publish the change.");
+      });
+      tr.lastChild.appendChild(del);
+      body.appendChild(tr);
+    });
+    if (!COMMON_SUBJECTS.length){
+      body.innerHTML = '<tr><td colspan="' + (cols.length + 1) + '" style="' + cell + 'text-align:center;color:#64748b;">No common subjects yet &mdash; import an Excel file.</td></tr>';
+    }
+    document.getElementById("commonCount").textContent = COMMON_SUBJECTS.length + " subject(s)" + (commonDirty ? " \u2014 unsaved changes" : "");
+  }
+
+  function loadCommonSubjects_(quiet){
+    if (!GOOGLE_SCRIPT_URL || GOOGLE_SCRIPT_URL.indexOf("PASTE_YOUR_") === 0) return Promise.resolve();
+    var url = GOOGLE_SCRIPT_URL + "?formType=" + encodeURIComponent(FORM_TYPE)
+            + "&recordKey=" + encodeURIComponent(COMMON_RECORD_KEY)
+            + "&token=" + encodeURIComponent(getSessionToken_());
+    return fetch(url, {method:"GET", mode:"cors"})
+      .then(function(r){ return r.json(); })
+      .then(function(result){
+        if (handleAuthFailure_(result)) return;
+        if (result && result.success && result.data){
+          var loaded = result.data.data || result.data;
+          if (loaded && Array.isArray(loaded.subjects)){
+            COMMON_SUBJECTS = loaded.subjects;
+            commonDirty = false;
+            refreshCommonLists_();
+          }
+        }
+      })
+      .catch(function(err){ console.error(err); if (!quiet) setCommonStatus_("Could not load the common subject list.", true); });
+  }
+
+  function saveCommonSubjects_(){
+    if (!checkOnlineURL()) return;
+    setCommonStatus_("Saving common subjects online...");
+    showLoader("Saving common subjects...");
+    fetch(GOOGLE_SCRIPT_URL, {
+      method:"POST", mode:"cors",
+      headers:{"Content-Type":"text/plain;charset=utf-8"},
+      body: JSON.stringify({
+        formType: FORM_TYPE,
+        token: getSessionToken_(),
+        recordKey: COMMON_RECORD_KEY,
+        courseCode: "COMMON",
+        courseTitle: "Common subjects (all departments)",
+        data: { formType: "LAS_COMMON_SUBJECTS", subjects: COMMON_SUBJECTS }
+      })
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(result){
+      if (handleAuthFailure_(result)) return;
+      if (result.success){ commonDirty = false; renderCommonTable_(); setCommonStatus_("Saved. All users now get these " + COMMON_SUBJECTS.length + " subject(s) in the drop-down."); }
+      else setCommonStatus_(result.message || "Online save failed.", true);
+    })
+    .catch(function(err){ console.error(err); setCommonStatus_("Online save failed. Check the Web App URL and deployment access.", true); })
+    .finally(function(){ hideLoader(); });
+  }
+
+  function rowsToCommon_(rows){
+    var out = [];
+    rows.forEach(function(row){
+      if (isBlankRow(row) || isHeaderRow(row) || isTotalRow(row)) return;
+      var c = emptyCourse("");
+      COMMON_COLUMNS.forEach(function(field, i){
+        if (!field || field === "srNo") return;
+        var v = row[i];
+        v = (v === undefined || v === null) ? "" : String(v).trim();
+        if (v === DASH || v === "-" || v === "--") v = "";
+        if (UPPER.indexOf(field) > -1 || TEXTY.indexOf(field) > -1) v = v.toUpperCase();
+        c[field] = v;
+      });
+      if (!filled(c.title) && !filled(c.code)) return;
+      if (c.type && COURSE_TYPES.indexOf(c.type) === -1) c.type = "";
+      computeCourse(c, "sem5");   // keeps the imported Credits; fills Notional and the marks totals
+      var sub = {};
+      COMMON_FIELDS.forEach(function(f){ sub[f] = c[f]; });
+      out.push(sub);
+    });
+    return out;
+  }
+
+  document.getElementById("btnCommonSubjects").addEventListener("click", function(){
+    document.getElementById("commonBackdrop").classList.add("open");
+    renderCommonTable_();
+    setCommonStatus_("");
+    if (!commonDirty) loadCommonSubjects_(false);
+  });
+  document.getElementById("closeCommon").addEventListener("click", function(){
+    if (commonDirty && !confirm("You have unsaved changes to the common subject list. Close anyway?")) return;
+    document.getElementById("commonBackdrop").classList.remove("open");
+  });
+  document.getElementById("btnCommonImport").addEventListener("click", function(){
+    if (!excelReady()) return;
+    document.getElementById("commonExcelInput").click();
+  });
+  document.getElementById("commonExcelInput").addEventListener("change", function(e){
+    var file = e.target.files[0];
+    if (!file) return;
+    showLoader("Importing common subjects...");
+    var reader = new FileReader();
+    reader.onload = function(){
+      try {
+        var wb = XLSX.read(new Uint8Array(reader.result), {type:"array"});
+        var imported = [];
+        wb.SheetNames.forEach(function(name){
+          var rows = XLSX.utils.sheet_to_json(wb.Sheets[name], {header:1, blankrows:false, defval:""});
+          imported = imported.concat(rowsToCommon_(rows));
+        });
+        if (!imported.length){
+          setCommonStatus_("No subjects were found in that file. Check that the columns follow the template order.", true);
+          return;
+        }
+        var added = 0, updated = 0;
+        imported.forEach(function(s){
+          var key = filled(s.code) ? "code" : "title";
+          var at = -1;
+          COMMON_SUBJECTS.forEach(function(x, i){
+            if (at === -1 && String(x[key] || "").trim().toUpperCase() === String(s[key]).trim().toUpperCase()) at = i;
+          });
+          if (at > -1){ COMMON_SUBJECTS[at] = s; updated++; } else { COMMON_SUBJECTS.push(s); added++; }
+        });
+        commonDirty = true;
+        refreshCommonLists_();
+        setCommonStatus_("Imported " + imported.length + " row(s): " + added + " added, " + updated + " updated. Click Save Online to publish to all users.");
+      } catch (err) {
+        console.error(err);
+        setCommonStatus_("Could not read that file. Save it as .xlsx or .csv and try again.", true);
+      } finally {
+        hideLoader();
+      }
+    };
+    reader.onerror = function(){ hideLoader(); };
+    reader.readAsArrayBuffer(file);
+    e.target.value = "";
+  });
+  document.getElementById("btnCommonTemplate").addEventListener("click", function(){
+    if (!excelReady()) return;
+    var ws = XLSX.utils.aoa_to_sheet([EXCEL_HEADER_1]);
+    ws['!cols'] = excelColsFromPct(EXCEL_COL_WIDTHS_PCT);
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Common Subjects");
+    XLSX.writeFile(wb, "Common_Subjects_Template.xlsx");
+  });
+  document.getElementById("btnCommonSave").addEventListener("click", saveCommonSubjects_);
+  document.getElementById("btnCommonClear").addEventListener("click", function(){
+    if (!COMMON_SUBJECTS.length) return;
+    if (!confirm("Remove ALL common subjects from the list?\n\nThis only takes effect for other users after you click Save Online.")) return;
+    COMMON_SUBJECTS = [];
+    commonDirty = true;
+    refreshCommonLists_();
+    setCommonStatus_("List cleared. Click Save Online to publish the change.");
+  });
+
+  loadCommonSubjects_(true);   // every user: fetch the published list for the drop-downs
 
   switchPage("sem1"); // init will trigger initial recordHistory pass
 
