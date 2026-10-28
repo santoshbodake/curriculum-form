@@ -587,7 +587,7 @@ function handleAuthFailure_(result) {
     <h2>Reports</h2>
     <button class="btn btn-report" id="btnReports">&#128202; Generate Final Reports</button>
     <button class="btn btn-navy" id="btnAllDeptSummary" style="display:none;margin-left:10px;">&#127970; All Department Summary</button>
-    <button class="btn btn-navy" id="btnAllDeptReports" style="display:none;margin-left:10px;">&#128209; All Department Final Reports</button>
+    <button class="btn btn-gold" id="btnAllDeptSchemes" style="display:none;margin-left:10px;">&#128218; All Department Schemes (Semester-wise)</button>
     <div class="hint" style="margin-top:12px;">
       Generates Curriculum at a Glance, Credit Distribution (course-category wise) and the Semester-wise Totalling &amp; Grand Total report.
       "All Department Summary" (admin only) consolidates the latest Saved Online data across every department.
@@ -604,6 +604,31 @@ function handleAuthFailure_(result) {
       <button class="close-x" id="closeModal">&#10005;</button>
     </div>
     <div id="docPreview"></div>
+  </div>
+</div>
+
+<div id="deptPagesOverlay" style="display:none;position:fixed;inset:0;z-index:90;background:#f1f5f9;overflow:auto;">
+  <div style="max-width:1100px;margin:0 auto;padding:24px 20px 60px;">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <h2 style="margin:0;flex:1;min-width:260px;">All Department Schemes &mdash; Semester-wise Filled Data</h2>
+      <button class="btn btn-outline btn-compact" id="btnDeptPagesRefresh">&#8635; Refresh</button>
+      <button class="btn btn-navy btn-compact" id="btnDeptPagesClose">&larr; Back to Form</button>
+    </div>
+    <div class="hint" style="margin-top:8px;">
+      Each department's latest Saved-Online scheme, with every semester and exit stage exactly as filled in (course tables, hours, credits and marks).
+      Choose Preview, Print, Word or PDF in front of a programme. For PDF, pick <b>Save as PDF</b> as the destination in the print window that opens.
+    </div>
+    <div class="status" id="deptPagesStatus" style="margin-top:8px;"></div>
+    <table style="width:100%;border-collapse:collapse;background:#fff;margin-top:12px;font-size:13.5px;">
+      <thead><tr>
+        <th style="border:1px solid #cbd5e1;padding:8px;background:#e2e8f0;width:56px;">Sr No</th>
+        <th style="border:1px solid #cbd5e1;padding:8px;background:#e2e8f0;width:90px;">Code</th>
+        <th style="border:1px solid #cbd5e1;padding:8px;background:#e2e8f0;text-align:left;">Programme</th>
+        <th style="border:1px solid #cbd5e1;padding:8px;background:#e2e8f0;width:130px;">Saved Data</th>
+        <th style="border:1px solid #cbd5e1;padding:8px;background:#e2e8f0;width:330px;">Output</th>
+      </tr></thead>
+      <tbody id="deptPagesBody"></tbody>
+    </table>
   </div>
 </div>
 
@@ -644,8 +669,7 @@ function handleAuthFailure_(result) {
     <div class="modal-head">
       <h3>Reports</h3>
       <div class="spacer"></div>
-      <button class="btn btn-outline" id="btnReportAllDept" style="display:none;" title="Build the Final Reports of every department (admin)">&#127970; All Departments</button>
-      <button class="btn btn-outline" id="btnPrintReport">&#128424; Print / Preview</button>
+      <button class="btn btn-outline" id="btnPrintReport">&#128424; Print Reports</button>
       <button class="btn btn-outline" id="btnReportWord">&#128196; Save Reports as Word</button>
       <button class="btn btn-outline" id="btnReportExcel" style="display:none;">&#128202; Save Reports as Excel</button>
       <button class="close-x" id="closeReport">&#10005;</button>
@@ -946,10 +970,8 @@ function handleAuthFailure_(result) {
     if (allDeptSummaryBtn) allDeptSummaryBtn.style.display = "inline-flex";
     var commonBtn = document.getElementById("btnCommonSubjects");
     if (commonBtn) commonBtn.style.display = "inline-flex";
-    var allRepBtn = document.getElementById("btnAllDeptReports");
-    if (allRepBtn) allRepBtn.style.display = "inline-flex";
-    var modalAllBtn = document.getElementById("btnReportAllDept");
-    if (modalAllBtn) modalAllBtn.style.display = "";
+    var schemesBtn = document.getElementById("btnAllDeptSchemes");
+    if (schemesBtn) schemesBtn.style.display = "inline-flex";
   }
 
   progSelect.addEventListener("change", function(){
@@ -2260,27 +2282,10 @@ function handleAuthFailure_(result) {
     reportBackdrop.classList.add("open");
   }
 
-  function downloadSingleReportExcel_(){
-    if (typeof XLSX === "undefined"){
-      setStatus("The Excel library could not load. Connect to the internet and reload the page.", true);
-      return;
-    }
-    try {
-      var ws = XLSX.utils.aoa_to_sheet(finalReportAOA_(finalReportData_()));
-      ws['!cols'] = [{ wch: 48 }].concat(new Array(15).fill({ wch: 14 }));
-      var wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Final Reports");
-      XLSX.writeFile(wb, outputFileName("Reports") + ".xlsx");
-    } catch(err){
-      console.error(err);
-      setStatus("Could not build the Excel file. " + (err && err.message ? err.message : ""), true);
-    }
-  }
-
   document.getElementById("btnReports").addEventListener("click", function(){
     showLoader("Generating final reports...");
     setTimeout(function(){
-      try { openReportModal(buildReportsHTML(), outputTitle("Reports"), outputFileName("Reports"), downloadSingleReportExcel_); }
+      try { openReportModal(buildReportsHTML(), outputTitle("Reports"), outputFileName("Reports")); }
       finally { hideLoader(); }
     }, 30);
   });
@@ -2697,118 +2702,119 @@ function handleAuthFailure_(result) {
 
   document.getElementById("btnAllDeptSummary").addEventListener("click", runAllDeptSummary);
 
-  /* ================= ALL DEPARTMENT FINAL REPORTS =================
-     The same three Final Reports (Curriculum at a Glance, Credit Distribution,
-     Semester-wise Totalling) for EVERY department, opened in the shared Reports
-     modal so Print / Preview, Save as Word and Save as Excel all work. */
-  function loadAllDeptResults_(){
-    return Promise.all(PROGRAMMES.map(fetchDeptRecord_)).then(function(items){
+
+
+  /* ================= ALL DEPARTMENT SCHEMES (semester-wise filled data) =================
+     A full-screen page listing every programme. For each one the admin can open the
+     complete filled scheme (all semesters / stages, same layout as the normal
+     "Preview (All stages)", "Print / Save PDF" and "Save as Word" outputs).
+     The existing builders read the global `state`, so each programme's saved data is
+     swapped in for the duration of the build and the user's open form is restored. */
+  var deptSchemeData = {};   // programme code -> normalised saved state
+
+  function deptSchemeHTML_(prog, forWord){
+    var saved = state;
+    try {
+      var st = deptSchemeData[prog.code];
+      st.programmeCode = prog.code;
+      state = st;
+      return buildAllHTML(forWord);
+    } finally {
+      state = saved;
+    }
+  }
+  function deptSchemeName_(prog){
+    return (prog.name + " - All Stages").replace(/[\\\/:*?"<>|]/g, "").replace(/\s+/g, "_");
+  }
+  function setDeptStatus_(msg, isErr){
+    var el = document.getElementById("deptPagesStatus");
+    el.textContent = msg || "";
+    el.className = "status" + (isErr ? " err" : "");
+  }
+
+  function renderDeptPages_(){
+    var body = document.getElementById("deptPagesBody");
+    body.innerHTML = "";
+    var cell = "border:1px solid #cbd5e1;padding:7px 8px;";
+    PROGRAMMES.forEach(function(prog, i){
+      var has = !!deptSchemeData[prog.code];
+      var tr = document.createElement("tr");
+      tr.innerHTML = '<td style="' + cell + 'text-align:center;"></td><td style="' + cell + 'text-align:center;font-weight:700;"></td>'
+        + '<td style="' + cell + '"></td><td style="' + cell + 'text-align:center;"></td><td style="' + cell + 'text-align:center;white-space:nowrap;"></td>';
+      tr.children[0].textContent = i + 1;
+      tr.children[1].textContent = prog.code;
+      tr.children[2].textContent = prog.name;
+      tr.children[3].textContent = has ? "Available" : "Not saved yet";
+      tr.children[3].style.color = has ? "#15803d" : "#b91c1c";
+      var actions = [
+        ["\uD83D\uDC41 Preview", function(){
+          openPreview(deptSchemeHTML_(prog, false), prog.name + " : Preview - All Stages");
+        }, "Preparing preview..."],
+        ["\uD83D\uDDA8 Print", function(){
+          printHTML(prog.name + " : Print", deptSchemeHTML_(prog, false));
+        }, "Preparing print view..."],
+        ["\uD83D\uDCC4 Word", function(){
+          wordHTML(deptSchemeHTML_(prog, true), deptSchemeName_(prog) + ".doc", prog.name + " : Word Document");
+          setDeptStatus_("Word file for " + prog.code + " downloaded.");
+        }, "Generating Word document..."],
+        ["\uD83D\uDCD5 PDF", function(){
+          printHTML(deptSchemeName_(prog), deptSchemeHTML_(prog, false));
+          setDeptStatus_("In the print window choose \u201CSave as PDF\u201D as the destination to save " + prog.code + " as a PDF.");
+        }, "Preparing PDF view..."]
+      ];
+      actions.forEach(function(a){
+        var b = document.createElement("button");
+        b.className = "btn btn-outline btn-compact";
+        b.style.marginRight = "6px";
+        b.textContent = a[0];
+        b.disabled = !has;
+        b.addEventListener("click", function(){
+          showLoader(a[2]);
+          setTimeout(function(){
+            try { a[1](); }
+            catch (err) { console.error(err); setDeptStatus_("Could not build the output for " + prog.code + ". " + (err && err.message ? err.message : ""), true); }
+            finally { hideLoader(); }
+          }, 30);
+        });
+        tr.children[4].appendChild(b);
+      });
+      body.appendChild(tr);
+    });
+  }
+
+  function loadDeptPages_(){
+    if (!checkOnlineURL()) return;
+    setDeptStatus_("Fetching the latest saved data for all departments...");
+    showLoader("Fetching data for all departments...");
+    Promise.all(PROGRAMMES.map(fetchDeptRecord_)).then(function(items){
       var authIssue = items.filter(function(it){ return it.result && it.result.authRequired; })[0];
-      if (authIssue) { handleAuthFailure_(authIssue.result); return null; }
-      var results = [];
+      if (authIssue) { handleAuthFailure_(authIssue.result); return; }
+      deptSchemeData = {};
       items.forEach(function(it){
         var result = it.result;
         if (result && result.success && result.data){
           var loaded = result.data.data || result.data;
-          if (loaded && loaded.pages) results.push({ prog: it.prog, data: normaliseLoaded(loaded) });
+          if (loaded && loaded.pages) deptSchemeData[it.prog.code] = normaliseLoaded(loaded);
         }
       });
-      return results;
-    });
-  }
-
-  function allDeptFinalReportsHTML_(results){
-    var fd = results.map(function(item){ return { item: item, d: finalReportData_(item.data, item.prog) }; });
-    var out = '<div class="doctitle">ALL DEPARTMENT FINAL REPORTS</div>'
-      + '<div class="subtitle">Final Reports of ' + results.length + ' department(s) &mdash; six semesters only</div>';
-
-    out += '<h4>CURRICULUM AT A GLANCE &mdash; ALL DEPARTMENTS</h4>';
-    out += '<table><thead><tr><th class="left">Particulars</th>';
-    fd.forEach(function(x){ out += '<th>' + x.item.prog.code + '</th>'; });
-    out += '</tr></thead><tbody>';
-    fd[0].d.glance.forEach(function(g, gi){
-      out += '<tr><td class="left">' + g[0] + '</td>';
-      fd.forEach(function(x){ var v = x.d.glance[gi][1]; out += '<td>' + (v === "" ? DASH : v) + '</td>'; });
-      out += '</tr>';
-    });
-    out += '</tbody></table>';
-
-    results.forEach(function(item, i){
-      out += '<div style="page-break-before:always;margin-top:18px;padding-top:6px;border-top:2px solid #7c3aed;font-weight:700;">'
-        + (i + 1) + '. ' + item.prog.code + ' - ' + item.prog.name + '</div>';
-      out += buildReportsHTML(item.data, item.prog);
-    });
-    return out;
-  }
-
-  function downloadAllDeptFinalReportsExcel_(results){
-    if (typeof XLSX === "undefined"){
-      setStatus("The Excel library could not load. Connect to the internet and reload the page.", true);
-      return;
-    }
-    try {
-      var wb = XLSX.utils.book_new();
-      var fd = results.map(function(item){ return { item: item, d: finalReportData_(item.data, item.prog) }; });
-      var header = ["Particulars"].concat(fd.map(function(x){ return x.item.prog.code; }));
-      var gl = XLSX.utils.aoa_to_sheet([header].concat(fd[0].d.glance.map(function(g, gi){
-        return [g[0]].concat(fd.map(function(x){ var v = x.d.glance[gi][1]; return v === "" ? DASH : v; }));
-      })));
-      gl['!cols'] = [{ wch: 55 }].concat(fd.map(function(){ return { wch: 14 }; }));
-      XLSX.utils.book_append_sheet(wb, gl, "Glance - All Depts");
-      var used = {};
-      fd.forEach(function(x){
-        var base = ("FR " + x.item.prog.code).replace(/[\\\/\?\*\[\]:]/g, "").slice(0, 28), nm = base, n = 2;
-        while (used[nm]) { nm = base.slice(0, 26) + "_" + n++; }
-        used[nm] = true;
-        var ws = XLSX.utils.aoa_to_sheet(finalReportAOA_(x.d));
-        ws['!cols'] = [{ wch: 48 }].concat(new Array(15).fill({ wch: 14 }));
-        XLSX.utils.book_append_sheet(wb, ws, nm);
-      });
-      XLSX.writeFile(wb, "All_Department_Final_Reports.xlsx");
-      setStatus("All Department Final Reports exported to Excel.");
-    } catch(err){
-      console.error(err);
-      setStatus("Could not build the Excel file. " + (err && err.message ? err.message : ""), true);
-    }
-  }
-
-  function runAllDeptFinalReports(){
-    if (!checkOnlineURL()) return;
-    var btn = document.getElementById("btnAllDeptReports");
-    var originalHTML = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = "Loading all departments...";
-    setStatus("Fetching data for all departments...", false);
-    showLoader("Fetching data for all departments...");
-    loadAllDeptResults_().then(function(results){
-      if (results === null) return;
-      if (!results.length){
-        setStatus("No saved online data found for any department yet.", true);
-        return;
-      }
-      showLoader("Building final reports...");
-      var html = allDeptFinalReportsHTML_(results);
-      openReportModal(html, "All Department Final Reports \u2014 All Programmes", "All_Department_Final_Reports", function(){
-        showLoader("Generating Excel workbook...");
-        setTimeout(function(){
-          try { downloadAllDeptFinalReportsExcel_(results); }
-          finally { hideLoader(); }
-        }, 30);
-      });
-      setStatus("All Department Final Reports generated from " + results.length + " of " + PROGRAMMES.length + " department record(s).");
+      renderDeptPages_();
+      var n = Object.keys(deptSchemeData).length;
+      setDeptStatus_(n ? ("Saved data found for " + n + " of " + PROGRAMMES.length + " programme(s).") : "No saved online data found for any department yet.", !n);
     }).catch(function(err){
       console.error(err);
-      setStatus("Could not build the All Department Final Reports. Check the Web App URL and deployment access.", true);
-    }).finally(function(){
-      btn.disabled = false;
-      btn.innerHTML = originalHTML;
-      hideLoader();
-    });
+      setDeptStatus_("Could not load the departments. Check the Web App URL and deployment access.", true);
+    }).finally(function(){ hideLoader(); });
   }
-  document.getElementById("btnAllDeptReports").addEventListener("click", runAllDeptFinalReports);
-  document.getElementById("btnReportAllDept").addEventListener("click", runAllDeptFinalReports);
 
-
+  document.getElementById("btnAllDeptSchemes").addEventListener("click", function(){
+    document.getElementById("deptPagesOverlay").style.display = "block";
+    renderDeptPages_();
+    loadDeptPages_();
+  });
+  document.getElementById("btnDeptPagesRefresh").addEventListener("click", loadDeptPages_);
+  document.getElementById("btnDeptPagesClose").addEventListener("click", function(){
+    document.getElementById("deptPagesOverlay").style.display = "none";
+  });
 
   /* ================= COMMON SUBJECTS =================
      Admin imports a list of common subjects from Excel and publishes it online
