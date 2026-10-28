@@ -1096,11 +1096,14 @@ function handleAuthFailure_(result) {
     } else {
       if (field === "title") input.setAttribute("list", "dlCommonTitles");
       if (field === "code")  input.setAttribute("list", "dlCommonCodes");
+      input._prev = input.value;
       input.addEventListener("input", function(ev){
+        var prevVal = input._prev || "";
+        input._prev = input.value;
         var v = input.value;
         if (UPPER.indexOf(field) > -1 || TEXTY.indexOf(field) > -1) v = v.toUpperCase();
         // Picking an entry from the drop-down (not typing) fills the whole row.
-        if ((field === "title" || field === "code") && commonPickEvent_(ev)) {
+        if ((field === "title" || field === "code") && commonPickEvent_(ev, prevVal, input.value)) {
           var picked = findCommon_(field, v);
           if (picked) { applyCommonSubject_(idx, picked); return; }
         }
@@ -1112,13 +1115,11 @@ function handleAuthFailure_(result) {
         input.title = "Symbols such as * or # are allowed; they are ignored when adding up.";
       }
       // Fallback for browsers that don't flag a drop-down pick on the input event:
-      // if the rest of the row is still empty and the value is an exact common subject, fill it.
+      // when the committed value is an exact common subject, fill the row (even if it already had data).
       if (field === "title" || field === "code") {
         input.addEventListener("change", function(){
-          var c = cur().courses[idx];
-          if (!c || !rowEmptyExcept_(c, field)) return;
           var m = findCommon_(field, input.value);
-          if (m) applyCommonSubject_(idx, m);
+          if (m && cur().courses[idx]) applyCommonSubject_(idx, m);
         });
       }
     }
@@ -2634,9 +2635,13 @@ function handleAuthFailure_(result) {
     "slaMax", null, null
   ];
 
-  function commonPickEvent_(ev){
+  // True when the input event came from choosing a drop-down entry rather than typing/deleting.
+  function commonPickEvent_(ev, prev, now){
     var t = ev && ev.inputType;
-    return t === undefined || t === null || t === "" || t === "insertReplacementText";
+    if (t && t.indexOf("delete") === 0) return false;
+    if (t === "insertText" && ev.data && String(ev.data).length === 1 &&
+        String(now).length === String(prev).length + 1) return false;   // ordinary single-key typing
+    return true;
   }
   function rowEmptyExcept_(c, field){
     return COMMON_FIELDS.every(function(f){ return f === field || !filled(c[f]); });
