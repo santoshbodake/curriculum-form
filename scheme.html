@@ -1094,19 +1094,9 @@ function handleAuthFailure_(result) {
       input.className = "calc";
       input.title = "Calculated automatically";
     } else {
-      if (field === "title") input.setAttribute("list", "dlCommonTitles");
-      if (field === "code")  input.setAttribute("list", "dlCommonCodes");
-      input._prev = input.value;
-      input.addEventListener("input", function(ev){
-        var prevVal = input._prev || "";
-        input._prev = input.value;
+      input.addEventListener("input", function(){
         var v = input.value;
         if (UPPER.indexOf(field) > -1 || TEXTY.indexOf(field) > -1) v = v.toUpperCase();
-        // Picking an entry from the drop-down (not typing) fills the whole row.
-        if ((field === "title" || field === "code") && commonPickEvent_(ev, prevVal, input.value)) {
-          var picked = findCommon_(field, v);
-          if (picked) { applyCommonSubject_(idx, picked); return; }
-        }
         cur().courses[idx][field] = v;
         recalcAll();
         recordHistory(false);
@@ -1114,14 +1104,8 @@ function handleAuthFailure_(result) {
       if (TEXTY.indexOf(field) > -1){
         input.title = "Symbols such as * or # are allowed; they are ignored when adding up.";
       }
-      // Fallback for browsers that don't flag a drop-down pick on the input event:
-      // when the committed value is an exact common subject, fill the row (even if it already had data).
-      if (field === "title" || field === "code") {
-        input.addEventListener("change", function(){
-          var m = findCommon_(field, input.value);
-          if (m && cur().courses[idx]) applyCommonSubject_(idx, m);
-        });
-      }
+      // Course Title / Course Code offer the common-subject list; clicking an entry fills the whole row.
+      if (field === "title" || field === "code") attachCommonSuggest_(input, field, idx);
     }
     td.appendChild(input);
     return td;
@@ -2635,14 +2619,6 @@ function handleAuthFailure_(result) {
     "slaMax", null, null
   ];
 
-  // True when the input event came from choosing a drop-down entry rather than typing/deleting.
-  function commonPickEvent_(ev, prev, now){
-    var t = ev && ev.inputType;
-    if (t && t.indexOf("delete") === 0) return false;
-    if (t === "insertText" && ev.data && String(ev.data).length === 1 &&
-        String(now).length === String(prev).length + 1) return false;   // ordinary single-key typing
-    return true;
-  }
   function rowEmptyExcept_(c, field){
     return COMMON_FIELDS.every(function(f){ return f === field || !filled(c[f]); });
   }
@@ -2662,6 +2638,84 @@ function handleAuthFailure_(result) {
     renderCourseTable();
     recordHistory(true);
     setStatus('Row filled from common subject "' + (subj.title || subj.code) + '".');
+  }
+
+  /* Custom drop-down (instead of a native <datalist>) so that choosing an entry
+     ALWAYS fills the row - even when the cell already holds that same title. */
+  var suggestEl = null, suggestCtx = null;
+  function hideSuggest_(){ if (suggestEl) suggestEl.style.display = "none"; suggestCtx = null; }
+  function ensureSuggest_(){
+    if (suggestEl) return suggestEl;
+    suggestEl = document.createElement("div");
+    suggestEl.id = "commonSuggest";
+    suggestEl.style.cssText = "position:fixed;z-index:300;display:none;background:#fff;border:1px solid #cbd5e1;" +
+      "border-radius:8px;box-shadow:0 10px 25px rgba(15,23,42,.18);max-height:260px;overflow:auto;font-size:12.5px;text-align:left;";
+    document.body.appendChild(suggestEl);
+    window.addEventListener("scroll", hideSuggest_, true);
+    window.addEventListener("resize", hideSuggest_);
+    return suggestEl;
+  }
+  function pickSuggest_(ctx, i){
+    var subj = ctx.items[i];
+    hideSuggest_();
+    if (subj) applyCommonSubject_(ctx.idx, subj);
+  }
+  function paintSuggest_(){
+    var ctx = suggestCtx; if (!ctx) return;
+    var el = suggestEl;
+    el.innerHTML = "";
+    ctx.items.forEach(function(s, i){
+      var d = document.createElement("div");
+      d.style.cssText = "padding:6px 10px;cursor:pointer;border-bottom:1px solid #f1f5f9;" + (i === ctx.active ? "background:#f3e8ff;" : "");
+      var t = document.createElement("div"); t.style.fontWeight = "600"; t.textContent = s.title || s.code || "";
+      var m = document.createElement("div"); m.style.cssText = "font-size:11px;color:#64748b;";
+      m.textContent = [s.code, s.abbr, s.type].filter(filled).join("  \u00b7  ");
+      d.appendChild(t); d.appendChild(m);
+      d.addEventListener("mousedown", function(e){ e.preventDefault(); pickSuggest_(ctx, i); });
+      d.addEventListener("mouseenter", function(){ ctx.active = i; });
+      el.appendChild(d);
+    });
+  }
+  function showSuggest_(input, field, idx){
+    if (!COMMON_SUBJECTS.length) { hideSuggest_(); return; }
+    var q = input.value.trim().toUpperCase();
+    var items = COMMON_SUBJECTS.filter(function(s){
+      return !q || [s.title, s.code, s.abbr].join(" ").toUpperCase().indexOf(q) > -1;
+    }).slice(0, 60);
+    if (!items.length) { hideSuggest_(); return; }
+    var el = ensureSuggest_();
+    suggestCtx = { input: input, field: field, idx: idx, items: items, active: -1 };
+    paintSuggest_();
+    var r = input.getBoundingClientRect();
+    el.style.display = "block";
+    el.style.minWidth = Math.max(r.width, 300) + "px";
+    el.style.left = Math.min(r.left, window.innerWidth - el.offsetWidth - 8) + "px";
+    var below = window.innerHeight - r.bottom, h = el.offsetHeight;
+    el.style.top = (below >= Math.min(h, 200) || r.top < h ? r.bottom + 2 : r.top - h - 2) + "px";
+  }
+  function attachCommonSuggest_(input, field, idx){
+    input.setAttribute("autocomplete", "off");
+    input.addEventListener("focus", function(){ showSuggest_(input, field, idx); });
+    input.addEventListener("click",  function(){ if (!suggestCtx || suggestCtx.input !== input) showSuggest_(input, field, idx); });
+    input.addEventListener("input",  function(){ showSuggest_(input, field, idx); });
+    input.addEventListener("blur",   function(){ if (suggestCtx && suggestCtx.input === input) hideSuggest_(); });
+    input.addEventListener("keydown", function(e){
+      var ctx = suggestCtx;
+      if (!ctx || ctx.input !== input || suggestEl.style.display === "none") {
+        if (e.key === "ArrowDown") { showSuggest_(input, field, idx); e.preventDefault(); }
+        return;
+      }
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        ctx.active = (ctx.active + (e.key === "ArrowDown" ? 1 : -1) + ctx.items.length) % ctx.items.length;
+        paintSuggest_();
+        var node = suggestEl.children[ctx.active]; if (node && node.scrollIntoView) node.scrollIntoView({block:"nearest"});
+      } else if (e.key === "Enter" && ctx.active > -1) {
+        e.preventDefault(); pickSuggest_(ctx, ctx.active);
+      } else if (e.key === "Escape" || e.key === "Tab") {
+        hideSuggest_();
+      }
+    });
   }
 
   function refreshCommonLists_(){
