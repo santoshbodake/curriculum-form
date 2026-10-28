@@ -587,6 +587,7 @@ function handleAuthFailure_(result) {
     <h2>Reports</h2>
     <button class="btn btn-report" id="btnReports">&#128202; Generate Final Reports</button>
     <button class="btn btn-navy" id="btnAllDeptSummary" style="display:none;margin-left:10px;">&#127970; All Department Summary</button>
+    <button class="btn btn-navy" id="btnAllDeptReports" style="display:none;margin-left:10px;">&#128209; All Department Final Reports</button>
     <div class="hint" style="margin-top:12px;">
       Generates Curriculum at a Glance, Credit Distribution (course-category wise) and the Semester-wise Totalling &amp; Grand Total report.
       "All Department Summary" (admin only) consolidates the latest Saved Online data across every department.
@@ -643,7 +644,8 @@ function handleAuthFailure_(result) {
     <div class="modal-head">
       <h3>Reports</h3>
       <div class="spacer"></div>
-      <button class="btn btn-outline" id="btnPrintReport">&#128424; Print Reports</button>
+      <button class="btn btn-outline" id="btnReportAllDept" style="display:none;" title="Build the Final Reports of every department (admin)">&#127970; All Departments</button>
+      <button class="btn btn-outline" id="btnPrintReport">&#128424; Print / Preview</button>
       <button class="btn btn-outline" id="btnReportWord">&#128196; Save Reports as Word</button>
       <button class="btn btn-outline" id="btnReportExcel" style="display:none;">&#128202; Save Reports as Excel</button>
       <button class="close-x" id="closeReport">&#10005;</button>
@@ -944,6 +946,10 @@ function handleAuthFailure_(result) {
     if (allDeptSummaryBtn) allDeptSummaryBtn.style.display = "inline-flex";
     var commonBtn = document.getElementById("btnCommonSubjects");
     if (commonBtn) commonBtn.style.display = "inline-flex";
+    var allRepBtn = document.getElementById("btnAllDeptReports");
+    if (allRepBtn) allRepBtn.style.display = "inline-flex";
+    var modalAllBtn = document.getElementById("btnReportAllDept");
+    if (modalAllBtn) modalAllBtn.style.display = "";
   }
 
   progSelect.addEventListener("change", function(){
@@ -2254,10 +2260,27 @@ function handleAuthFailure_(result) {
     reportBackdrop.classList.add("open");
   }
 
+  function downloadSingleReportExcel_(){
+    if (typeof XLSX === "undefined"){
+      setStatus("The Excel library could not load. Connect to the internet and reload the page.", true);
+      return;
+    }
+    try {
+      var ws = XLSX.utils.aoa_to_sheet(finalReportAOA_(finalReportData_()));
+      ws['!cols'] = [{ wch: 48 }].concat(new Array(15).fill({ wch: 14 }));
+      var wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Final Reports");
+      XLSX.writeFile(wb, outputFileName("Reports") + ".xlsx");
+    } catch(err){
+      console.error(err);
+      setStatus("Could not build the Excel file. " + (err && err.message ? err.message : ""), true);
+    }
+  }
+
   document.getElementById("btnReports").addEventListener("click", function(){
     showLoader("Generating final reports...");
     setTimeout(function(){
-      try { openReportModal(buildReportsHTML(), outputTitle("Reports"), outputFileName("Reports")); }
+      try { openReportModal(buildReportsHTML(), outputTitle("Reports"), outputFileName("Reports"), downloadSingleReportExcel_); }
       finally { hideLoader(); }
     }, 30);
   });
@@ -2673,6 +2696,118 @@ function handleAuthFailure_(result) {
   }
 
   document.getElementById("btnAllDeptSummary").addEventListener("click", runAllDeptSummary);
+
+  /* ================= ALL DEPARTMENT FINAL REPORTS =================
+     The same three Final Reports (Curriculum at a Glance, Credit Distribution,
+     Semester-wise Totalling) for EVERY department, opened in the shared Reports
+     modal so Print / Preview, Save as Word and Save as Excel all work. */
+  function loadAllDeptResults_(){
+    return Promise.all(PROGRAMMES.map(fetchDeptRecord_)).then(function(items){
+      var authIssue = items.filter(function(it){ return it.result && it.result.authRequired; })[0];
+      if (authIssue) { handleAuthFailure_(authIssue.result); return null; }
+      var results = [];
+      items.forEach(function(it){
+        var result = it.result;
+        if (result && result.success && result.data){
+          var loaded = result.data.data || result.data;
+          if (loaded && loaded.pages) results.push({ prog: it.prog, data: normaliseLoaded(loaded) });
+        }
+      });
+      return results;
+    });
+  }
+
+  function allDeptFinalReportsHTML_(results){
+    var fd = results.map(function(item){ return { item: item, d: finalReportData_(item.data, item.prog) }; });
+    var out = '<div class="doctitle">ALL DEPARTMENT FINAL REPORTS</div>'
+      + '<div class="subtitle">Final Reports of ' + results.length + ' department(s) &mdash; six semesters only</div>';
+
+    out += '<h4>CURRICULUM AT A GLANCE &mdash; ALL DEPARTMENTS</h4>';
+    out += '<table><thead><tr><th class="left">Particulars</th>';
+    fd.forEach(function(x){ out += '<th>' + x.item.prog.code + '</th>'; });
+    out += '</tr></thead><tbody>';
+    fd[0].d.glance.forEach(function(g, gi){
+      out += '<tr><td class="left">' + g[0] + '</td>';
+      fd.forEach(function(x){ var v = x.d.glance[gi][1]; out += '<td>' + (v === "" ? DASH : v) + '</td>'; });
+      out += '</tr>';
+    });
+    out += '</tbody></table>';
+
+    results.forEach(function(item, i){
+      out += '<div style="page-break-before:always;margin-top:18px;padding-top:6px;border-top:2px solid #7c3aed;font-weight:700;">'
+        + (i + 1) + '. ' + item.prog.code + ' - ' + item.prog.name + '</div>';
+      out += buildReportsHTML(item.data, item.prog);
+    });
+    return out;
+  }
+
+  function downloadAllDeptFinalReportsExcel_(results){
+    if (typeof XLSX === "undefined"){
+      setStatus("The Excel library could not load. Connect to the internet and reload the page.", true);
+      return;
+    }
+    try {
+      var wb = XLSX.utils.book_new();
+      var fd = results.map(function(item){ return { item: item, d: finalReportData_(item.data, item.prog) }; });
+      var header = ["Particulars"].concat(fd.map(function(x){ return x.item.prog.code; }));
+      var gl = XLSX.utils.aoa_to_sheet([header].concat(fd[0].d.glance.map(function(g, gi){
+        return [g[0]].concat(fd.map(function(x){ var v = x.d.glance[gi][1]; return v === "" ? DASH : v; }));
+      })));
+      gl['!cols'] = [{ wch: 55 }].concat(fd.map(function(){ return { wch: 14 }; }));
+      XLSX.utils.book_append_sheet(wb, gl, "Glance - All Depts");
+      var used = {};
+      fd.forEach(function(x){
+        var base = ("FR " + x.item.prog.code).replace(/[\\\/\?\*\[\]:]/g, "").slice(0, 28), nm = base, n = 2;
+        while (used[nm]) { nm = base.slice(0, 26) + "_" + n++; }
+        used[nm] = true;
+        var ws = XLSX.utils.aoa_to_sheet(finalReportAOA_(x.d));
+        ws['!cols'] = [{ wch: 48 }].concat(new Array(15).fill({ wch: 14 }));
+        XLSX.utils.book_append_sheet(wb, ws, nm);
+      });
+      XLSX.writeFile(wb, "All_Department_Final_Reports.xlsx");
+      setStatus("All Department Final Reports exported to Excel.");
+    } catch(err){
+      console.error(err);
+      setStatus("Could not build the Excel file. " + (err && err.message ? err.message : ""), true);
+    }
+  }
+
+  function runAllDeptFinalReports(){
+    if (!checkOnlineURL()) return;
+    var btn = document.getElementById("btnAllDeptReports");
+    var originalHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = "Loading all departments...";
+    setStatus("Fetching data for all departments...", false);
+    showLoader("Fetching data for all departments...");
+    loadAllDeptResults_().then(function(results){
+      if (results === null) return;
+      if (!results.length){
+        setStatus("No saved online data found for any department yet.", true);
+        return;
+      }
+      showLoader("Building final reports...");
+      var html = allDeptFinalReportsHTML_(results);
+      openReportModal(html, "All Department Final Reports \u2014 All Programmes", "All_Department_Final_Reports", function(){
+        showLoader("Generating Excel workbook...");
+        setTimeout(function(){
+          try { downloadAllDeptFinalReportsExcel_(results); }
+          finally { hideLoader(); }
+        }, 30);
+      });
+      setStatus("All Department Final Reports generated from " + results.length + " of " + PROGRAMMES.length + " department record(s).");
+    }).catch(function(err){
+      console.error(err);
+      setStatus("Could not build the All Department Final Reports. Check the Web App URL and deployment access.", true);
+    }).finally(function(){
+      btn.disabled = false;
+      btn.innerHTML = originalHTML;
+      hideLoader();
+    });
+  }
+  document.getElementById("btnAllDeptReports").addEventListener("click", runAllDeptFinalReports);
+  document.getElementById("btnReportAllDept").addEventListener("click", runAllDeptFinalReports);
+
 
 
   /* ================= COMMON SUBJECTS =================
