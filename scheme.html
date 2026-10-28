@@ -234,6 +234,12 @@ function handleAuthFailure_(result) {
     background: #fff; border-color: var(--primary); box-shadow: var(--shadow-glow); outline: none; 
   }
   
+  /* Duplicate course code (same code used elsewhere in the six semesters) */
+  table.scheme input.dupcode {
+    background: #fee2e2 !important; color: #b91c1c !important; font-weight: 700;
+    box-shadow: inset 0 0 0 2px #dc2626; border-radius: 4px;
+  }
+
   /* Calculated green cells */
   table.scheme input.calc { 
     background: var(--calc-bg); font-weight: 700; color: var(--calc-text); 
@@ -1082,7 +1088,7 @@ function handleAuthFailure_(result) {
     var isCalc = false;
     
     if (strictlyCalc.indexOf(field) > -1) isCalc = true;
-    if (field === "credits" && pageId !== "sem5" && pageId !== "sem6" && pageId !== "exit1" && pageId !== "exit2") {
+    if (field === "credits" && pageId !== "sem6" && pageId !== "exit1" && pageId !== "exit2") {
         isCalc = true;
     }
     if (field === "notional" && pageId !== "exit1" && pageId !== "exit2") {
@@ -1116,7 +1122,7 @@ function handleAuthFailure_(result) {
       var notional = num(c.cl) + num(c.tl) + num(c.ll) + num(c.selfLearning);
       c.notional = notional ? tidy(notional) : "";
     }
-    if (pageId !== "sem5" && pageId !== "sem6" && pageId !== "exit1" && pageId !== "exit2") {
+    if (pageId !== "sem6" && pageId !== "exit1" && pageId !== "exit2") {
       c.credits = c.notional ? tidy(num(c.notional) / 2) : "";
     }
 
@@ -1134,6 +1140,34 @@ function handleAuthFailure_(result) {
     c.totalMarks = hasTm ? tidy(totalMarks) : "";
   }
 
+  // Course codes used more than once across Semesters 1-6 (rows sharing a Sr No on a sheet
+  // are one "Any-One" elective group, so they count once, as elsewhere in this file).
+  function duplicateCodeMap_(){
+    var map = {};
+    SEM_PAGES.forEach(function(p){
+      state.pages[p.id].courses.forEach(function(c, idx){
+        var code = String(c.code || "").trim().toUpperCase();
+        if (!code) return;
+        var sr = String(c.srNo).trim();
+        var id = p.id + "|" + (sr !== "" ? "sr" + sr : "row" + idx);
+        var e = map[code] || (map[code] = { ids:{}, n:0, sems:{} });
+        if (!e.ids[id]) { e.ids[id] = 1; e.n++; }
+        e.sems[p.name] = 1;
+      });
+    });
+    return map;
+  }
+  function markDuplicateCodes_(){
+    var map = duplicateCodeMap_();
+    Array.prototype.forEach.call(courseBody.querySelectorAll('input[data-field="code"]'), function(inp){
+      var code = inp.value.trim().toUpperCase();
+      var e = code && map[code];
+      var dup = !!(e && e.n > 1);
+      inp.classList.toggle("dupcode", dup);
+      inp.title = dup ? "Duplicate course code \u2013 used in: " + Object.keys(e.sems).join(", ") : "";
+    });
+  }
+
   function recalcAll(){
     var page = cur();
     var pageId = state.current;
@@ -1144,6 +1178,7 @@ function handleAuthFailure_(result) {
       if (c) inp.value = c[inp.dataset.field] || "";
     });
     updateTotals();
+    markDuplicateCodes_();
   }
 
   function pageSums(page, pageId){
@@ -2319,6 +2354,7 @@ function handleAuthFailure_(result) {
             stageName: p.name,
             code: String(c.code || "").trim().toUpperCase(),
             title: String(c.title || "").trim().toUpperCase(),
+            type: String(c.type || "").trim(),
             credits: num(c.credits),
             totalMarks: num(c.totalMarks)
           });
@@ -2326,6 +2362,27 @@ function handleAuthFailure_(result) {
       });
     });
     return rows;
+  }
+
+  // Course codes that appear with more than one distinct course title (any department / semester).
+  function dupCodeDiffTitle_(rows){
+    var groups = {}, codes = [];
+    rows.forEach(function(r){
+      if (!r.code || !r.title) return;
+      var norm = r.title.replace(/\s+/g, " ").trim();
+      var g = groups[r.code] || (groups[r.code] = { titles:{}, items:[] });
+      if (!g.items.length) codes.push(r.code);
+      g.titles[norm] = 1;
+      g.items.push({ code:r.code, title:norm, progCode:r.progCode, stageName:r.stageName, type:r.type, credits:r.credits });
+    });
+    var out = [];
+    codes.sort().forEach(function(code){
+      var g = groups[code];
+      if (Object.keys(g.titles).length < 2) return;
+      g.items.sort(function(a, b){ return a.title < b.title ? -1 : a.title > b.title ? 1 : 0; });
+      g.items.forEach(function(it){ out.push(it); });
+    });
+    return out;
   }
 
   function buildAllDeptSummaryHTML(results, rows){
@@ -2421,9 +2478,20 @@ function handleAuthFailure_(result) {
     if (!results.length) out += '<tr><td colspan="' + (SEM_PAGES.length + 3) + '">' + DASH + '</td></tr>';
     out += '</tbody></table>';
 
-    // 7. Final Reports - Curriculum at a Glance, all departments side by side
+    // 7. Same course code used with different course titles
+    var dupRows = dupCodeDiffTitle_(rows);
+    out += '<h4>7. Courses with Duplicate Course Code but Different Course Title</h4>';
+    out += '<table><thead><tr><th style="width:60px;">Sr No</th><th>Course Code</th><th>Course Title</th><th>Programme</th><th>Semester</th><th>Type</th><th>Credits</th></tr></thead><tbody>';
+    dupRows.forEach(function(r, i){
+      out += '<tr><td>' + (i + 1) + '</td><td style="color:#b91c1c;font-weight:700;">' + r.code + '</td><td class="left">' + r.title
+        + '</td><td>' + r.progCode + '</td><td>' + r.stageName + '</td><td>' + (r.type || DASH) + '</td><td>' + (r.credits ? tidy(r.credits) : DASH) + '</td></tr>';
+    });
+    if (!dupRows.length) out += '<tr><td colspan="7">No course code is used with different course titles.</td></tr>';
+    out += '</tbody></table>';
+
+    // 8. Final Reports - Curriculum at a Glance, all departments side by side
     var finalData = results.map(function(item){ return { item: item, d: finalReportData_(item.data, item.prog) }; });
-    out += '<h4>7. Final Reports &mdash; Curriculum at a Glance (All Departments)</h4>';
+    out += '<h4>8. Final Reports &mdash; Curriculum at a Glance (All Departments)</h4>';
     out += '<table><thead><tr><th class="left">Particulars</th>';
     finalData.forEach(function(fd){ out += '<th>' + fd.item.prog.code + '</th>'; });
     out += '</tr></thead><tbody>';
@@ -2442,9 +2510,9 @@ function handleAuthFailure_(result) {
     out += '</tbody></table>';
 
     // 8. Final Reports - complete set (Glance, Credit Distribution, Semester-wise Totalling) per department
-    out += '<h4>8. Final Reports &mdash; Department-wise (Complete)</h4>';
+    out += '<h4>9. Final Reports &mdash; Department-wise (Complete)</h4>';
     results.forEach(function(item, i){
-      out += '<div style="margin-top:14px;padding-top:6px;border-top:2px solid #7c3aed;font-weight:700;">8.' + (i + 1) + ' &nbsp;'
+      out += '<div style="margin-top:14px;padding-top:6px;border-top:2px solid #7c3aed;font-weight:700;">9.' + (i + 1) + ' &nbsp;'
         + item.prog.code + ' - ' + item.prog.name + '</div>';
       out += buildReportsHTML(item.data, item.prog);
     });
@@ -2515,6 +2583,9 @@ function handleAuthFailure_(result) {
         rows.filter(function(r){ return r.progCode === item.prog.code; }).forEach(function(r){ totalMk += r.totalMarks; });
         return [item.prog.code + " - " + item.prog.name].concat(cells).concat([totalCr, totalMk]);
       }));
+
+    addSheet("Dup Code - Diff Title", ["Sr No", "Course Code", "Course Title", "Programme", "Semester", "Type", "Credits"],
+      dupCodeDiffTitle_(rows).map(function(r, i){ return [i + 1, r.code, r.title, r.progCode, r.stageName, r.type, r.credits ? tidy(r.credits) : ""]; }));
 
     // Final Reports - at a glance across departments
     var fdAll = results.map(function(item){ return { item: item, d: finalReportData_(item.data, item.prog) }; });
@@ -2634,6 +2705,7 @@ function handleAuthFailure_(result) {
     var c = cur().courses[idx];
     if (!c) return;
     COMMON_FIELDS.forEach(function(f){ c[f] = subj[f] === undefined || subj[f] === null ? "" : String(subj[f]); });
+    if (state.current === "exit2") c.notional = "";   // Second Year Exit: no Notional Learning Hrs/Week
     computeCourse(c, state.current);
     renderCourseTable();
     recordHistory(true);
@@ -2837,7 +2909,7 @@ function handleAuthFailure_(result) {
       });
       if (!filled(c.title) && !filled(c.code)) return;
       if (c.type && COURSE_TYPES.indexOf(c.type) === -1) c.type = "";
-      computeCourse(c, "sem5");   // keeps the imported Credits; fills Notional and the marks totals
+      computeCourse(c, "sem6");   // keeps the imported Credits; fills Notional and the marks totals
       var sub = {};
       COMMON_FIELDS.forEach(function(f){ sub[f] = c[f]; });
       out.push(sub);
