@@ -588,6 +588,7 @@ function handleAuthFailure_(result) {
     <button class="btn btn-report" id="btnReports">&#128202; Generate Final Reports</button>
     <button class="btn btn-navy" id="btnAllDeptSummary" style="margin-left:10px;">&#127970; All Department Summary</button>
     <button class="btn btn-gold" id="btnAllDeptSchemes" style="margin-left:10px;">&#128218; All Department Schemes (Semester-wise)</button>
+    <button class="btn btn-navy" id="btnCodeRegister" style="display:none;margin-left:10px;" title="Admin only: build the master course register and allocate course codes">&#128290; Course Code Register</button>
     <div class="hint" style="margin-top:12px;">
       Generates Curriculum at a Glance, Credit Distribution (course-category wise) and the Semester-wise Totalling &amp; Grand Total report.
       "All Department Summary" consolidates the latest Saved Online data across every department.
@@ -629,6 +630,90 @@ function handleAuthFailure_(result) {
       </tr></thead>
       <tbody id="deptPagesBody"></tbody>
     </table>
+  </div>
+</div>
+
+<div id="registerOverlay" style="display:none;position:fixed;inset:0;z-index:90;background:#f1f5f9;overflow:auto;">
+  <div style="max-width:1500px;margin:0 auto;padding:20px 20px 80px;">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <h2 style="margin:0;flex:1;min-width:280px;">Master Course Register &mdash; Course Code Allocation</h2>
+      <button class="btn btn-navy btn-compact" id="btnRegBack">&larr; Back to Form</button>
+    </div>
+    <div class="hint" style="margin-top:8px;">
+      Every course from the Saved-Online schemes of all departments (six semesters) is listed <b>once</b>; identical names are grouped automatically.
+      Use <b>Find Similar Names</b> to spot slightly different names, then <b>Merge</b> them &mdash; a comment is compulsory before any merge and is kept in the register.
+      Allocate each course to a department (or <b>Common to all</b>), then <b>Assign Codes</b>. Code format: <b>YY&nbsp;S&nbsp;D&nbsp;NN</b> = autonomy year, semester, department digit (0 = common, 1&ndash;9 = AN, AO, CE, CO, IH, EE, TE, ME, MK), serial.
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px;">
+      <label style="font-size:13px;font-weight:600;">Autonomy year (YY)
+        <input id="regYear" maxlength="2" value="27" style="width:46px;text-align:center;margin-left:4px;padding:5px;border:1px solid #cbd5e1;border-radius:6px;">
+      </label>
+      <button class="btn btn-outline btn-compact" id="btnRegRefresh">&#8635; Refresh from Schemes</button>
+      <button class="btn btn-gold btn-compact" id="btnRegAssign">&#128290; Assign Codes</button>
+      <button class="btn btn-outline btn-compact" id="btnRegClearCodes">Clear All Codes</button>
+      <button class="btn btn-navy btn-compact" id="btnRegSave">&#9729; Save Register Online</button>
+      <button class="btn btn-outline btn-compact" id="btnRegExcel">&#128202; Export Excel</button>
+      <span id="regCount" style="font-size:12.5px;color:#475569;margin-left:6px;"></span>
+    </div>
+    <div class="status" id="regStatus" style="margin-top:8px;"></div>
+
+    <div style="background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:12px;margin-top:12px;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <b style="font-size:13.5px;">Similar course names</b>
+        <label style="font-size:12.5px;">Match level
+          <select id="regThreshold" style="padding:4px;border:1px solid #cbd5e1;border-radius:6px;">
+            <option value="0.9">90% (very close)</option>
+            <option value="0.8" selected>80%</option>
+            <option value="0.7">70%</option>
+            <option value="0.6">60% (loose)</option>
+          </select>
+        </label>
+        <button class="btn btn-outline btn-compact" id="btnRegFind">&#128269; Find Similar Names</button>
+        <span style="font-size:12px;color:#64748b;">Names that differ only by a number or roman numeral (e.g. Mathematics I / II) are never suggested.</span>
+      </div>
+      <div id="regSuggestBox" style="margin-top:10px;"></div>
+    </div>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:14px;">
+      <input id="regSearch" placeholder="Search title / code..." style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;min-width:220px;">
+      <select id="regDeptFilter" style="padding:6px;border:1px solid #cbd5e1;border-radius:6px;"></select>
+      <span style="flex:1"></span>
+      <span style="font-size:12.5px;" id="regSelCount">0 selected</span>
+      <select id="regBulkDept" style="padding:6px;border:1px solid #cbd5e1;border-radius:6px;"></select>
+      <button class="btn btn-outline btn-compact" id="btnRegBulkDept">Allocate selected</button>
+      <button class="btn btn-gold btn-compact" id="btnRegMergeSel">&#128279; Merge selected&hellip;</button>
+      <button class="btn btn-outline btn-compact" id="btnRegClearSel">Clear selection</button>
+    </div>
+
+    <div style="overflow:auto;margin-top:8px;background:#fff;border:1px solid #cbd5e1;border-radius:10px;">
+      <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+        <thead><tr id="regHead"></tr></thead>
+        <tbody id="regBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<datalist id="regNameList"></datalist>
+<div class="modal-backdrop" id="regMergeBackdrop">
+  <div class="modal" style="max-width:640px;">
+    <div class="modal-head">
+      <h3>Merge courses</h3>
+      <div class="spacer"></div>
+      <button class="close-x" id="regMergeClose">&#10005;</button>
+    </div>
+    <div id="regMergeList" style="font-size:12.5px;margin-bottom:10px;"></div>
+    <label style="font-size:13px;font-weight:600;display:block;">Resulting course name
+      <input id="regMergeName" list="regNameList" style="width:100%;box-sizing:border-box;padding:7px;border:1px solid #cbd5e1;border-radius:6px;margin-top:4px;text-transform:uppercase;">
+    </label>
+    <label style="font-size:13px;font-weight:600;display:block;margin-top:10px;">Comment (required) &mdash; why are these the same course?
+      <textarea id="regMergeNote" rows="3" style="width:100%;box-sizing:border-box;padding:7px;border:1px solid #cbd5e1;border-radius:6px;margin-top:4px;"></textarea>
+    </label>
+    <div class="status" id="regMergeStatus" style="margin-top:8px;"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+      <button class="btn btn-outline btn-compact" id="regMergeCancel">Cancel</button>
+      <button class="btn btn-gold btn-compact" id="regMergeOk">Merge</button>
+    </div>
   </div>
 </div>
 
@@ -968,6 +1053,8 @@ function handleAuthFailure_(result) {
   if (IS_ADMIN) {
     var commonBtn = document.getElementById("btnCommonSubjects");
     if (commonBtn) commonBtn.style.display = "inline-flex";
+    var regBtn = document.getElementById("btnCodeRegister");
+    if (regBtn) regBtn.style.display = "inline-flex";
   }
 
   progSelect.addEventListener("change", function(){
@@ -2822,6 +2909,485 @@ function handleAuthFailure_(result) {
   document.getElementById("btnDeptPagesClose").addEventListener("click", function(){
     document.getElementById("deptPagesOverlay").style.display = "none";
   });
+
+
+  /* ================= MASTER COURSE REGISTER =================
+     Builds one register of unique courses from every department's Saved-Online scheme
+     (six semesters). Identical names (ignoring case / punctuation / spacing) are one entry.
+     Slightly different names are only SUGGESTED; merging needs a comment that is stored in the
+     register. Each entry is allocated to a department (or Common to all) and receives a code
+     YY S D NN. The register itself is saved online under record key LAS_COURSE_REGISTER. */
+  var REG_KEY = "LAS_COURSE_REGISTER";
+  var reg = { year: "27", nextId: 1, ignore: [], entries: [] };
+  var regRows = [], regSel = {}, regDirty = false, regLoaded = false, regMergeIds = [];
+  var REG_TYPE_ORDER = ["DSC","DSE","SEC","AEC","VEC","GE","INP"];
+
+  function regKey_(t){ return String(t || "").toUpperCase().replace(/&/g, " AND ").replace(/[^A-Z0-9]+/g, " ").trim(); }
+  function regStatus_(msg, isErr){
+    var el = document.getElementById("regStatus");
+    el.textContent = msg || "";
+    el.className = "status" + (isErr ? " err" : "");
+  }
+  function regToday_(){ return new Date().toISOString().slice(0, 10); }
+  function regDeptLabel_(d){
+    if (d === "" || d === undefined) return "";
+    if (d === "0") return "Common to all";
+    var pr = PROGRAMMES[parseInt(d, 10) - 1];
+    return pr ? pr.code : "";
+  }
+  function regUniq_(arr){ var seen = {}, out = []; arr.forEach(function(x){ if (x !== "" && x !== undefined && !seen[x]){ seen[x] = 1; out.push(x); } }); return out; }
+  function regFind_(id){ return reg.entries.filter(function(e){ return e.id === id; })[0]; }
+  function regSems_(e){ return regUniq_((e.usages || []).map(function(u){ return semNo_(u.stageId); })).sort(); }
+
+  // a stored code only stays valid while its semester / department digits match the entry
+  function regValidateCode_(e){
+    if (e.code && (String(e.code).charAt(2) !== String(e.sem) || String(e.code).charAt(3) !== String(e.dept))) e.code = "";
+  }
+
+  function regApplyRows_(){
+    var km = {}, added = 0;
+    reg.entries.forEach(function(e){
+      e.usages = [];
+      e.names.forEach(function(n){ km[regKey_(n)] = e; });
+    });
+    regRows.forEach(function(r){
+      if (!r.title) return;
+      var k = regKey_(r.title), e = km[k];
+      if (!e){
+        e = { id: "C" + (reg.nextId++), title: r.title, names: [r.title], dept: "", sem: "", code: "", comments: [], usages: [] };
+        reg.entries.push(e); km[k] = e; added++;
+      }
+      e.usages.push(r);
+    });
+    reg.entries.forEach(function(e){
+      if (e.sem === "" && e.usages.length) e.sem = Math.min.apply(null, e.usages.map(function(u){ return semNo_(u.stageId); }));
+    });
+    return added;
+  }
+
+  /* ---------- fuzzy name similarity ---------- */
+  var REG_STOP = { AND:1, OF:1, THE:1, FOR:1, TO:1, IN:1, A:1, AN:1, ON:1, WITH:1 };
+  var REG_ROMAN = { I:"1", II:"2", III:"3", IV:"4", V:"5", VI:"6", VII:"7", VIII:"8", IX:"9", X:"10" };
+  function regTok_(t){
+    var k = regKey_(t).split(" ").filter(Boolean), num = null;
+    if (k.length > 1 && /^(I|II|III|IV|V|VI|VII|VIII|IX|X|\d+)$/.test(k[k.length - 1])){
+      num = k.pop(); num = REG_ROMAN[num] || num;       // I and 1 are the same level
+    }
+    var toks = k.filter(function(w){ return !REG_STOP[w]; }).map(function(w){ return w.length > 3 && w.slice(-1) === "S" ? w.slice(0, -1) : w; });
+    return { toks: toks, str: toks.join(" "), num: num };
+  }
+  function regLev_(a, b){
+    var m = a.length, n = b.length, prev = [], cur = [], i, j;
+    for (j = 0; j <= n; j++) prev[j] = j;
+    for (i = 1; i <= m; i++){
+      cur = [i];
+      for (j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a.charAt(i - 1) === b.charAt(j - 1) ? 0 : 1));
+      prev = cur;
+    }
+    return prev[n];
+  }
+  // words match when equal or nearly equal (spelling variations); order of words does not matter
+  function regWordMatch_(x, y){
+    if (x === y) return true;
+    var mx = Math.max(x.length, y.length);
+    return mx >= 5 && 1 - regLev_(x, y) / mx >= 0.8;
+  }
+  function regSim_(A, B){
+    if (A.num && B.num && A.num !== B.num) return 0;
+    if (!A.toks.length || !B.toks.length) return 0;
+    var used = {}, matched = 0;
+    A.toks.forEach(function(x){
+      for (var j = 0; j < B.toks.length; j++){
+        if (!used[j] && regWordMatch_(x, B.toks[j])){ used[j] = 1; matched++; break; }
+      }
+    });
+    var sim = matched / (A.toks.length + B.toks.length - matched);
+    if ((A.num && !B.num) || (!A.num && B.num)) sim -= 0.1;
+    return sim;
+  }
+
+  function regFindSimilar_(){
+    var thr = parseFloat(document.getElementById("regThreshold").value);
+    var box = document.getElementById("regSuggestBox");
+    box.textContent = "Comparing names...";
+    setTimeout(function(){
+      var L = reg.entries.slice(), toks = L.map(function(e){
+        // an entry that already holds several names is compared on every one of them
+        return e.names.map(regTok_);
+      });
+      var parent = L.map(function(_, i){ return i; }), best = {};
+      function find(x){ while (parent[x] !== x){ parent[x] = parent[parent[x]]; x = parent[x]; } return x; }
+      for (var i = 0; i < L.length; i++){
+        for (var j = i + 1; j < L.length; j++){
+          var m = 0;
+          for (var a = 0; a < toks[i].length; a++) for (var b = 0; b < toks[j].length; b++) m = Math.max(m, regSim_(toks[i][a], toks[j][b]));
+          if (m >= thr){
+            var ri = find(i), rj = find(j);
+            if (ri !== rj) parent[ri] = rj;
+            best[i] = Math.max(best[i] || 0, m); best[j] = Math.max(best[j] || 0, m);
+          }
+        }
+      }
+      var groups = {};
+      L.forEach(function(e, i){ var r = find(i); (groups[r] = groups[r] || []).push(i); });
+      var clusters = [];
+      Object.keys(groups).forEach(function(r){
+        if (groups[r].length < 2) return;
+        var ids = groups[r].map(function(i){ return L[i].id; }), key = ids.slice().sort().join("|");
+        if (reg.ignore.indexOf(key) > -1) return;
+        var top = 0; groups[r].forEach(function(i){ top = Math.max(top, best[i] || 0); });
+        clusters.push({ ids: ids, key: key, top: top });
+      });
+      clusters.sort(function(x, y){ return y.top - x.top; });
+      regRenderClusters_(clusters);
+    }, 30);
+  }
+
+  function regRenderClusters_(clusters){
+    var box = document.getElementById("regSuggestBox");
+    box.innerHTML = "";
+    if (!clusters.length){ box.textContent = "No similar course names found at this level."; return; }
+    var head = document.createElement("div");
+    head.style.cssText = "font-size:12.5px;margin-bottom:6px;color:#475569;";
+    head.textContent = clusters.length + " group(s) of possibly the same course:";
+    box.appendChild(head);
+    clusters.forEach(function(c, gi){
+      var d = document.createElement("div");
+      d.style.cssText = "border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px;margin-bottom:8px;background:#fafafa;";
+      var t = document.createElement("div");
+      t.style.cssText = "font-weight:600;font-size:12.5px;margin-bottom:4px;";
+      t.textContent = "Group " + (gi + 1) + " \u00b7 up to " + Math.round(c.top * 100) + "% similar";
+      d.appendChild(t);
+      c.ids.forEach(function(id){
+        var e = regFind_(id); if (!e) return;
+        var li = document.createElement("div");
+        li.style.cssText = "font-size:12.5px;padding:1px 0;";
+        li.textContent = "\u2022 " + e.title + (e.names.length > 1 ? "  (" + e.names.length + " names)" : "") + "   \u2014   " + (regUsedIn_(e) || "not used in any scheme");
+        d.appendChild(li);
+      });
+      var bar = document.createElement("div"); bar.style.cssText = "margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;";
+      function mk(label, fn){ var b = document.createElement("button"); b.className = "btn btn-outline btn-compact"; b.textContent = label; b.addEventListener("click", fn); bar.appendChild(b); }
+      mk("\uD83D\uDD17 Merge\u2026", function(){ regOpenMerge_(c.ids); });
+      mk("Select in table", function(){ regSel = {}; c.ids.forEach(function(id){ regSel[id] = true; }); document.getElementById("regSearch").value = ""; document.getElementById("regDeptFilter").value = ""; regRender_(); });
+      mk("Not the same \u2013 dismiss", function(){ reg.ignore.push(c.key); regDirty = true; d.remove(); regUpdateCount_(); });
+      d.appendChild(bar);
+      box.appendChild(d);
+    });
+  }
+
+  /* ---------- table ---------- */
+  function regUsedIn_(e){
+    var by = {}, order = [];
+    (e.usages || []).forEach(function(u){
+      if (!by[u.progCode]){ by[u.progCode] = []; order.push(u.progCode); }
+      var n = semNo_(u.stageId); if (by[u.progCode].indexOf(n) === -1) by[u.progCode].push(n);
+    });
+    return order.map(function(pc){ return pc + ": " + by[pc].sort().join(","); }).join("  \u00b7  ");
+  }
+  function regDeptOptions_(withAll, first){
+    var h = first;
+    if (withAll) h += '<option value="none">Not allocated</option>';
+    h += '<option value="0">Common to all (0)</option>';
+    PROGRAMMES.forEach(function(p, i){ h += '<option value="' + (i + 1) + '">' + (i + 1) + ' \u00b7 ' + p.code + ' \u2013 ' + p.name + '</option>'; });
+    return h;
+  }
+  function regUpdateCount_(){
+    var n = reg.entries.length, un = 0, cd = 0;
+    reg.entries.forEach(function(e){ if (e.dept === "") un++; if (e.code) cd++; });
+    document.getElementById("regCount").textContent = n + " course(s) \u00b7 " + un + " not allocated \u00b7 " + cd + " with code" + (regDirty ? " \u00b7 unsaved changes" : "");
+    document.getElementById("regSelCount").textContent = Object.keys(regSel).filter(function(k){ return regSel[k]; }).length + " selected";
+  }
+  function regRender_(){
+    var head = document.getElementById("regHead"), body = document.getElementById("regBody");
+    var cell = "border:1px solid #cbd5e1;padding:5px 7px;vertical-align:top;";
+    var cols = ["", "Sr", "Course Title", "Used in (Programme: Sem)", "Existing code(s)", "Type", "Cr", "Sem", "Allocate to", "New Code", "Comments"];
+    head.innerHTML = cols.map(function(c){ return '<th style="' + cell + 'background:#e2e8f0;position:sticky;top:0;text-align:left;">' + c + '</th>'; }).join("");
+    var q = document.getElementById("regSearch").value.trim().toUpperCase();
+    var df = document.getElementById("regDeptFilter").value;
+    var list = reg.entries.slice().sort(function(a, b){ return a.title < b.title ? -1 : a.title > b.title ? 1 : 0; }).filter(function(e){
+      if (df === "none" && e.dept !== "") return false;
+      if (df !== "" && df !== "none" && e.dept !== df) return false;
+      if (q){
+        var hay = (e.names.join(" ") + " " + (e.code || "") + " " + regUniq_((e.usages || []).map(function(u){ return u.code; })).join(" ")).toUpperCase();
+        if (hay.indexOf(q) === -1) return false;
+      }
+      return true;
+    });
+    body.innerHTML = "";
+    list.forEach(function(e, i){
+      var tr = document.createElement("tr");
+      for (var k = 0; k < cols.length; k++){ var td = document.createElement("td"); td.style.cssText = cell; tr.appendChild(td); }
+      var c = tr.children;
+      // checkbox
+      var cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !!regSel[e.id];
+      cb.addEventListener("change", function(){ regSel[e.id] = cb.checked; regUpdateCount_(); });
+      c[0].appendChild(cb);
+      c[1].textContent = i + 1;
+      // title (+ merged names)
+      var tt = document.createElement("div"); tt.style.fontWeight = "600"; tt.textContent = e.title; c[2].appendChild(tt);
+      if (e.names.length > 1){
+        var nm = document.createElement("div"); nm.style.cssText = "font-size:11px;color:#7c3aed;";
+        nm.textContent = "\u26d3 " + e.names.length + " names merged: " + e.names.join(" / ");
+        c[2].appendChild(nm);
+        var sp = document.createElement("button"); sp.className = "btn btn-outline btn-compact"; sp.style.cssText = "margin-top:3px;padding:1px 6px;font-size:11px;"; sp.textContent = "Split";
+        sp.addEventListener("click", function(){ regSplit_(e); });
+        c[2].appendChild(sp);
+      }
+      c[3].textContent = regUsedIn_(e) || "\u2014 not in any scheme \u2014";
+      c[4].textContent = regUniq_((e.usages || []).map(function(u){ return u.code; })).join(", ") || DASH;
+      c[5].textContent = regUniq_((e.usages || []).map(function(u){ return u.type; })).join(", ") || DASH;
+      c[6].textContent = regUniq_((e.usages || []).map(function(u){ return u.credits ? tidy(u.credits) : ""; })).join(", ") || DASH;
+      // semester
+      var ss = document.createElement("select"); ss.style.cssText = "padding:3px;border:1px solid #cbd5e1;border-radius:5px;";
+      ss.innerHTML = '<option value="">\u2013</option>' + [1,2,3,4,5,6].map(function(n){ return '<option value="' + n + '">' + n + '</option>'; }).join("");
+      ss.value = String(e.sem);
+      ss.addEventListener("change", function(){ e.sem = ss.value === "" ? "" : parseInt(ss.value, 10); regValidateCode_(e); regDirty = true; regRender_(); });
+      c[7].appendChild(ss);
+      var spread = regSems_(e);
+      if (spread.length > 1){ var w = document.createElement("span"); w.textContent = " \u26a0"; w.style.color = "#b45309"; w.title = "Used in different semesters: " + spread.join(", ") + ". The code carries one semester digit \u2013 choose it here."; c[7].appendChild(w); }
+      // allocation
+      var ds = document.createElement("select"); ds.style.cssText = "padding:3px;border:1px solid #cbd5e1;border-radius:5px;max-width:190px;";
+      ds.innerHTML = regDeptOptions_(false, '<option value="">\u2014 Select \u2014</option>');
+      ds.value = e.dept;
+      if (e.dept === "") ds.style.background = "#fef9c3";
+      ds.addEventListener("change", function(){ e.dept = ds.value; regValidateCode_(e); regDirty = true; regRender_(); });
+      c[8].appendChild(ds);
+      // code
+      c[9].textContent = e.code || DASH;
+      if (e.code) c[9].style.cssText += "font-weight:700;color:#15803d;font-family:monospace;font-size:13px;";
+      // comments
+      var cm = document.createElement("div"); cm.style.cssText = "max-height:84px;overflow:auto;font-size:11.5px;white-space:pre-wrap;color:#334155;";
+      cm.textContent = (e.comments || []).join("\n");
+      c[10].appendChild(cm);
+      var ab = document.createElement("button"); ab.className = "btn btn-outline btn-compact"; ab.style.cssText = "margin-top:3px;padding:1px 6px;font-size:11px;"; ab.textContent = "\u270e Add comment";
+      ab.addEventListener("click", function(){
+        var t = prompt("Comment for \u201c" + e.title + "\u201d:");
+        if (t && t.trim()){ e.comments.push("[" + regToday_() + "] " + t.trim()); regDirty = true; regRender_(); }
+      });
+      c[10].appendChild(ab);
+      body.appendChild(tr);
+    });
+    if (!list.length){
+      body.innerHTML = '<tr><td colspan="' + cols.length + '" style="' + cell + 'text-align:center;color:#64748b;">' + (reg.entries.length ? "No course matches the filter." : "No courses yet \u2013 click \u201cRefresh from Schemes\u201d.") + '</td></tr>';
+    }
+    regUpdateCount_();
+  }
+
+  /* ---------- merge / split ---------- */
+  function regOpenMerge_(ids){
+    var ents = ids.map(regFind_).filter(Boolean);
+    if (ents.length < 2){ regStatus_("Select at least two courses to merge.", true); return; }
+    regMergeIds = ents.map(function(e){ return e.id; });
+    var list = document.getElementById("regMergeList"), names = [];
+    list.innerHTML = "";
+    ents.forEach(function(e){
+      var d = document.createElement("div"); d.style.cssText = "padding:3px 0;border-bottom:1px solid #f1f5f9;";
+      d.textContent = "\u2022 " + e.names.join(" / ") + "   \u2014   " + (regUsedIn_(e) || "not used in any scheme");
+      list.appendChild(d);
+      e.names.forEach(function(n){ if (names.indexOf(n) === -1) names.push(n); });
+    });
+    document.getElementById("regNameList").innerHTML = names.map(function(n){ return '<option value="' + n.replace(/"/g, "&quot;") + '"></option>'; }).join("");
+    document.getElementById("regMergeName").value = ents[0].title;
+    document.getElementById("regMergeNote").value = "";
+    document.getElementById("regMergeStatus").textContent = "";
+    document.getElementById("regMergeBackdrop").classList.add("open");
+  }
+  function regDoMerge_(){
+    var title = document.getElementById("regMergeName").value.trim().toUpperCase();
+    var note = document.getElementById("regMergeNote").value.trim();
+    var st = document.getElementById("regMergeStatus");
+    if (!title || !note){ st.textContent = "Both the resulting name and a comment are required before merging."; st.className = "status err"; return; }
+    var ents = regMergeIds.map(regFind_).filter(Boolean);
+    if (ents.length < 2) return;
+    var target = ents[0], others = ents.slice(1), allNames = [], notes = [], depts = [], codes = [], sems = [];
+    ents.forEach(function(e){
+      e.names.forEach(function(n){ if (allNames.indexOf(n) === -1) allNames.push(n); });
+      (e.comments || []).forEach(function(cm){ if (notes.indexOf(cm) === -1) notes.push(cm); });
+      if (e.dept !== "") depts.push(e.dept);
+      if (e.code) codes.push(e.code);
+      if (e.sem !== "") sems.push(e.sem);
+    });
+    depts = regUniq_(depts); codes = regUniq_(codes);
+    var sourceNames = allNames.slice();
+    if (allNames.indexOf(title) === -1) allNames.push(title);
+    var line = "[" + regToday_() + "] MERGED " + sourceNames.map(function(n){ return "\u201c" + n + "\u201d"; }).join(" + ") + " \u2192 \u201c" + title + "\u201d. Reason: " + note;
+    if (depts.length > 1) line += "  (Different allocations were set before the merge: " + depts.map(regDeptLabel_).join(", ") + " \u2013 allocation cleared, please set it again.)";
+    notes.push(line);
+    target.title = title; target.names = allNames; target.comments = notes;
+    target.dept = depts.length === 1 ? depts[0] : "";
+    target.code = codes.length === 1 ? codes[0] : "";
+    target.sem = sems.length ? Math.min.apply(null, sems) : "";
+    regValidateCode_(target);
+    others.forEach(function(o){ reg.entries.splice(reg.entries.indexOf(o), 1); delete regSel[o.id]; });
+    regApplyRows_();
+    regDirty = true;
+    document.getElementById("regMergeBackdrop").classList.remove("open");
+    regStatus_("Merged " + ents.length + " courses into \u201c" + title + "\u201d. The comment was saved in the register.");
+    document.getElementById("regSuggestBox").innerHTML = "";
+    regRender_();
+  }
+  function regSplit_(e){
+    var t = prompt("Split \u201c" + e.title + "\u201d back into " + e.names.length + " separate courses.\n\nComment (required):");
+    if (!t || !t.trim()) return;
+    var first = e.names.indexOf(e.title) > -1 ? e.title : e.names[0];
+    var rest = e.names.filter(function(n){ return n !== first; });
+    e.names = [first]; e.title = first;
+    e.comments.push("[" + regToday_() + "] SPLIT into separate courses (" + [first].concat(rest).join(" | ") + "). Reason: " + t.trim());
+    rest.forEach(function(n){
+      reg.entries.push({ id: "C" + (reg.nextId++), title: n, names: [n], dept: e.dept, sem: "", code: "", comments: ["[" + regToday_() + "] SPLIT from \u201c" + first + "\u201d. Reason: " + t.trim()], usages: [] });
+    });
+    e.code = e.code; // keeps code on the original entry only
+    regApplyRows_();
+    regDirty = true;
+    regRender_();
+  }
+
+  /* ---------- codes ---------- */
+  function regAssign_(){
+    var yy = document.getElementById("regYear").value.replace(/\D/g, "");
+    if (yy.length !== 2){ regStatus_("Enter the autonomy year as two digits (for example 27).", true); return; }
+    reg.year = yy;
+    var used = {}, counters = {}, made = 0, skipped = 0, overflow = 0;
+    reg.entries.forEach(function(e){ if (e.code) used[e.code] = 1; });
+    function typeIdx(e){ var t = regUniq_((e.usages || []).map(function(u){ return u.type; }))[0]; var i = REG_TYPE_ORDER.indexOf(t); return i === -1 ? 99 : i; }
+    var todo = reg.entries.filter(function(e){ return !e.code; });
+    todo.filter(function(e){ return e.dept === "" || e.sem === ""; }).forEach(function(){ skipped++; });
+    todo = todo.filter(function(e){ return e.dept !== "" && e.sem !== ""; }).sort(function(a, b){
+      return (a.sem - b.sem) || (parseInt(a.dept, 10) - parseInt(b.dept, 10)) || (typeIdx(a) - typeIdx(b)) || (a.title < b.title ? -1 : a.title > b.title ? 1 : 0);
+    });
+    todo.forEach(function(e){
+      var prefix = yy + e.sem + e.dept, n = counters[prefix] || 0, code = "";
+      while (n < 99){ n++; var c = prefix + (n < 10 ? "0" + n : String(n)); if (!used[c]){ code = c; break; } }
+      counters[prefix] = n;
+      if (!code){ overflow++; return; }
+      e.code = code; used[code] = 1; made++;
+    });
+    if (made) regDirty = true;
+    regRender_();
+    regStatus_(made + " code(s) assigned." + (skipped ? " " + skipped + " course(s) skipped (department or semester not set)." : "") + (overflow ? " " + overflow + " course(s) could not be coded \u2013 more than 99 courses in one semester/department group." : ""), !!overflow);
+  }
+
+  /* ---------- load / save / refresh ---------- */
+  function regGetSaved_(){
+    var url = GOOGLE_SCRIPT_URL + "?formType=" + encodeURIComponent(FORM_TYPE) + "&recordKey=" + encodeURIComponent(REG_KEY) + "&token=" + encodeURIComponent(getSessionToken_());
+    return fetch(url, { method: "GET", mode: "cors" }).then(function(r){ return r.json(); }).catch(function(err){ console.error(err); return null; });
+  }
+  function regRefresh_(loadSaved){
+    if (!checkOnlineURL()) return;
+    regStatus_("Fetching saved data of all departments...");
+    showLoader("Building the course register...");
+    var jobs = [loadSaved ? regGetSaved_() : Promise.resolve(null)].concat(PROGRAMMES.map(fetchDeptRecord_));
+    Promise.all(jobs).then(function(all){
+      var saved = all[0], items = all.slice(1);
+      var authIssue = items.filter(function(it){ return it.result && it.result.authRequired; })[0] || (saved && saved.authRequired ? { result: saved } : null);
+      if (authIssue){ handleAuthFailure_(authIssue.result); return; }
+      if (loadSaved && saved && saved.success && saved.data){
+        var ld = saved.data.data || saved.data;
+        if (ld && Array.isArray(ld.entries)){
+          reg = { year: ld.year || "27", nextId: ld.nextId || 1, ignore: ld.ignore || [], entries: ld.entries.map(function(e){
+            return { id: e.id, title: e.title, names: e.names && e.names.length ? e.names : [e.title], dept: e.dept === undefined ? "" : String(e.dept), sem: e.sem === "" || e.sem === undefined ? "" : parseInt(e.sem, 10), code: e.code || "", comments: e.comments || [], usages: [] };
+          }) };
+          regDirty = false;
+        }
+      }
+      var results = [];
+      items.forEach(function(it){
+        var r = it.result;
+        if (r && r.success && r.data){ var ld = r.data.data || r.data; if (ld && ld.pages) results.push({ prog: it.prog, data: normaliseLoaded(ld) }); }
+      });
+      regRows = buildAllDeptRows_(results);
+      var added = regApplyRows_();
+      if (added) regDirty = true;
+      regLoaded = true;
+      document.getElementById("regYear").value = reg.year;
+      regRender_();
+      regStatus_(results.length + " of " + PROGRAMMES.length + " department record(s) read. " + (added ? added + " new course(s) added to the register." : "No new courses found."), !results.length);
+    }).catch(function(err){
+      console.error(err);
+      regStatus_("Could not build the register. Check the Web App URL and deployment access.", true);
+    }).finally(function(){ hideLoader(); });
+  }
+  function regSave_(){
+    if (!checkOnlineURL()) return;
+    regStatus_("Saving the register online...");
+    showLoader("Saving the course register...");
+    var payload = { formType: "LAS_COURSE_REGISTER", year: reg.year, nextId: reg.nextId, ignore: reg.ignore,
+      entries: reg.entries.map(function(e){ return { id: e.id, title: e.title, names: e.names, dept: e.dept, sem: e.sem, code: e.code, comments: e.comments }; }) };
+    fetch(GOOGLE_SCRIPT_URL, {
+      method: "POST", mode: "cors", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ formType: FORM_TYPE, token: getSessionToken_(), recordKey: REG_KEY, courseCode: "REGISTER", courseTitle: "Master course register", data: payload })
+    }).then(function(r){ return r.json(); }).then(function(result){
+      if (handleAuthFailure_(result)) return;
+      if (result.success){ regDirty = false; regUpdateCount_(); regStatus_("Register saved online (" + reg.entries.length + " courses)."); }
+      else regStatus_(result.message || "Online save failed.", true);
+    }).catch(function(err){ console.error(err); regStatus_("Online save failed. Check the Web App URL and deployment access.", true); })
+    .finally(function(){ hideLoader(); });
+  }
+
+  function regExcel_(){
+    if (typeof XLSX === "undefined"){ regStatus_("The Excel library could not load. Connect to the internet and reload the page.", true); return; }
+    var list = reg.entries.slice().sort(function(a, b){ return (a.code || "~") < (b.code || "~") ? -1 : (a.code || "~") > (b.code || "~") ? 1 : (a.title < b.title ? -1 : 1); });
+    var main = [["Sr No", "New Code", "Course Title", "Other Names Merged", "Allocated To", "Semester", "Type", "Credits", "Existing Code(s)", "Used In (Programme: Sem)", "Comments"]];
+    list.forEach(function(e, i){
+      main.push([i + 1, e.code || "", e.title, e.names.filter(function(n){ return n !== e.title; }).join(" / "),
+        e.dept === "" ? "Not allocated" : (e.dept === "0" ? "Common to all" : regDeptLabel_(e.dept)), e.sem,
+        regUniq_((e.usages || []).map(function(u){ return u.type; })).join(", "),
+        regUniq_((e.usages || []).map(function(u){ return u.credits ? tidy(u.credits) : ""; })).join(", "),
+        regUniq_((e.usages || []).map(function(u){ return u.code; })).join(", "), regUsedIn_(e), (e.comments || []).join("\n")]);
+    });
+    var det = [["New Code", "Course Title (register)", "Name in Scheme", "Programme", "Semester", "Existing Code", "Type", "Credits", "Allocated To"]];
+    list.forEach(function(e){
+      (e.usages || []).forEach(function(u){
+        det.push([e.code || "", e.title, u.title, u.progCode, semNo_(u.stageId), u.code, u.type, u.credits ? tidy(u.credits) : "", e.dept === "" ? "Not allocated" : (e.dept === "0" ? "Common to all" : regDeptLabel_(e.dept))]);
+      });
+    });
+    var wb = XLSX.utils.book_new(), w1 = XLSX.utils.aoa_to_sheet(main), w2 = XLSX.utils.aoa_to_sheet(det);
+    w1['!cols'] = [{wch:6},{wch:10},{wch:44},{wch:44},{wch:16},{wch:9},{wch:12},{wch:8},{wch:22},{wch:34},{wch:70}];
+    w2['!cols'] = [{wch:10},{wch:44},{wch:44},{wch:10},{wch:9},{wch:14},{wch:8},{wch:8},{wch:16}];
+    XLSX.utils.book_append_sheet(wb, w1, "Master Register");
+    XLSX.utils.book_append_sheet(wb, w2, "Usage Detail");
+    XLSX.writeFile(wb, "Master_Course_Register.xlsx");
+    regStatus_("Register exported to Excel.");
+  }
+
+  /* ---------- wiring ---------- */
+  document.getElementById("regDeptFilter").innerHTML = regDeptOptions_(true, '<option value="">All courses</option>');
+  document.getElementById("regBulkDept").innerHTML = regDeptOptions_(false, '<option value="">\u2014 Allocate to \u2014</option>');
+  document.getElementById("btnCodeRegister").addEventListener("click", function(){
+    document.getElementById("registerOverlay").style.display = "block";
+    regRender_();
+    if (!regLoaded) regRefresh_(true);
+  });
+  document.getElementById("btnRegBack").addEventListener("click", function(){
+    if (regDirty && !confirm("The register has unsaved changes. Leave anyway?\n(Use \u201cSave Register Online\u201d first to keep them.)")) return;
+    document.getElementById("registerOverlay").style.display = "none";
+  });
+  document.getElementById("btnRegRefresh").addEventListener("click", function(){ regRefresh_(false); });
+  document.getElementById("btnRegSave").addEventListener("click", regSave_);
+  document.getElementById("btnRegExcel").addEventListener("click", regExcel_);
+  document.getElementById("btnRegAssign").addEventListener("click", regAssign_);
+  document.getElementById("btnRegFind").addEventListener("click", regFindSimilar_);
+  document.getElementById("btnRegClearCodes").addEventListener("click", function(){
+    if (!confirm("Remove ALL assigned codes from the register? Allocations and comments are kept.")) return;
+    reg.entries.forEach(function(e){ e.code = ""; });
+    regDirty = true; regRender_(); regStatus_("All codes cleared.");
+  });
+  document.getElementById("regSearch").addEventListener("input", regRender_);
+  document.getElementById("regDeptFilter").addEventListener("change", regRender_);
+  document.getElementById("btnRegClearSel").addEventListener("click", function(){ regSel = {}; regRender_(); });
+  document.getElementById("btnRegBulkDept").addEventListener("click", function(){
+    var v = document.getElementById("regBulkDept").value;
+    var ids = Object.keys(regSel).filter(function(k){ return regSel[k]; });
+    if (v === "" || !ids.length){ regStatus_("Tick the courses and choose a department (or Common to all) first.", true); return; }
+    ids.forEach(function(id){ var e = regFind_(id); if (e){ e.dept = v; regValidateCode_(e); } });
+    regDirty = true; regRender_(); regStatus_(ids.length + " course(s) allocated to " + (v === "0" ? "Common to all" : regDeptLabel_(v)) + ".");
+  });
+  document.getElementById("btnRegMergeSel").addEventListener("click", function(){
+    regOpenMerge_(Object.keys(regSel).filter(function(k){ return regSel[k]; }));
+  });
+  document.getElementById("regMergeOk").addEventListener("click", regDoMerge_);
+  document.getElementById("regMergeCancel").addEventListener("click", function(){ document.getElementById("regMergeBackdrop").classList.remove("open"); });
+  document.getElementById("regMergeClose").addEventListener("click", function(){ document.getElementById("regMergeBackdrop").classList.remove("open"); });
 
   /* ================= COMMON SUBJECTS =================
      Admin imports a list of common subjects from Excel and publishes it online
