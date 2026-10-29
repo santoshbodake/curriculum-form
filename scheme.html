@@ -588,7 +588,7 @@ function handleAuthFailure_(result) {
     <button class="btn btn-report" id="btnReports">&#128202; Generate Final Reports</button>
     <button class="btn btn-navy" id="btnAllDeptSummary" style="margin-left:10px;">&#127970; All Department Summary</button>
     <button class="btn btn-gold" id="btnAllDeptSchemes" style="margin-left:10px;">&#128218; All Department Schemes (Semester-wise)</button>
-    <button class="btn btn-navy" id="btnCodeRegister" style="display:none;margin-left:10px;" title="Admin only: build the master course register and allocate course codes">&#128290; Course Code Register</button>
+    <button class="btn btn-navy" id="btnCodeRegister" style="margin-left:10px;" title="Build the master course register and allocate course codes">&#128290; Course Code Register</button>
     <div class="hint" style="margin-top:12px;">
       Generates Curriculum at a Glance, Credit Distribution (course-category wise) and the Semester-wise Totalling &amp; Grand Total report.
       "All Department Summary" consolidates the latest Saved Online data across every department.
@@ -677,7 +677,20 @@ function handleAuthFailure_(result) {
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:14px;">
       <input id="regSearch" placeholder="Search title / code..." style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;min-width:220px;">
       <select id="regDeptFilter" style="padding:6px;border:1px solid #cbd5e1;border-radius:6px;"></select>
+      <select id="regProgFilter" style="padding:6px;border:1px solid #cbd5e1;border-radius:6px;" title="Courses used in this programme"></select>
+      <select id="regSemFilter" style="padding:6px;border:1px solid #cbd5e1;border-radius:6px;" title="Semester of the code">
+        <option value="">All semesters</option><option value="1">Sem 1</option><option value="2">Sem 2</option><option value="3">Sem 3</option><option value="4">Sem 4</option><option value="5">Sem 5</option><option value="6">Sem 6</option>
+      </select>
+      <select id="regCodeFilter" style="padding:6px;border:1px solid #cbd5e1;border-radius:6px;">
+        <option value="">Code: all</option><option value="with">With new code</option><option value="without">Without new code</option>
+      </select>
+      <select id="regFlagFilter" style="padding:6px;border:1px solid #cbd5e1;border-radius:6px;">
+        <option value="">Flags: all</option><option value="dupabbr">Duplicate abbreviation</option><option value="noabbr">Missing abbreviation</option>
+        <option value="multisem">Used in different semesters</option><option value="merged">Merged names</option><option value="orphan">Not in any scheme</option>
+      </select>
+      <button class="btn btn-outline btn-compact" id="btnRegClearFilters">Clear filters</button>
       <span style="flex:1"></span>
+      <span style="font-size:12.5px;color:#475569;" id="regShown"></span>
       <span style="font-size:12.5px;" id="regSelCount">0 selected</span>
       <select id="regBulkDept" style="padding:6px;border:1px solid #cbd5e1;border-radius:6px;"></select>
       <button class="btn btn-outline btn-compact" id="btnRegBulkDept">Allocate selected</button>
@@ -1053,8 +1066,6 @@ function handleAuthFailure_(result) {
   if (IS_ADMIN) {
     var commonBtn = document.getElementById("btnCommonSubjects");
     if (commonBtn) commonBtn.style.display = "inline-flex";
-    var regBtn = document.getElementById("btnCodeRegister");
-    if (regBtn) regBtn.style.display = "inline-flex";
   }
 
   progSelect.addEventListener("change", function(){
@@ -2466,6 +2477,7 @@ function handleAuthFailure_(result) {
             code: String(c.code || "").trim().toUpperCase(),
             title: String(c.title || "").trim().toUpperCase(),
             type: String(c.type || "").trim(),
+            abbr: String(c.abbr || "").trim().toUpperCase(),
             credits: num(c.credits),
             totalMarks: num(c.totalMarks)
           });
@@ -2954,13 +2966,14 @@ function handleAuthFailure_(result) {
       if (!r.title) return;
       var k = regKey_(r.title), e = km[k];
       if (!e){
-        e = { id: "C" + (reg.nextId++), title: r.title, names: [r.title], dept: "", sem: "", code: "", comments: [], usages: [] };
+        e = { id: "C" + (reg.nextId++), title: r.title, names: [r.title], abbr: "", dept: "", sem: "", code: "", comments: [], usages: [] };
         reg.entries.push(e); km[k] = e; added++;
       }
       e.usages.push(r);
     });
     reg.entries.forEach(function(e){
       if (e.sem === "" && e.usages.length) e.sem = Math.min.apply(null, e.usages.map(function(u){ return semNo_(u.stageId); }));
+      if (!e.abbr) e.abbr = regUniq_(e.usages.map(function(u){ return u.abbr; }))[0] || "";
     });
     return added;
   }
@@ -3068,7 +3081,7 @@ function handleAuthFailure_(result) {
       var bar = document.createElement("div"); bar.style.cssText = "margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;";
       function mk(label, fn){ var b = document.createElement("button"); b.className = "btn btn-outline btn-compact"; b.textContent = label; b.addEventListener("click", fn); bar.appendChild(b); }
       mk("\uD83D\uDD17 Merge\u2026", function(){ regOpenMerge_(c.ids); });
-      mk("Select in table", function(){ regSel = {}; c.ids.forEach(function(id){ regSel[id] = true; }); document.getElementById("regSearch").value = ""; document.getElementById("regDeptFilter").value = ""; regRender_(); });
+      mk("Select in table", function(){ regSel = {}; c.ids.forEach(function(id){ regSel[id] = true; }); document.getElementById("regSearch").value = ""; ["regDeptFilter","regProgFilter","regSemFilter","regCodeFilter","regFlagFilter"].forEach(function(id){ document.getElementById(id).value = ""; }); regRender_(); });
       mk("Not the same \u2013 dismiss", function(){ reg.ignore.push(c.key); regDirty = true; d.remove(); regUpdateCount_(); });
       d.appendChild(bar);
       box.appendChild(d);
@@ -3094,36 +3107,111 @@ function handleAuthFailure_(result) {
   function regUpdateCount_(){
     var n = reg.entries.length, un = 0, cd = 0;
     reg.entries.forEach(function(e){ if (e.dept === "") un++; if (e.code) cd++; });
-    document.getElementById("regCount").textContent = n + " course(s) \u00b7 " + un + " not allocated \u00b7 " + cd + " with code" + (regDirty ? " \u00b7 unsaved changes" : "");
+    var am = regAbbrMap_(), dups = Object.keys(am).filter(function(k){ return am[k].length > 1; }).length;
+    document.getElementById("regCount").textContent = n + " course(s) \u00b7 " + un + " not allocated \u00b7 " + cd + " with code" + (dups ? " \u00b7 " + dups + " duplicate abbreviation(s)" : "") + (regDirty ? " \u00b7 unsaved changes" : "");
     document.getElementById("regSelCount").textContent = Object.keys(regSel).filter(function(k){ return regSel[k]; }).length + " selected";
+  }
+  var regSort = { key: "title", dir: 1 };
+  function regAbbrMap_(){
+    var m = {};
+    reg.entries.forEach(function(e){
+      var a = String(e.abbr || "").trim().toUpperCase();
+      if (a) (m[a] = m[a] || []).push(e);
+    });
+    return m;
+  }
+  var REG_COLS = [
+    { key: "sel",   label: "" },
+    { key: "sr",    label: "Sr" },
+    { key: "title", label: "Course Title" },
+    { key: "used",  label: "Used in (Programme: Sem)" },
+    { key: "codes", label: "Existing code(s)" },
+    { key: "abbr",  label: "Abbreviation" },
+    { key: "cr",    label: "Cr" },
+    { key: "sem",   label: "Sem" },
+    { key: "dept",  label: "Allocate to" },
+    { key: "code",  label: "New Code" },
+    { key: "cm",    label: "Comments" }
+  ];
+  function regSortVal_(e, key){
+    switch (key){
+      case "title": return e.title;
+      case "used":  return regUsedIn_(e);
+      case "codes": return regUniq_((e.usages || []).map(function(u){ return u.code; })).join(", ");
+      case "abbr":  return String(e.abbr || "");
+      case "cr":    return parseFloat(regUniq_((e.usages || []).map(function(u){ return u.credits; }))[0]) || 0;
+      case "sem":   return e.sem === "" ? 99 : e.sem;
+      case "dept":  return e.dept === "" ? 99 : parseInt(e.dept, 10);
+      case "code":  return e.code || "~";
+      case "cm":    return (e.comments || []).length;
+    }
+    return "";
+  }
+  function regPass_(e, f, am){
+    var q = f.q;
+    if (f.dept === "none" && e.dept !== "") return false;
+    if (f.dept !== "" && f.dept !== "none" && e.dept !== f.dept) return false;
+    if (f.prog && !(e.usages || []).some(function(u){ return u.progCode === f.prog; })) return false;
+    if (f.sem !== "" && String(e.sem) !== f.sem) return false;
+    if (f.code === "with" && !e.code) return false;
+    if (f.code === "without" && e.code) return false;
+    var ab = String(e.abbr || "").trim().toUpperCase();
+    if (f.flag === "dupabbr" && !(ab && am[ab] && am[ab].length > 1)) return false;
+    if (f.flag === "noabbr" && ab) return false;
+    if (f.flag === "multisem" && regSems_(e).length < 2) return false;
+    if (f.flag === "merged" && e.names.length < 2) return false;
+    if (f.flag === "orphan" && (e.usages || []).length) return false;
+    if (q){
+      var hay = (e.names.join(" ") + " " + (e.code || "") + " " + ab + " " + regUniq_((e.usages || []).map(function(u){ return u.code; })).join(" ")).toUpperCase();
+      if (hay.indexOf(q) === -1) return false;
+    }
+    return true;
   }
   function regRender_(){
     var head = document.getElementById("regHead"), body = document.getElementById("regBody");
     var cell = "border:1px solid #cbd5e1;padding:5px 7px;vertical-align:top;";
-    var cols = ["", "Sr", "Course Title", "Used in (Programme: Sem)", "Existing code(s)", "Type", "Cr", "Sem", "Allocate to", "New Code", "Comments"];
-    head.innerHTML = cols.map(function(c){ return '<th style="' + cell + 'background:#e2e8f0;position:sticky;top:0;text-align:left;">' + c + '</th>'; }).join("");
-    var q = document.getElementById("regSearch").value.trim().toUpperCase();
-    var df = document.getElementById("regDeptFilter").value;
-    var list = reg.entries.slice().sort(function(a, b){ return a.title < b.title ? -1 : a.title > b.title ? 1 : 0; }).filter(function(e){
-      if (df === "none" && e.dept !== "") return false;
-      if (df !== "" && df !== "none" && e.dept !== df) return false;
-      if (q){
-        var hay = (e.names.join(" ") + " " + (e.code || "") + " " + regUniq_((e.usages || []).map(function(u){ return u.code; })).join(" ")).toUpperCase();
-        if (hay.indexOf(q) === -1) return false;
+    head.innerHTML = "";
+    REG_COLS.forEach(function(c){
+      var th = document.createElement("th");
+      th.style.cssText = cell + "background:#e2e8f0;position:sticky;top:0;text-align:left;white-space:nowrap;";
+      var sortable = c.key !== "sel" && c.key !== "sr";
+      th.textContent = c.label + (sortable && regSort.key === c.key ? (regSort.dir === 1 ? " \u25b2" : " \u25bc") : (sortable ? " \u21c5" : ""));
+      if (sortable){
+        th.style.cursor = "pointer"; th.title = "Click to sort";
+        th.addEventListener("click", function(){
+          if (regSort.key === c.key) regSort.dir = -regSort.dir; else { regSort.key = c.key; regSort.dir = 1; }
+          regRender_();
+        });
       }
-      return true;
+      head.appendChild(th);
     });
+
+    var f = {
+      q: document.getElementById("regSearch").value.trim().toUpperCase(),
+      dept: document.getElementById("regDeptFilter").value,
+      prog: document.getElementById("regProgFilter").value,
+      sem: document.getElementById("regSemFilter").value,
+      code: document.getElementById("regCodeFilter").value,
+      flag: document.getElementById("regFlagFilter").value
+    };
+    var am = regAbbrMap_();
+    var list = reg.entries.filter(function(e){ return regPass_(e, f, am); }).sort(function(x, y){
+      var a = regSortVal_(x, regSort.key), b = regSortVal_(y, regSort.key), r;
+      if (typeof a === "number" && typeof b === "number") r = a - b;
+      else r = String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
+      if (r === 0) r = x.title < y.title ? -1 : x.title > y.title ? 1 : 0;
+      return r * regSort.dir;
+    });
+
     body.innerHTML = "";
     list.forEach(function(e, i){
       var tr = document.createElement("tr");
-      for (var k = 0; k < cols.length; k++){ var td = document.createElement("td"); td.style.cssText = cell; tr.appendChild(td); }
+      for (var k = 0; k < REG_COLS.length; k++){ var td = document.createElement("td"); td.style.cssText = cell; tr.appendChild(td); }
       var c = tr.children;
-      // checkbox
       var cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !!regSel[e.id];
       cb.addEventListener("change", function(){ regSel[e.id] = cb.checked; regUpdateCount_(); });
       c[0].appendChild(cb);
       c[1].textContent = i + 1;
-      // title (+ merged names)
       var tt = document.createElement("div"); tt.style.fontWeight = "600"; tt.textContent = e.title; c[2].appendChild(tt);
       if (e.names.length > 1){
         var nm = document.createElement("div"); nm.style.cssText = "font-size:11px;color:#7c3aed;";
@@ -3135,9 +3223,28 @@ function handleAuthFailure_(result) {
       }
       c[3].textContent = regUsedIn_(e) || "\u2014 not in any scheme \u2014";
       c[4].textContent = regUniq_((e.usages || []).map(function(u){ return u.code; })).join(", ") || DASH;
-      c[5].textContent = regUniq_((e.usages || []).map(function(u){ return u.type; })).join(", ") || DASH;
+
+      // abbreviation (editable, red when another course uses the same one)
+      var ab = String(e.abbr || "").trim().toUpperCase(), others = (am[ab] || []).filter(function(x){ return x !== e; });
+      var ai = document.createElement("input");
+      ai.value = e.abbr || ""; ai.maxLength = 20;
+      ai.style.cssText = "width:92px;padding:3px 5px;border:1px solid #cbd5e1;border-radius:5px;text-transform:uppercase;";
+      if (others.length){
+        ai.style.cssText += "background:#fee2e2;color:#b91c1c;font-weight:700;box-shadow:inset 0 0 0 2px #dc2626;";
+        ai.title = "Duplicate abbreviation \u2013 also used by: " + others.map(function(x){ return x.title; }).join("; ");
+      } else if (!ab){
+        ai.style.background = "#fef9c3"; ai.title = "No abbreviation";
+      }
+      ai.addEventListener("change", function(){ e.abbr = ai.value.trim().toUpperCase(); regDirty = true; regRender_(); });
+      c[5].appendChild(ai);
+      var sch = regUniq_((e.usages || []).map(function(u){ return u.abbr; }));
+      if (sch.length > 1){
+        var wn = document.createElement("div"); wn.style.cssText = "font-size:10.5px;color:#b45309;";
+        wn.textContent = "schemes use: " + sch.join(", ");
+        c[5].appendChild(wn);
+      }
       c[6].textContent = regUniq_((e.usages || []).map(function(u){ return u.credits ? tidy(u.credits) : ""; })).join(", ") || DASH;
-      // semester
+
       var ss = document.createElement("select"); ss.style.cssText = "padding:3px;border:1px solid #cbd5e1;border-radius:5px;";
       ss.innerHTML = '<option value="">\u2013</option>' + [1,2,3,4,5,6].map(function(n){ return '<option value="' + n + '">' + n + '</option>'; }).join("");
       ss.value = String(e.sem);
@@ -3145,32 +3252,34 @@ function handleAuthFailure_(result) {
       c[7].appendChild(ss);
       var spread = regSems_(e);
       if (spread.length > 1){ var w = document.createElement("span"); w.textContent = " \u26a0"; w.style.color = "#b45309"; w.title = "Used in different semesters: " + spread.join(", ") + ". The code carries one semester digit \u2013 choose it here."; c[7].appendChild(w); }
-      // allocation
+
       var ds = document.createElement("select"); ds.style.cssText = "padding:3px;border:1px solid #cbd5e1;border-radius:5px;max-width:190px;";
       ds.innerHTML = regDeptOptions_(false, '<option value="">\u2014 Select \u2014</option>');
       ds.value = e.dept;
       if (e.dept === "") ds.style.background = "#fef9c3";
       ds.addEventListener("change", function(){ e.dept = ds.value; regValidateCode_(e); regDirty = true; regRender_(); });
       c[8].appendChild(ds);
-      // code
+
       c[9].textContent = e.code || DASH;
       if (e.code) c[9].style.cssText += "font-weight:700;color:#15803d;font-family:monospace;font-size:13px;";
-      // comments
+
       var cm = document.createElement("div"); cm.style.cssText = "max-height:84px;overflow:auto;font-size:11.5px;white-space:pre-wrap;color:#334155;";
       cm.textContent = (e.comments || []).join("\n");
       c[10].appendChild(cm);
-      var ab = document.createElement("button"); ab.className = "btn btn-outline btn-compact"; ab.style.cssText = "margin-top:3px;padding:1px 6px;font-size:11px;"; ab.textContent = "\u270e Add comment";
-      ab.addEventListener("click", function(){
+      var abn = document.createElement("button"); abn.className = "btn btn-outline btn-compact"; abn.style.cssText = "margin-top:3px;padding:1px 6px;font-size:11px;"; abn.textContent = "\u270e Add comment";
+      abn.addEventListener("click", function(){
         var t = prompt("Comment for \u201c" + e.title + "\u201d:");
         if (t && t.trim()){ e.comments.push("[" + regToday_() + "] " + t.trim()); regDirty = true; regRender_(); }
       });
-      c[10].appendChild(ab);
+      c[10].appendChild(abn);
       body.appendChild(tr);
     });
     if (!list.length){
-      body.innerHTML = '<tr><td colspan="' + cols.length + '" style="' + cell + 'text-align:center;color:#64748b;">' + (reg.entries.length ? "No course matches the filter." : "No courses yet \u2013 click \u201cRefresh from Schemes\u201d.") + '</td></tr>';
+      body.innerHTML = '<tr><td colspan="' + REG_COLS.length + '" style="' + cell + 'text-align:center;color:#64748b;">' + (reg.entries.length ? "No course matches the filters." : "No courses yet \u2013 click \u201cRefresh from Schemes\u201d.") + '</td></tr>';
     }
     regUpdateCount_();
+    var shown = document.getElementById("regShown");
+    if (shown) shown.textContent = "Showing " + list.length + " of " + reg.entries.length;
   }
 
   /* ---------- merge / split ---------- */
@@ -3208,11 +3317,14 @@ function handleAuthFailure_(result) {
       if (e.sem !== "") sems.push(e.sem);
     });
     depts = regUniq_(depts); codes = regUniq_(codes);
+    var abbrs = regUniq_(ents.map(function(e){ return e.abbr; }));
     var sourceNames = allNames.slice();
     if (allNames.indexOf(title) === -1) allNames.push(title);
     var line = "[" + regToday_() + "] MERGED " + sourceNames.map(function(n){ return "\u201c" + n + "\u201d"; }).join(" + ") + " \u2192 \u201c" + title + "\u201d. Reason: " + note;
     if (depts.length > 1) line += "  (Different allocations were set before the merge: " + depts.map(regDeptLabel_).join(", ") + " \u2013 allocation cleared, please set it again.)";
+    if (abbrs.length > 1) line += "  (Abbreviations before the merge: " + abbrs.join(", ") + " \u2013 kept " + abbrs[0] + ".)";
     notes.push(line);
+    target.abbr = abbrs[0] || "";
     target.title = title; target.names = allNames; target.comments = notes;
     target.dept = depts.length === 1 ? depts[0] : "";
     target.code = codes.length === 1 ? codes[0] : "";
@@ -3234,7 +3346,7 @@ function handleAuthFailure_(result) {
     e.names = [first]; e.title = first;
     e.comments.push("[" + regToday_() + "] SPLIT into separate courses (" + [first].concat(rest).join(" | ") + "). Reason: " + t.trim());
     rest.forEach(function(n){
-      reg.entries.push({ id: "C" + (reg.nextId++), title: n, names: [n], dept: e.dept, sem: "", code: "", comments: ["[" + regToday_() + "] SPLIT from \u201c" + first + "\u201d. Reason: " + t.trim()], usages: [] });
+      reg.entries.push({ id: "C" + (reg.nextId++), title: n, names: [n], abbr: "", dept: e.dept, sem: "", code: "", comments: ["[" + regToday_() + "] SPLIT from \u201c" + first + "\u201d. Reason: " + t.trim()], usages: [] });
     });
     e.code = e.code; // keeps code on the original entry only
     regApplyRows_();
@@ -3285,7 +3397,7 @@ function handleAuthFailure_(result) {
         var ld = saved.data.data || saved.data;
         if (ld && Array.isArray(ld.entries)){
           reg = { year: ld.year || "27", nextId: ld.nextId || 1, ignore: ld.ignore || [], entries: ld.entries.map(function(e){
-            return { id: e.id, title: e.title, names: e.names && e.names.length ? e.names : [e.title], dept: e.dept === undefined ? "" : String(e.dept), sem: e.sem === "" || e.sem === undefined ? "" : parseInt(e.sem, 10), code: e.code || "", comments: e.comments || [], usages: [] };
+            return { id: e.id, title: e.title, names: e.names && e.names.length ? e.names : [e.title], abbr: e.abbr || "", dept: e.dept === undefined ? "" : String(e.dept), sem: e.sem === "" || e.sem === undefined ? "" : parseInt(e.sem, 10), code: e.code || "", comments: e.comments || [], usages: [] };
           }) };
           regDirty = false;
         }
@@ -3312,7 +3424,7 @@ function handleAuthFailure_(result) {
     regStatus_("Saving the register online...");
     showLoader("Saving the course register...");
     var payload = { formType: "LAS_COURSE_REGISTER", year: reg.year, nextId: reg.nextId, ignore: reg.ignore,
-      entries: reg.entries.map(function(e){ return { id: e.id, title: e.title, names: e.names, dept: e.dept, sem: e.sem, code: e.code, comments: e.comments }; }) };
+      entries: reg.entries.map(function(e){ return { id: e.id, title: e.title, names: e.names, abbr: e.abbr || "", dept: e.dept, sem: e.sem, code: e.code, comments: e.comments }; }) };
     fetch(GOOGLE_SCRIPT_URL, {
       method: "POST", mode: "cors", headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({ formType: FORM_TYPE, token: getSessionToken_(), recordKey: REG_KEY, courseCode: "REGISTER", courseTitle: "Master course register", data: payload })
@@ -3327,18 +3439,18 @@ function handleAuthFailure_(result) {
   function regExcel_(){
     if (typeof XLSX === "undefined"){ regStatus_("The Excel library could not load. Connect to the internet and reload the page.", true); return; }
     var list = reg.entries.slice().sort(function(a, b){ return (a.code || "~") < (b.code || "~") ? -1 : (a.code || "~") > (b.code || "~") ? 1 : (a.title < b.title ? -1 : 1); });
-    var main = [["Sr No", "New Code", "Course Title", "Other Names Merged", "Allocated To", "Semester", "Type", "Credits", "Existing Code(s)", "Used In (Programme: Sem)", "Comments"]];
+    var main = [["Sr No", "New Code", "Course Title", "Other Names Merged", "Allocated To", "Semester", "Abbreviation", "Credits", "Existing Code(s)", "Used In (Programme: Sem)", "Comments"]];
     list.forEach(function(e, i){
       main.push([i + 1, e.code || "", e.title, e.names.filter(function(n){ return n !== e.title; }).join(" / "),
         e.dept === "" ? "Not allocated" : (e.dept === "0" ? "Common to all" : regDeptLabel_(e.dept)), e.sem,
-        regUniq_((e.usages || []).map(function(u){ return u.type; })).join(", "),
+        e.abbr || "",
         regUniq_((e.usages || []).map(function(u){ return u.credits ? tidy(u.credits) : ""; })).join(", "),
         regUniq_((e.usages || []).map(function(u){ return u.code; })).join(", "), regUsedIn_(e), (e.comments || []).join("\n")]);
     });
-    var det = [["New Code", "Course Title (register)", "Name in Scheme", "Programme", "Semester", "Existing Code", "Type", "Credits", "Allocated To"]];
+    var det = [["New Code", "Course Title (register)", "Name in Scheme", "Programme", "Semester", "Existing Code", "Abbreviation (scheme)", "Credits", "Allocated To"]];
     list.forEach(function(e){
       (e.usages || []).forEach(function(u){
-        det.push([e.code || "", e.title, u.title, u.progCode, semNo_(u.stageId), u.code, u.type, u.credits ? tidy(u.credits) : "", e.dept === "" ? "Not allocated" : (e.dept === "0" ? "Common to all" : regDeptLabel_(e.dept))]);
+        det.push([e.code || "", e.title, u.title, u.progCode, semNo_(u.stageId), u.code, u.abbr, u.credits ? tidy(u.credits) : "", e.dept === "" ? "Not allocated" : (e.dept === "0" ? "Common to all" : regDeptLabel_(e.dept))]);
       });
     });
     var wb = XLSX.utils.book_new(), w1 = XLSX.utils.aoa_to_sheet(main), w2 = XLSX.utils.aoa_to_sheet(det);
@@ -3372,8 +3484,15 @@ function handleAuthFailure_(result) {
     reg.entries.forEach(function(e){ e.code = ""; });
     regDirty = true; regRender_(); regStatus_("All codes cleared.");
   });
-  document.getElementById("regSearch").addEventListener("input", regRender_);
-  document.getElementById("regDeptFilter").addEventListener("change", regRender_);
+  document.getElementById("regProgFilter").innerHTML = '<option value="">All programmes</option>' + PROGRAMMES.map(function(p){ return '<option value="' + p.code + '">' + p.code + '</option>'; }).join("");
+  ["regSearch"].forEach(function(id){ document.getElementById(id).addEventListener("input", regRender_); });
+  ["regDeptFilter","regProgFilter","regSemFilter","regCodeFilter","regFlagFilter"].forEach(function(id){ document.getElementById(id).addEventListener("change", regRender_); });
+  document.getElementById("btnRegClearFilters").addEventListener("click", function(){
+    document.getElementById("regSearch").value = "";
+    ["regDeptFilter","regProgFilter","regSemFilter","regCodeFilter","regFlagFilter"].forEach(function(id){ document.getElementById(id).value = ""; });
+    regSort = { key: "title", dir: 1 };
+    regRender_();
+  });
   document.getElementById("btnRegClearSel").addEventListener("click", function(){ regSel = {}; regRender_(); });
   document.getElementById("btnRegBulkDept").addEventListener("click", function(){
     var v = document.getElementById("regBulkDept").value;
