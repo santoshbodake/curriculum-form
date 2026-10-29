@@ -2409,11 +2409,15 @@ function handleAuthFailure_(result) {
     return out;
   }
 
-  // Semester names (in Sem 1..6 order) in which a group of rows occurs.
+  // Semester number (1-6) of a stage id, and the semester numbers (in order) in which a group of rows occurs.
+  function semNo_(stageId){
+    for (var i = 0; i < SEM_PAGES.length; i++) if (SEM_PAGES[i].id === stageId) return i + 1;
+    return "";
+  }
   function semNames_(items){
     var seen = {};
-    items.forEach(function(x){ seen[x.stageName] = 1; });
-    return SEM_PAGES.filter(function(p){ return seen[p.name]; }).map(function(p){ return p.name; });
+    items.forEach(function(x){ seen[x.stageId] = 1; });
+    return SEM_PAGES.map(function(p, i){ return seen[p.id] ? i + 1 : null; }).filter(function(n){ return n !== null; });
   }
 
   function buildAllDeptSummaryHTML(results, rows){
@@ -2427,7 +2431,7 @@ function handleAuthFailure_(result) {
     out += '<table><thead><tr><th style="width:60px;">Sr No</th><th>Course Code</th><th>Course Name</th><th>Programme</th><th>Semester</th></tr></thead><tbody>';
     rows.forEach(function(r, i){
       out += '<tr><td>' + (i + 1) + '</td><td>' + (r.code || DASH) + '</td><td class="left">' + (r.title || DASH)
-        + '</td><td>' + r.progCode + '</td><td>' + (r.stageName || DASH) + '</td></tr>';
+        + '</td><td>' + r.progCode + '</td><td>' + (semNo_(r.stageId) || DASH) + '</td></tr>';
     });
     if (!rows.length) out += '<tr><td colspan="5">' + DASH + '</td></tr>';
     out += '</tbody></table>';
@@ -2565,7 +2569,7 @@ function handleAuthFailure_(result) {
     }
 
     addSheet("All Subjects", ["Sr No", "Course Code", "Course Name", "Programme", "Semester"],
-      rows.map(function(r, i){ return [i + 1, r.code, r.title, r.progCode, r.stageName]; }));
+      rows.map(function(r, i){ return [i + 1, r.code, r.title, r.progCode, semNo_(r.stageId)]; }));
 
     var byCode = groupBy(rows.filter(function(r){ return r.code; }), function(r){ return r.code; });
     addSheet("Unique by Code", ["Sr No", "Course Code", "Course Name", "Programme(s)", "Semester(s)"],
