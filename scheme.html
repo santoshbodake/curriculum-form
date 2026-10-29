@@ -2409,6 +2409,13 @@ function handleAuthFailure_(result) {
     return out;
   }
 
+  // Semester names (in Sem 1..6 order) in which a group of rows occurs.
+  function semNames_(items){
+    var seen = {};
+    items.forEach(function(x){ seen[x.stageName] = 1; });
+    return SEM_PAGES.filter(function(p){ return seen[p.name]; }).map(function(p){ return p.name; });
+  }
+
   function buildAllDeptSummaryHTML(results, rows){
     var uniqueList = allDeptUniqueList_, groupBy = allDeptGroupBy_;
 
@@ -2417,40 +2424,40 @@ function handleAuthFailure_(result) {
 
     // 1. All subjects
     out += '<h4>1. All Subjects (All Departments &amp; Semesters)</h4>';
-    out += '<table><thead><tr><th style="width:60px;">Sr No</th><th>Course Code</th><th>Course Name</th><th>Programme</th></tr></thead><tbody>';
+    out += '<table><thead><tr><th style="width:60px;">Sr No</th><th>Course Code</th><th>Course Name</th><th>Programme</th><th>Semester</th></tr></thead><tbody>';
     rows.forEach(function(r, i){
       out += '<tr><td>' + (i + 1) + '</td><td>' + (r.code || DASH) + '</td><td class="left">' + (r.title || DASH)
-        + '</td><td>' + r.progCode + '</td></tr>';
+        + '</td><td>' + r.progCode + '</td><td>' + (r.stageName || DASH) + '</td></tr>';
     });
-    if (!rows.length) out += '<tr><td colspan="4">' + DASH + '</td></tr>';
+    if (!rows.length) out += '<tr><td colspan="5">' + DASH + '</td></tr>';
     out += '</tbody></table>';
 
     // 2. Unique by Course Code
     var byCode = groupBy(rows.filter(function(r){ return r.code; }), function(r){ return r.code; });
     out += '<h4>2. Unique Subjects by Course Code</h4>';
-    out += '<table><thead><tr><th style="width:60px;">Sr No</th><th>Course Code</th><th>Course Name</th><th>Programme(s)</th></tr></thead><tbody>';
+    out += '<table><thead><tr><th style="width:60px;">Sr No</th><th>Course Code</th><th>Course Name</th><th>Programme(s)</th><th>Semester(s)</th></tr></thead><tbody>';
     byCode.order.forEach(function(code, i){
       var items = byCode.map[code];
       var titles = uniqueList(items.map(function(x){ return x.title; }));
       var progs = uniqueList(items.map(function(x){ return x.progCode; }));
       out += '<tr><td>' + (i + 1) + '</td><td>' + code + '</td><td class="left">' + (titles.join(' / ') || DASH)
-        + '</td><td>' + progs.join(', ') + '</td></tr>';
+        + '</td><td>' + progs.join(', ') + '</td><td>' + (semNames_(items).join(', ') || DASH) + '</td></tr>';
     });
-    if (!byCode.order.length) out += '<tr><td colspan="4">' + DASH + '</td></tr>';
+    if (!byCode.order.length) out += '<tr><td colspan="5">' + DASH + '</td></tr>';
     out += '</tbody></table>';
 
     // 3. Unique by Course Name
     var byName = groupBy(rows.filter(function(r){ return r.title; }), function(r){ return r.title; });
     out += '<h4>3. Unique Subjects by Course Name</h4>';
-    out += '<table><thead><tr><th style="width:60px;">Sr No</th><th>Course Name</th><th>Course Code(s)</th><th>Programme(s)</th></tr></thead><tbody>';
+    out += '<table><thead><tr><th style="width:60px;">Sr No</th><th>Course Name</th><th>Course Code(s)</th><th>Programme(s)</th><th>Semester(s)</th></tr></thead><tbody>';
     byName.order.forEach(function(title, i){
       var items = byName.map[title];
       var codes = uniqueList(items.map(function(x){ return x.code; }));
       var progs = uniqueList(items.map(function(x){ return x.progCode; }));
       out += '<tr><td>' + (i + 1) + '</td><td class="left">' + title + '</td><td>' + (codes.join(' / ') || DASH)
-        + '</td><td>' + progs.join(', ') + '</td></tr>';
+        + '</td><td>' + progs.join(', ') + '</td><td>' + (semNames_(items).join(', ') || DASH) + '</td></tr>';
     });
-    if (!byName.order.length) out += '<tr><td colspan="4">' + DASH + '</td></tr>';
+    if (!byName.order.length) out += '<tr><td colspan="5">' + DASH + '</td></tr>';
     out += '</tbody></table>';
 
     // 4. Department-wise summary
@@ -2557,23 +2564,23 @@ function handleAuthFailure_(result) {
       XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31));
     }
 
-    addSheet("All Subjects", ["Sr No", "Course Code", "Course Name", "Programme"],
-      rows.map(function(r, i){ return [i + 1, r.code, r.title, r.progCode]; }));
+    addSheet("All Subjects", ["Sr No", "Course Code", "Course Name", "Programme", "Semester"],
+      rows.map(function(r, i){ return [i + 1, r.code, r.title, r.progCode, r.stageName]; }));
 
     var byCode = groupBy(rows.filter(function(r){ return r.code; }), function(r){ return r.code; });
-    addSheet("Unique by Code", ["Sr No", "Course Code", "Course Name", "Programme(s)"],
+    addSheet("Unique by Code", ["Sr No", "Course Code", "Course Name", "Programme(s)", "Semester(s)"],
       byCode.order.map(function(code, i){
         var items = byCode.map[code];
         return [i + 1, code, uniqueList(items.map(function(x){ return x.title; })).join(" / "),
-          uniqueList(items.map(function(x){ return x.progCode; })).join(", ")];
+          uniqueList(items.map(function(x){ return x.progCode; })).join(", "), semNames_(items).join(", ")];
       }));
 
     var byName = groupBy(rows.filter(function(r){ return r.title; }), function(r){ return r.title; });
-    addSheet("Unique by Name", ["Sr No", "Course Name", "Course Code(s)", "Programme(s)"],
+    addSheet("Unique by Name", ["Sr No", "Course Name", "Course Code(s)", "Programme(s)", "Semester(s)"],
       byName.order.map(function(title, i){
         var items = byName.map[title];
         return [i + 1, title, uniqueList(items.map(function(x){ return x.code; })).join(" / "),
-          uniqueList(items.map(function(x){ return x.progCode; })).join(", ")];
+          uniqueList(items.map(function(x){ return x.progCode; })).join(", "), semNames_(items).join(", ")];
       }));
 
     addSheet("Department-wise", ["Sr No", "Department", "Total Course Entries", "Unique Courses (by Code)", "Total Credits", "Total Marks"],
