@@ -685,7 +685,7 @@ function handleAuthFailure_(result) {
         <option value="">Code: all</option><option value="with">With new code</option><option value="without">Without new code</option>
       </select>
       <select id="regFlagFilter" style="padding:6px;border:1px solid #cbd5e1;border-radius:6px;">
-        <option value="">Flags: all</option><option value="dupabbr">Duplicate abbreviation</option><option value="noabbr">Missing abbreviation</option>
+        <option value="">Flags: all</option><option value="dupabbr">Duplicate abbreviation</option><option value="abbrmismatch">Same code, different abbreviation</option><option value="noabbr">Missing abbreviation</option>
         <option value="multisem">Used in different semesters</option><option value="merged">Merged names</option><option value="orphan">Not in any scheme</option>
       </select>
       <button class="btn btn-outline btn-compact" id="btnRegClearFilters">Clear filters</button>
@@ -3107,11 +3107,37 @@ function handleAuthFailure_(result) {
   function regUpdateCount_(){
     var n = reg.entries.length, un = 0, cd = 0;
     reg.entries.forEach(function(e){ if (e.dept === "") un++; if (e.code) cd++; });
-    var am = regAbbrMap_(), dups = Object.keys(am).filter(function(k){ return am[k].length > 1; }).length;
+    regPrep_();
+    var am = regAbbrMap_(), dups = Object.keys(am).filter(function(k){
+      return am[k].some(function(e){ return regDupOthers_(e, am).length > 0; });
+    }).length;
     document.getElementById("regCount").textContent = n + " course(s) \u00b7 " + un + " not allocated \u00b7 " + cd + " with code" + (dups ? " \u00b7 " + dups + " duplicate abbreviation(s)" : "") + (regDirty ? " \u00b7 unsaved changes" : "");
     document.getElementById("regSelCount").textContent = Object.keys(regSel).filter(function(k){ return regSel[k]; }).length + " selected";
   }
   var regSort = { key: "title", dir: 1 };
+
+  // All course codes an entry carries: its new register code plus the codes used in the schemes.
+  function regPrep_(){
+    reg.entries.forEach(function(e){
+      e._codes = regUniq_([e.code].concat((e.usages || []).map(function(u){ return u.code; })));
+    });
+  }
+  function regShareCode_(a, b){
+    return a._codes.some(function(c){ return b._codes.indexOf(c) > -1; });
+  }
+  // Same abbreviation on a DIFFERENT course (no course code in common) = duplicate.
+  // Entries that share a course code are the same course, so a shared abbreviation is correct.
+  function regDupOthers_(e, am){
+    var ab = String(e.abbr || "").trim().toUpperCase();
+    return ab ? (am[ab] || []).filter(function(x){ return x !== e && !regShareCode_(e, x); }) : [];
+  }
+  // Same course code but a different abbreviation = inconsistent (the abbreviation must match).
+  function regMismatchOthers_(e){
+    var ab = String(e.abbr || "").trim().toUpperCase();
+    return reg.entries.filter(function(x){
+      return x !== e && regShareCode_(e, x) && String(x.abbr || "").trim().toUpperCase() !== ab;
+    });
+  }
   function regAbbrMap_(){
     var m = {};
     reg.entries.forEach(function(e){
@@ -3156,7 +3182,8 @@ function handleAuthFailure_(result) {
     if (f.code === "with" && !e.code) return false;
     if (f.code === "without" && e.code) return false;
     var ab = String(e.abbr || "").trim().toUpperCase();
-    if (f.flag === "dupabbr" && !(ab && am[ab] && am[ab].length > 1)) return false;
+    if (f.flag === "dupabbr" && !regDupOthers_(e, am).length) return false;
+    if (f.flag === "abbrmismatch" && !regMismatchOthers_(e).length) return false;
     if (f.flag === "noabbr" && ab) return false;
     if (f.flag === "multisem" && regSems_(e).length < 2) return false;
     if (f.flag === "merged" && e.names.length < 2) return false;
@@ -3194,6 +3221,7 @@ function handleAuthFailure_(result) {
       code: document.getElementById("regCodeFilter").value,
       flag: document.getElementById("regFlagFilter").value
     };
+    regPrep_();
     var am = regAbbrMap_();
     var list = reg.entries.filter(function(e){ return regPass_(e, f, am); }).sort(function(x, y){
       var a = regSortVal_(x, regSort.key), b = regSortVal_(y, regSort.key), r;
@@ -3225,13 +3253,16 @@ function handleAuthFailure_(result) {
       c[4].textContent = regUniq_((e.usages || []).map(function(u){ return u.code; })).join(", ") || DASH;
 
       // abbreviation (editable, red when another course uses the same one)
-      var ab = String(e.abbr || "").trim().toUpperCase(), others = (am[ab] || []).filter(function(x){ return x !== e; });
+      var ab = String(e.abbr || "").trim().toUpperCase(), others = regDupOthers_(e, am), clash = regMismatchOthers_(e);
       var ai = document.createElement("input");
       ai.value = e.abbr || ""; ai.maxLength = 20;
       ai.style.cssText = "width:92px;padding:3px 5px;border:1px solid #cbd5e1;border-radius:5px;text-transform:uppercase;";
       if (others.length){
         ai.style.cssText += "background:#fee2e2;color:#b91c1c;font-weight:700;box-shadow:inset 0 0 0 2px #dc2626;";
-        ai.title = "Duplicate abbreviation \u2013 also used by: " + others.map(function(x){ return x.title; }).join("; ");
+        ai.title = "Duplicate abbreviation \u2013 also used by a different course (different course code): " + others.map(function(x){ return x.title; }).join("; ");
+      } else if (clash.length){
+        ai.style.cssText += "background:#ffedd5;color:#9a3412;font-weight:700;box-shadow:inset 0 0 0 2px #f97316;";
+        ai.title = "Same course code as \u201c" + clash[0].title + "\u201d but a different abbreviation (" + (clash[0].abbr || "none") + ") \u2013 the abbreviation must be the same.";
       } else if (!ab){
         ai.style.background = "#fef9c3"; ai.title = "No abbreviation";
       }
