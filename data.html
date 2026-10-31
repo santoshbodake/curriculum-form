@@ -686,6 +686,21 @@ body.viewer-mode header button[onclick*="scheme"] { display: none !important; }
 body.viewer-mode header, body.viewer-mode .container { margin-left: 0 !important; }
 #viewerBackBar { display: none; position: sticky; top: 0; z-index: 50; background: #fff; border-bottom: 1px solid #e2e8f0; padding: 8px 16px; }
 @media print { #viewerBackBar { display: none !important; } }
+
+/* ---- Course Title drop-down (fed by the Master Course Register) ---- */
+.cc-wrap { position: relative; }
+.cc-wrap input { padding-right: 34px; }
+.cc-caret { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 28px; height: 28px; padding: 0; margin: 0;
+  border: 0; background: transparent; color: #64748b; font-size: 14px; cursor: pointer; box-shadow: none; line-height: 1; }
+.cc-caret:hover { color: #0f172a; background: #f1f5f9; }
+#courseSuggest { position: fixed; z-index: 400; display: none; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(15,23,42,.18); max-height: 280px; overflow: auto; font-size: 13px; text-align: left; text-transform: none; letter-spacing: 0; }
+#courseSuggest .cs-item { padding: 7px 11px; cursor: pointer; border-bottom: 1px solid #f1f5f9; }
+#courseSuggest .cs-item.active { background: #e0f2fe; }
+#courseSuggest .cs-title { font-weight: 600; color: #0f172a; }
+#courseSuggest .cs-meta { font-size: 11px; color: #64748b; margin-top: 1px; }
+#courseSuggest .cs-msg { padding: 10px 12px; color: #64748b; font-size: 12.5px; }
+#courseSuggest .cs-retry { color: #0369a1; cursor: pointer; text-decoration: underline; margin-left: 6px; }
 </style>
 </head>
 <body>
@@ -878,7 +893,12 @@ It's been 20 minutes since your last save. Click "Save Data" to avoid losing you
     <option value="Sixth">Sixth</option>
 </select></div>
 <div class="field"><label>Scheme (e.g. K)</label><input id="curriculumScheme" value="K"></div>
-<div class="field"><label>Course Title</label><input id="courseTitle" oninput="toUpperInput(this)" style="text-transform:uppercase;"></div>
+<div class="field"><label>Course Title</label>
+<div class="cc-wrap">
+<input id="courseTitle" autocomplete="off" placeholder="Select from register or type..." oninput="toUpperInput(this)" style="text-transform:uppercase;">
+<button type="button" class="cc-caret" id="courseTitleCaret" tabindex="-1" title="Show course register" aria-label="Show course register">&#9662;</button>
+</div>
+</div>
 <div class="field"><label>Course Code</label><input id="courseCode"></div>
 <div class="field"><label>Course Category / Abbreviation</label><input id="category" value="DSC"></div>
 <div class="field"><label>Abbr (short course code, e.g. IRO)</label><input id="abbr" oninput="toUpperInput(this)" style="text-transform:uppercase;"></div>
@@ -2361,6 +2381,175 @@ function restoreFromRecordView() {
 
 // ===== Google Sheets Online Save / Load =====
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxxG_0OTue9ovCJU00FwMag1iPtyWCCrEX-fWgfNos18ZKs5QB9ciEkNqmTpHvSj8ohlg/exec";
+
+/* ===== Course Title drop-down: data comes from the Master Course Register saved by scheme.html ===== */
+(function(){
+  const REG_KEY = "LAS_COURSE_REGISTER", REG_FORM = "secondForm";
+  const MIN_PERCENT = 0.40;
+  let courses = [], state = "idle";      // idle | loading | ready | error
+  let panel = null, ctx = { items: [], active: -1 }, applying = false, pending = null;
+
+  const filled = v => String(v === undefined || v === null ? "" : v).trim() !== "";
+  const num = v => { if (v === undefined || v === null) return 0; const n = parseFloat(String(v).replace(/[^0-9.]/g, "")); return isNaN(n) ? 0 : n; };
+  const tidy = n => isFinite(n) ? String(Math.round(n * 100) / 100) : "";
+  const pct = v => String(Math.round(num(v) * MIN_PERCENT));
+
+  function getKey(key){
+    const url = GOOGLE_SCRIPT_URL + "?formType=" + encodeURIComponent(REG_FORM) + "&recordKey=" + encodeURIComponent(key) + "&token=" + encodeURIComponent(getSessionToken_());
+    return fetch(url, { method: "GET", mode: "cors" }).then(r => r.json());
+  }
+
+  /* Turn one register entry into the values for the form. Columns the register does not store
+     (totals, minimum marks) are calculated exactly as scheme.html does. */
+  function build(e){
+    const r = (e.row && typeof e.row === "object") ? e.row : {};
+    const g = f => (r[f] === undefined || r[f] === null) ? "" : String(r[f]);
+    const o = { title: e.title, names: (e.names || []).join(" "), partial: !e.row,
+      code: e.code || g("code"), abbr: e.abbr || g("abbr"), type: g("type") };
+    const f = { cl: g("cl"), tl: g("tl"), ll: g("ll"), slh: g("selfLearning"), nlh: g("notional"), credits: g("credits"),
+      duration: g("paperDuration"), fathMax: g("faTh"), sathMax: g("saTh"),
+      faprMax: g("faPrMax"), saprMax: g("saPrMax"), slaMax: g("slaMax") };
+    if (!filled(f.nlh)){ const n = num(f.cl) + num(f.tl) + num(f.ll) + num(f.slh); f.nlh = n ? tidy(n) : ""; }
+    const hasTh = filled(f.fathMax) || filled(f.sathMax), thTotal = num(f.fathMax) + num(f.sathMax);
+    f.totalMax = hasTh ? tidy(thTotal) : "";
+    f.totalMin = hasTh && thTotal ? String(Math.round(thTotal * MIN_PERCENT)) : "";
+    f.faprMin = filled(f.faprMax) ? pct(f.faprMax) : "";
+    f.saprMin = filled(f.saprMax) ? pct(f.saprMax) : "";
+    f.slaMin  = filled(f.slaMax)  ? pct(f.slaMax)  : "";
+    const hasTm = hasTh || filled(f.faprMax) || filled(f.saprMax) || filled(f.slaMax);
+    f.totalMarks = hasTm ? tidy(thTotal + num(f.faprMax) + num(f.saprMax) + num(f.slaMax)) : "";
+    o.fields = f;
+    return o;
+  }
+
+  function loadRegister(){
+    if (state === "loading") return;
+    if (!GOOGLE_SCRIPT_URL || !getSessionToken_()){ state = "error"; return; }
+    state = "loading"; paint();
+    getKey(REG_KEY).then(saved => {
+      if (saved && saved.authRequired){ handleAuthFailure_(saved); throw new Error("auth"); }
+      const ld = saved && saved.success && saved.data ? (saved.data.data || saved.data) : null;
+      if (!ld || !Array.isArray(ld.entries)) throw new Error("The course register has not been saved online yet (scheme.html > Course Code Register > Save Register Online).");
+      const parts = parseInt(ld.rowParts, 10) || 0, jobs = [];
+      for (let i = 1; i <= parts; i++) jobs.push(getKey(REG_KEY + "_ROWS_" + i).catch(() => null));
+      return Promise.all(jobs).then(res => {
+        const map = {};
+        res.forEach(x => { const d = x && x.success && x.data ? (x.data.data || x.data) : null; if (d && d.rows) Object.keys(d.rows).forEach(id => { map[id] = d.rows[id]; }); });
+        courses = ld.entries.filter(e => filled(e.title)).map(e => { const m = map[e.id]; return build({ title: e.title, names: e.names, abbr: e.abbr, code: e.code, row: m ? m.r : null }); });
+        courses.sort((a, b) => a.title.localeCompare(b.title));
+        state = "ready";
+      });
+    }).catch(err => {
+      console.error(err);
+      state = "error"; loadError = err && err.message && err.message !== "auth" ? err.message : "Could not read the course register.";
+    }).finally(() => { if (panel && panel.style.display === "block") paint(); });
+  }
+  let loadError = "";
+
+  function setVal(id, v, force){
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (!force && !filled(v)) return;
+    el.value = String(v === undefined || v === null ? "" : v);
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function applyCourse(c){
+    applying = true;
+    try {
+      setVal("courseTitle", c.title, true);
+      setVal("courseCode", c.code, true);
+      setVal("abbr", c.abbr, true);
+      setVal("category", c.type);                       // keeps the current value when the register has none
+      if (!c.partial) Object.keys(c.fields).forEach(id => setVal(id, c.fields[id], true));
+    } finally { applying = false; }
+    if (typeof markUnsavedOnlineChanges === "function") markUnsavedOnlineChanges();
+  }
+
+  /* ----- drop-down panel ----- */
+  function ensurePanel(){
+    if (panel) return panel;
+    panel = document.createElement("div"); panel.id = "courseSuggest";
+    document.body.appendChild(panel);
+    window.addEventListener("scroll", ev => { if (!panel.contains(ev.target)) hide(); }, true);
+    window.addEventListener("resize", hide);
+    document.addEventListener("mousedown", ev => {
+      const inp = document.getElementById("courseTitle"), cb = document.getElementById("courseTitleCaret");
+      if (!panel.contains(ev.target) && ev.target !== inp && ev.target !== cb) hide();
+    });
+    return panel;
+  }
+  function hide(){ if (panel) panel.style.display = "none"; }
+  function place(){
+    const inp = document.getElementById("courseTitle"), r = inp.getBoundingClientRect();
+    panel.style.left = r.left + "px"; panel.style.width = Math.max(r.width, 320) + "px";
+    const below = window.innerHeight - r.bottom, h = Math.min(280, panel.scrollHeight);
+    if (below < h + 12 && r.top > below){ panel.style.top = Math.max(8, r.top - h - 4) + "px"; }
+    else panel.style.top = (r.bottom + 4) + "px";
+  }
+  function matches(q){
+    q = q.trim().toUpperCase();
+    if (!q) return courses;
+    return courses.filter(c => (c.title + " " + c.names + " " + c.code + " " + c.abbr).toUpperCase().indexOf(q) !== -1);
+  }
+  function paint(){
+    const inp = document.getElementById("courseTitle"); if (!inp) return;
+    ensurePanel(); panel.innerHTML = "";
+    if (state === "loading" || state === "idle"){
+      panel.innerHTML = '<div class="cs-msg">Loading course register&hellip;</div>';
+    } else if (state === "error"){
+      const d = document.createElement("div"); d.className = "cs-msg";
+      d.textContent = (loadError || "Course register unavailable.") + " You can still type the details manually.";
+      const a = document.createElement("span"); a.className = "cs-retry"; a.textContent = "Retry";
+      a.addEventListener("mousedown", ev => { ev.preventDefault(); loadRegister(); });
+      d.appendChild(a); panel.appendChild(d);
+    } else {
+      ctx.items = matches(inp.value);
+      if (ctx.active >= ctx.items.length) ctx.active = ctx.items.length - 1;
+      if (!ctx.items.length){
+        panel.innerHTML = '<div class="cs-msg">No matching course in the register &mdash; keep typing to use your own title.</div>';
+      }
+      ctx.items.forEach((c, i) => {
+        const d = document.createElement("div"); d.className = "cs-item" + (i === ctx.active ? " active" : "");
+        const t = document.createElement("div"); t.className = "cs-title"; t.textContent = c.title;
+        const m = document.createElement("div"); m.className = "cs-meta";
+        m.textContent = [c.code, c.abbr, c.type].filter(filled).join("  \u00b7  ") + (c.partial ? "  \u00b7  (title / code / abbr only)" : "");
+        d.appendChild(t); d.appendChild(m);
+        d.addEventListener("mousedown", ev => { ev.preventDefault(); pick(i); });
+        d.addEventListener("mouseenter", () => { ctx.active = i; mark(); });
+        panel.appendChild(d);
+      });
+    }
+    panel.style.display = "block"; place();
+  }
+  function mark(){
+    Array.prototype.forEach.call(panel.querySelectorAll(".cs-item"), (el, i) => el.classList.toggle("active", i === ctx.active));
+  }
+  function pick(i){ const c = ctx.items[i]; hide(); if (c) applyCourse(c); }
+  function open(){
+    if (state === "idle" || state === "error" && !courses.length && !loadError) loadRegister();
+    ctx.active = -1; paint();
+  }
+
+  function init(){
+    const inp = document.getElementById("courseTitle"), cb = document.getElementById("courseTitleCaret");
+    if (!inp || document.body.classList.contains("viewer-mode")) return;
+    inp.addEventListener("focus", open);
+    inp.addEventListener("click", () => { if (!panel || panel.style.display !== "block") open(); });
+    inp.addEventListener("input", () => { if (applying) return; ctx.active = -1; paint(); });
+    inp.addEventListener("keydown", ev => {
+      const shown = panel && panel.style.display === "block";
+      if (ev.key === "ArrowDown"){ ev.preventDefault(); if (!shown) return open(); ctx.active = Math.min(ctx.items.length - 1, ctx.active + 1); mark(); const a = panel.querySelector(".cs-item.active"); if (a) a.scrollIntoView({ block: "nearest" }); }
+      else if (ev.key === "ArrowUp" && shown){ ev.preventDefault(); ctx.active = Math.max(0, ctx.active - 1); mark(); const a = panel.querySelector(".cs-item.active"); if (a) a.scrollIntoView({ block: "nearest" }); }
+      else if (ev.key === "Enter" && shown && ctx.active >= 0){ ev.preventDefault(); pick(ctx.active); }
+      else if (ev.key === "Escape" || ev.key === "Tab"){ hide(); }
+    });
+    cb.addEventListener("mousedown", ev => { ev.preventDefault(); if (panel && panel.style.display === "block") hide(); else { inp.focus(); open(); } });
+    loadRegister();                                   // pre-load so the list is ready on first click
+  }
+  init();
+})();
 
 let isFormLocked = false;
 
