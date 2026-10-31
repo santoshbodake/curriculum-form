@@ -2451,7 +2451,7 @@ function handleAuthFailure_(result) {
   // First Year Exit and Second Year Exit stages are intentionally excluded —
   // only SEM_PAGES (the six actual semesters) are considered, matching the
   // six-semester Credit Distribution report elsewhere in this file.
-  function buildAllDeptRows_(results){
+  function buildAllDeptRows_(results, includeAllElectives){
     var rows = [];
     results.forEach(function(item){
       var prog = item.prog, st = item.data;
@@ -2461,18 +2461,24 @@ function handleAuthFailure_(result) {
         // (see renderCourseTable / pageSums / semStats above) — only the first
         // one is an actually-taken subject, so count that group once per stage,
         // same as the existing per-programme totals and reports already do.
-        var seenSr = {};
+        var seenSr = {}, srCount = {};
+        page.courses.forEach(function(c){
+          var k = String(c.srNo).trim();
+          if (k !== "" && (filled(c.title) || filled(c.code))) srCount[k] = (srCount[k] || 0) + 1;
+        });
         page.courses.forEach(function(c){
           if (!filled(c.title) && !filled(c.code)) return;
           var sr = String(c.srNo).trim();
           if (sr !== "") {
-            if (seenSr[sr]) return;
+            // Summaries count an elective group once; the master register lists every elective.
+            if (seenSr[sr] && !includeAllElectives) return;
             seenSr[sr] = true;
           }
           var rowData = {};
           FIELDS.forEach(function(f){ rowData[f] = (c[f] === undefined || c[f] === null) ? "" : String(c[f]); });
           rows.push({
             data: rowData,
+            elective: sr !== "" && srCount[sr] > 1,
             progCode: prog.code,
             progName: prog.name,
             stageId: p.id,
@@ -3502,7 +3508,7 @@ function handleAuthFailure_(result) {
         var r = it.result;
         if (r && r.success && r.data){ var ld = r.data.data || r.data; if (ld && ld.pages) results.push({ prog: it.prog, data: normaliseLoaded(ld) }); }
       });
-      regRows = buildAllDeptRows_(results);
+      regRows = buildAllDeptRows_(results, true);   // every elective, not just the first of each Any-One group
       var added = regApplyRows_();
       if (added) regDirty = true;
       regLoaded = true;
