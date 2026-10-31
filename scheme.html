@@ -3439,9 +3439,45 @@ function handleAuthFailure_(result) {
   }
 
   /* ---------- load / save / refresh ---------- */
-  function regGetSaved_(){
-    var url = GOOGLE_SCRIPT_URL + "?formType=" + encodeURIComponent(FORM_TYPE) + "&recordKey=" + encodeURIComponent(REG_KEY) + "&token=" + encodeURIComponent(getSessionToken_());
+  /* The register is stored as one main record (titles, codes, allocation, comments) plus a few
+     small "rows" records holding each course's scheme data. Keeping every record small avoids the
+     Google Sheets 50,000-character cell limit that made one big record fail to save. */
+  var REG_ROW_CHUNK = 20000;
+  function regGetKey_(key){
+    var url = GOOGLE_SCRIPT_URL + "?formType=" + encodeURIComponent(FORM_TYPE) + "&recordKey=" + encodeURIComponent(key) + "&token=" + encodeURIComponent(getSessionToken_());
     return fetch(url, { method: "GET", mode: "cors" }).then(function(r){ return r.json(); }).catch(function(err){ console.error(err); return null; });
+  }
+  function regGetSaved_(){
+    return regGetKey_(REG_KEY).then(function(saved){
+      if (!saved || !saved.success || !saved.data) return saved;
+      var ld = saved.data.data || saved.data;
+      var parts = parseInt(ld && ld.rowParts, 10) || 0;
+      if (!ld || !Array.isArray(ld.entries) || !parts) return saved;
+      var jobs = [];
+      for (var i = 1; i <= parts; i++) jobs.push(regGetKey_(REG_KEY + "_ROWS_" + i));
+      return Promise.all(jobs).then(function(res){
+        var map = {};
+        res.forEach(function(r){
+          var d = r && r.success && r.data ? (r.data.data || r.data) : null;
+          if (d && d.rows) Object.keys(d.rows).forEach(function(id){ map[id] = d.rows[id]; });
+        });
+        ld.entries.forEach(function(e){
+          var m = map[e.id];
+          if (m){ e.row = m.r || null; e.rowEdited = !!m.x; }
+        });
+        return saved;
+      });
+    });
+  }
+  function regPost_(key, code, title, data){
+    return fetch(GOOGLE_SCRIPT_URL, {
+      method: "POST", mode: "cors", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ formType: FORM_TYPE, token: getSessionToken_(), recordKey: key, courseCode: code, courseTitle: title, data: data })
+    }).then(function(r){ return r.json(); }).then(function(result){
+      if (handleAuthFailure_(result)) throw new Error("__auth__");
+      if (!result.success) throw new Error(result.message || "The server refused the save.");
+      return result;
+    });
   }
   function regRefresh_(loadSaved){
     if (!checkOnlineURL()) return;
@@ -3482,17 +3518,40 @@ function handleAuthFailure_(result) {
     if (!checkOnlineURL()) return;
     regStatus_("Saving the register online...");
     showLoader("Saving the course register...");
-    var payload = { formType: "LAS_COURSE_REGISTER", year: reg.year, nextId: reg.nextId, ignore: reg.ignore,
-      entries: reg.entries.map(function(e){ return { id: e.id, title: e.title, names: e.names, abbr: e.abbr || "", dept: e.dept, sem: e.sem, code: e.code, comments: e.comments, row: e.row || null, rowEdited: !!e.rowEdited }; }) };
-    fetch(GOOGLE_SCRIPT_URL, {
-      method: "POST", mode: "cors", headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ formType: FORM_TYPE, token: getSessionToken_(), recordKey: REG_KEY, courseCode: "REGISTER", courseTitle: "Master course register", data: payload })
-    }).then(function(r){ return r.json(); }).then(function(result){
-      if (handleAuthFailure_(result)) return;
-      if (result.success){ regDirty = false; setRegisterCourses_(reg.entries); regUpdateCount_(); var noData = reg.entries.filter(function(x){ return !x.row; }).length; regStatus_("Register saved online (" + reg.entries.length + " courses)." + (noData ? " " + noData + " course(s) have no scheme data yet and will fill only title / code / abbreviation." : "")); }
-      else regStatus_(result.message || "Online save failed.", true);
-    }).catch(function(err){ console.error(err); regStatus_("Online save failed. Check the Web App URL and deployment access.", true); })
-    .finally(function(){ hideLoader(); });
+    // 1. split the scheme data of the courses into small chunks
+    var chunks = [], cur = {}, curLen = 0;
+    reg.entries.forEach(function(e){
+      if (!e.row) return;
+      var item = { r: e.row, x: e.rowEdited ? 1 : 0 }, len = JSON.stringify(item).length + e.id.length + 6;
+      if (curLen + len > REG_ROW_CHUNK && curLen > 0){ chunks.push(cur); cur = {}; curLen = 0; }
+      cur[e.id] = item; curLen += len;
+    });
+    if (curLen > 0) chunks.push(cur);
+    // 2. main record: everything except the row data
+    var payload = { formType: "LAS_COURSE_REGISTER", year: reg.year, nextId: reg.nextId, ignore: reg.ignore, rowParts: chunks.length,
+      entries: reg.entries.map(function(e){ return { id: e.id, title: e.title, names: e.names, abbr: e.abbr || "", dept: e.dept, sem: e.sem, code: e.code, comments: e.comments }; }) };
+    // rows first, main record last, so the main record never points at rows that were not saved
+    var chain = Promise.resolve();
+    chunks.forEach(function(ch, i){
+      chain = chain.then(function(){
+        showLoader("Saving course data " + (i + 1) + " of " + chunks.length + "...");
+        return regPost_(REG_KEY + "_ROWS_" + (i + 1), "REGISTER_ROWS_" + (i + 1), "Master course register - scheme data " + (i + 1),
+          { formType: "LAS_COURSE_REGISTER_ROWS", part: i + 1, parts: chunks.length, rows: ch });
+      });
+    });
+    chain.then(function(){
+      showLoader("Saving the course register...");
+      return regPost_(REG_KEY, "REGISTER", "Master course register", payload);
+    }).then(function(){
+      regDirty = false; setRegisterCourses_(reg.entries); regUpdateCount_();
+      var noData = reg.entries.filter(function(x){ return !x.row; }).length;
+      regStatus_("Register saved online (" + reg.entries.length + " courses, scheme data in " + chunks.length + " part(s))." + (noData ? " " + noData + " course(s) have no scheme data yet and will fill only title / code / abbreviation." : ""));
+    }).catch(function(err){
+      if (err && err.message === "__auth__") return;
+      console.error(err);
+      var m = err && err.message ? err.message : "";
+      regStatus_("Online save failed" + (m ? ": " + m : ".") + " Check the Web App URL and deployment access. (If this keeps happening, open the browser console for details.)", true);
+    }).finally(function(){ hideLoader(); });
   }
 
   /* ---------- scheme data of a register course (the values copied into the scheme rows) ---------- */
