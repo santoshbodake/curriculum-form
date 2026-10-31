@@ -2993,7 +2993,7 @@ function handleAuthFailure_(result) {
     });
     reg.entries.forEach(function(e){
       var rw = regPickRow_(e.usages);
-      if (rw && JSON.stringify(rw) !== JSON.stringify(e.row || null)){ e.row = rw; regDirty = true; }
+      if (rw && !e.rowEdited && JSON.stringify(rw) !== JSON.stringify(e.row || null)){ e.row = rw; regDirty = true; }
       if (e.sem === "" && e.usages.length) e.sem = Math.min.apply(null, e.usages.map(function(u){ return semNo_(u.stageId); }));
       if (!e.abbr) e.abbr = regUniq_(e.usages.map(function(u){ return u.abbr; }))[0] || "";
     });
@@ -3174,6 +3174,7 @@ function handleAuthFailure_(result) {
     { key: "sem",   label: "Sem" },
     { key: "dept",  label: "Allocate to" },
     { key: "code",  label: "New Code" },
+    { key: "data",  label: "Scheme data (used to fill rows)" },
     { key: "cm",    label: "Comments" }
   ];
   function regSortVal_(e, key){
@@ -3186,6 +3187,7 @@ function handleAuthFailure_(result) {
       case "sem":   return e.sem === "" ? 99 : e.sem;
       case "dept":  return e.dept === "" ? 99 : parseInt(e.dept, 10);
       case "code":  return e.code || "~";
+      case "data":  return e.row ? Object.keys(e.row).length : 0;
       case "cm":    return (e.comments || []).length;
     }
     return "";
@@ -3311,15 +3313,24 @@ function handleAuthFailure_(result) {
       c[9].textContent = e.code || DASH;
       if (e.code) c[9].style.cssText += "font-weight:700;color:#15803d;font-family:monospace;font-size:13px;";
 
+      var nData = e.row ? Object.keys(e.row).length : 0;
+      var dv = document.createElement("div"); dv.style.cssText = "font-size:11.5px;color:" + (nData ? "#15803d" : "#b45309") + ";";
+      dv.textContent = nData ? ("\u2713 " + nData + " fields" + (e.rowEdited ? " (edited)" : "")) : "\u2014 none yet";
+      c[10].appendChild(dv);
+      var dvb = document.createElement("button"); dvb.className = "btn btn-outline btn-compact"; dvb.style.cssText = "margin-top:3px;padding:1px 6px;font-size:11px;";
+      dvb.textContent = "\u270e View / Edit";
+      dvb.addEventListener("click", function(){ regEditRow_(e); });
+      c[10].appendChild(dvb);
+
       var cm = document.createElement("div"); cm.style.cssText = "max-height:84px;overflow:auto;font-size:11.5px;white-space:pre-wrap;color:#334155;";
       cm.textContent = (e.comments || []).join("\n");
-      c[10].appendChild(cm);
+      c[11].appendChild(cm);
       var abn = document.createElement("button"); abn.className = "btn btn-outline btn-compact"; abn.style.cssText = "margin-top:3px;padding:1px 6px;font-size:11px;"; abn.textContent = "\u270e Add comment";
       abn.addEventListener("click", function(){
         var t = prompt("Comment for \u201c" + e.title + "\u201d:");
         if (t && t.trim()){ e.comments.push("[" + regToday_() + "] " + t.trim()); regDirty = true; regRender_(); }
       });
-      c[10].appendChild(abn);
+      c[11].appendChild(abn);
       body.appendChild(tr);
     });
     if (!list.length){
@@ -3445,7 +3456,7 @@ function handleAuthFailure_(result) {
         var ld = saved.data.data || saved.data;
         if (ld && Array.isArray(ld.entries)){
           reg = { year: ld.year || "27", nextId: ld.nextId || 1, ignore: ld.ignore || [], entries: ld.entries.map(function(e){
-            return { id: e.id, title: e.title, names: e.names && e.names.length ? e.names : [e.title], abbr: e.abbr || "", dept: e.dept === undefined ? "" : String(e.dept), sem: e.sem === "" || e.sem === undefined ? "" : parseInt(e.sem, 10), code: e.code || "", comments: e.comments || [], row: (e.row && typeof e.row === "object") ? e.row : null, usages: [] };
+            return { id: e.id, title: e.title, names: e.names && e.names.length ? e.names : [e.title], abbr: e.abbr || "", dept: e.dept === undefined ? "" : String(e.dept), sem: e.sem === "" || e.sem === undefined ? "" : parseInt(e.sem, 10), code: e.code || "", comments: e.comments || [], row: (e.row && typeof e.row === "object") ? e.row : null, rowEdited: !!e.rowEdited, usages: [] };
           }) };
           regDirty = false;
         }
@@ -3472,16 +3483,59 @@ function handleAuthFailure_(result) {
     regStatus_("Saving the register online...");
     showLoader("Saving the course register...");
     var payload = { formType: "LAS_COURSE_REGISTER", year: reg.year, nextId: reg.nextId, ignore: reg.ignore,
-      entries: reg.entries.map(function(e){ return { id: e.id, title: e.title, names: e.names, abbr: e.abbr || "", dept: e.dept, sem: e.sem, code: e.code, comments: e.comments, row: e.row || null }; }) };
+      entries: reg.entries.map(function(e){ return { id: e.id, title: e.title, names: e.names, abbr: e.abbr || "", dept: e.dept, sem: e.sem, code: e.code, comments: e.comments, row: e.row || null, rowEdited: !!e.rowEdited }; }) };
     fetch(GOOGLE_SCRIPT_URL, {
       method: "POST", mode: "cors", headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({ formType: FORM_TYPE, token: getSessionToken_(), recordKey: REG_KEY, courseCode: "REGISTER", courseTitle: "Master course register", data: payload })
     }).then(function(r){ return r.json(); }).then(function(result){
       if (handleAuthFailure_(result)) return;
-      if (result.success){ regDirty = false; setRegisterCourses_(reg.entries); regUpdateCount_(); regStatus_("Register saved online (" + reg.entries.length + " courses)."); }
+      if (result.success){ regDirty = false; setRegisterCourses_(reg.entries); regUpdateCount_(); var noData = reg.entries.filter(function(x){ return !x.row; }).length; regStatus_("Register saved online (" + reg.entries.length + " courses)." + (noData ? " " + noData + " course(s) have no scheme data yet and will fill only title / code / abbreviation." : "")); }
       else regStatus_(result.message || "Online save failed.", true);
     }).catch(function(err){ console.error(err); regStatus_("Online save failed. Check the Web App URL and deployment access.", true); })
     .finally(function(){ hideLoader(); });
+  }
+
+  /* ---------- scheme data of a register course (the values copied into the scheme rows) ---------- */
+  var REG_ROW_LABELS = { type:"Type", iks:"IKS Hrs", cl:"CL", tl:"TL", ll:"LL", selfLearning:"Self Learning", notional:"Notional Hrs",
+    credits:"Credits", paperDuration:"Paper Duration", faTh:"FA-TH Max", saTh:"SA-TH Max", faPrMax:"FA-PR Max", saPrMax:"SA-PR Max", slaMax:"SLA Max" };
+  function regRowFields_(){ return FIELDS.filter(function(f){ return REG_DERIVED.indexOf(f) === -1 && f !== "title" && f !== "abbr" && f !== "code"; }); }
+  function regEditRow_(e){
+    var old = document.getElementById("regRowEditor"); if (old) old.remove();
+    var ov = document.createElement("div"); ov.id = "regRowEditor";
+    ov.style.cssText = "position:fixed;inset:0;z-index:400;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:16px;";
+    var box = document.createElement("div");
+    box.style.cssText = "background:#fff;border-radius:12px;max-width:760px;width:100%;max-height:90vh;overflow:auto;padding:18px;box-shadow:0 20px 50px rgba(0,0,0,.35);";
+    var h = document.createElement("h3"); h.style.margin = "0 0 4px"; h.textContent = e.title; box.appendChild(h);
+    var sub = document.createElement("div"); sub.style.cssText = "font-size:12px;color:#64748b;margin-bottom:12px;";
+    sub.textContent = "These values are copied into a scheme row when this course is chosen from the Course Title drop-down. Totals, minimums, credits and notional hours are calculated automatically. Saving here stops 'Refresh from Schemes' from overwriting them.";
+    box.appendChild(sub);
+    var grid = document.createElement("div"); grid.style.cssText = "display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;";
+    var inputs = {}, row = e.row || {};
+    regRowFields_().forEach(function(f){
+      var lab = document.createElement("label"); lab.style.cssText = "font-size:11.5px;font-weight:600;color:#334155;";
+      lab.textContent = REG_ROW_LABELS[f] || f;
+      var inp = document.createElement("input"); inp.value = row[f] || "";
+      inp.style.cssText = "display:block;width:100%;box-sizing:border-box;margin-top:2px;padding:5px;border:1px solid #cbd5e1;border-radius:6px;";
+      lab.appendChild(inp); grid.appendChild(lab); inputs[f] = inp;
+    });
+    box.appendChild(grid);
+    var bar = document.createElement("div"); bar.style.cssText = "display:flex;gap:8px;justify-content:flex-end;margin-top:14px;";
+    var cancel = document.createElement("button"); cancel.className = "btn btn-outline btn-compact"; cancel.textContent = "Cancel";
+    cancel.addEventListener("click", function(){ ov.remove(); });
+    var ok = document.createElement("button"); ok.className = "btn btn-navy btn-compact"; ok.textContent = "Save data";
+    ok.addEventListener("click", function(){
+      var out = {};
+      Object.keys(inputs).forEach(function(f){
+        var v = inputs[f].value.trim();
+        if (f === "type" || f === "saTh" || f === "saPrMax") v = v.toUpperCase();
+        if (v !== "") out[f] = v;
+      });
+      e.row = out; e.rowEdited = true; regDirty = true;
+      ov.remove(); regRender_();
+      regStatus_("Scheme data updated for \u201c" + e.title + "\u201d. Click \u201cSave Register Online\u201d to publish it.");
+    });
+    bar.appendChild(cancel); bar.appendChild(ok); box.appendChild(bar);
+    ov.appendChild(box); document.body.appendChild(ov);
   }
 
   function regExcel_(){
@@ -3506,6 +3560,9 @@ function handleAuthFailure_(result) {
     w2['!cols'] = [{wch:10},{wch:44},{wch:44},{wch:10},{wch:9},{wch:14},{wch:8},{wch:8},{wch:16}];
     XLSX.utils.book_append_sheet(wb, w1, "Master Register");
     XLSX.utils.book_append_sheet(wb, w2, "Usage Detail");
+    var rf = regRowFields_(), dat = [["New Code", "Course Title", "Abbreviation"].concat(rf.map(function(f){ return REG_ROW_LABELS[f] || f; }))];
+    list.forEach(function(e){ var r = e.row || {}; dat.push([e.code || "", e.title, e.abbr || ""].concat(rf.map(function(f){ return r[f] === undefined ? "" : r[f]; }))); });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(dat), "Course Data");
     XLSX.writeFile(wb, "Master_Course_Register.xlsx");
     regStatus_("Register exported to Excel.");
   }
