@@ -2469,7 +2469,10 @@ function handleAuthFailure_(result) {
             if (seenSr[sr]) return;
             seenSr[sr] = true;
           }
+          var rowData = {};
+          FIELDS.forEach(function(f){ rowData[f] = (c[f] === undefined || c[f] === null) ? "" : String(c[f]); });
           rows.push({
+            data: rowData,
             progCode: prog.code,
             progName: prog.name,
             stageId: p.id,
@@ -2956,6 +2959,23 @@ function handleAuthFailure_(result) {
     if (e.code && (String(e.code).charAt(2) !== String(e.sem) || String(e.code).charAt(3) !== String(e.dept))) e.code = "";
   }
 
+  /* Columns that computeCourse() recalculates are not stored in the register's row copy. */
+  var REG_DERIVED = ["srNo","thTotal","thMin","faPrMin","saPrMin","slaMin","totalMarks"];
+  function regCompactRow_(data){
+    var out = {};
+    FIELDS.forEach(function(f){ if (REG_DERIVED.indexOf(f) === -1 && filled(data[f])) out[f] = String(data[f]); });
+    return out;
+  }
+  // The most completely filled row among all places a course is used (first one wins a tie).
+  function regPickRow_(usages){
+    var best = null, bestN = -1;
+    (usages || []).forEach(function(u){
+      if (!u.data) return;
+      var row = regCompactRow_(u.data), n = Object.keys(row).length;
+      if (n > bestN){ best = row; bestN = n; }
+    });
+    return best;
+  }
   function regApplyRows_(){
     var km = {}, added = 0;
     reg.entries.forEach(function(e){
@@ -2972,6 +2992,8 @@ function handleAuthFailure_(result) {
       e.usages.push(r);
     });
     reg.entries.forEach(function(e){
+      var rw = regPickRow_(e.usages);
+      if (rw && JSON.stringify(rw) !== JSON.stringify(e.row || null)){ e.row = rw; regDirty = true; }
       if (e.sem === "" && e.usages.length) e.sem = Math.min.apply(null, e.usages.map(function(u){ return semNo_(u.stageId); }));
       if (!e.abbr) e.abbr = regUniq_(e.usages.map(function(u){ return u.abbr; }))[0] || "";
     });
@@ -3423,7 +3445,7 @@ function handleAuthFailure_(result) {
         var ld = saved.data.data || saved.data;
         if (ld && Array.isArray(ld.entries)){
           reg = { year: ld.year || "27", nextId: ld.nextId || 1, ignore: ld.ignore || [], entries: ld.entries.map(function(e){
-            return { id: e.id, title: e.title, names: e.names && e.names.length ? e.names : [e.title], abbr: e.abbr || "", dept: e.dept === undefined ? "" : String(e.dept), sem: e.sem === "" || e.sem === undefined ? "" : parseInt(e.sem, 10), code: e.code || "", comments: e.comments || [], usages: [] };
+            return { id: e.id, title: e.title, names: e.names && e.names.length ? e.names : [e.title], abbr: e.abbr || "", dept: e.dept === undefined ? "" : String(e.dept), sem: e.sem === "" || e.sem === undefined ? "" : parseInt(e.sem, 10), code: e.code || "", comments: e.comments || [], row: (e.row && typeof e.row === "object") ? e.row : null, usages: [] };
           }) };
           regDirty = false;
         }
@@ -3450,13 +3472,13 @@ function handleAuthFailure_(result) {
     regStatus_("Saving the register online...");
     showLoader("Saving the course register...");
     var payload = { formType: "LAS_COURSE_REGISTER", year: reg.year, nextId: reg.nextId, ignore: reg.ignore,
-      entries: reg.entries.map(function(e){ return { id: e.id, title: e.title, names: e.names, abbr: e.abbr || "", dept: e.dept, sem: e.sem, code: e.code, comments: e.comments }; }) };
+      entries: reg.entries.map(function(e){ return { id: e.id, title: e.title, names: e.names, abbr: e.abbr || "", dept: e.dept, sem: e.sem, code: e.code, comments: e.comments, row: e.row || null }; }) };
     fetch(GOOGLE_SCRIPT_URL, {
       method: "POST", mode: "cors", headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({ formType: FORM_TYPE, token: getSessionToken_(), recordKey: REG_KEY, courseCode: "REGISTER", courseTitle: "Master course register", data: payload })
     }).then(function(r){ return r.json(); }).then(function(result){
       if (handleAuthFailure_(result)) return;
-      if (result.success){ regDirty = false; regUpdateCount_(); regStatus_("Register saved online (" + reg.entries.length + " courses)."); }
+      if (result.success){ regDirty = false; setRegisterCourses_(reg.entries); regUpdateCount_(); regStatus_("Register saved online (" + reg.entries.length + " courses)."); }
       else regStatus_(result.message || "Online save failed.", true);
     }).catch(function(err){ console.error(err); regStatus_("Online save failed. Check the Web App URL and deployment access.", true); })
     .finally(function(){ hideLoader(); });
@@ -3563,16 +3585,54 @@ function handleAuthFailure_(result) {
   function applyCommonSubject_(idx, subj){
     var c = cur().courses[idx];
     if (!c) return;
-    COMMON_FIELDS.forEach(function(f){ c[f] = subj[f] === undefined || subj[f] === null ? "" : String(subj[f]); });
+    COMMON_FIELDS.forEach(function(f){
+      if (subj._partial && !filled(subj[f])) return;
+      c[f] = subj[f] === undefined || subj[f] === null ? "" : String(subj[f]);
+    });
     if (state.current === "exit2") c.notional = "";   // Second Year Exit: no Notional Learning Hrs/Week
     computeCourse(c, state.current);
     renderCourseTable();
     recordHistory(true);
-    setStatus('Row filled from common subject "' + (subj.title || subj.code) + '".');
+    setStatus('Row filled from ' + (subj._reg ? 'course register' : 'common subject') + ' "' + (subj.title || subj.code) + '".');
   }
 
   /* Custom drop-down (instead of a native <datalist>) so that choosing an entry
      ALWAYS fills the row - even when the cell already holds that same title. */
+  var REGISTER_COURSES = [], suggestCache = null;
+  function setRegisterCourses_(entries){
+    REGISTER_COURSES = (entries || []).filter(function(e){ return filled(e.title); }).map(function(e){
+      var row = (e.row && typeof e.row === "object") ? e.row : {}, sbj = {};
+      COMMON_FIELDS.forEach(function(f){ sbj[f] = (row[f] === undefined || row[f] === null) ? "" : String(row[f]); });
+      sbj.title = e.title;
+      sbj.abbr = e.abbr || sbj.abbr;
+      sbj.code = e.code || sbj.code;          // the register's code is the official one
+      sbj._names = (e.names || []).join(" ");
+      sbj._partial = !e.row;                  // saved before row data was stored: fill title/abbr/code only
+      sbj._reg = true;
+      return sbj;
+    });
+    suggestCache = null;
+  }
+  function loadRegisterCourses_(){
+    if (!GOOGLE_SCRIPT_URL || GOOGLE_SCRIPT_URL.indexOf("PASTE_YOUR_") === 0) return Promise.resolve();
+    return regGetSaved_().then(function(saved){
+      if (saved && saved.authRequired){ handleAuthFailure_(saved); return; }
+      if (saved && saved.success && saved.data){
+        var ld = saved.data.data || saved.data;
+        if (ld && Array.isArray(ld.entries)) setRegisterCourses_(ld.entries);
+      }
+    });
+  }
+  function suggestSource_(){
+    if (suggestCache) return suggestCache;
+    var seen = {};
+    REGISTER_COURSES.forEach(function(s){
+      seen[regKey_(s.title)] = 1;
+    });
+    var extra = COMMON_SUBJECTS.filter(function(s){ return !seen[regKey_(s.title)]; });
+    suggestCache = REGISTER_COURSES.concat(extra);
+    return suggestCache;
+  }
   var suggestEl = null, suggestCtx = null;
   function hideSuggest_(){ if (suggestEl) suggestEl.style.display = "none"; suggestCtx = null; }
   function ensureSuggest_(){
@@ -3600,7 +3660,7 @@ function handleAuthFailure_(result) {
       d.style.cssText = "padding:6px 10px;cursor:pointer;border-bottom:1px solid #f1f5f9;" + (i === ctx.active ? "background:#f3e8ff;" : "");
       var t = document.createElement("div"); t.style.fontWeight = "600"; t.textContent = s.title || s.code || "";
       var m = document.createElement("div"); m.style.cssText = "font-size:11px;color:#64748b;";
-      m.textContent = [s.code, s.abbr, s.type].filter(filled).join("  \u00b7  ");
+      m.textContent = [s.code, s.abbr, s.type].filter(filled).join("  \u00b7  ") + (s._reg && s._partial ? "  \u00b7  (title / code only)" : "");
       d.appendChild(t); d.appendChild(m);
       d.addEventListener("mousedown", function(e){ e.preventDefault(); pickSuggest_(ctx, i); });
       d.addEventListener("mouseenter", function(){ ctx.active = i; });
@@ -3608,11 +3668,12 @@ function handleAuthFailure_(result) {
     });
   }
   function showSuggest_(input, field, idx){
-    if (!COMMON_SUBJECTS.length) { hideSuggest_(); return; }
+    var src = suggestSource_();
+    if (!src.length) { hideSuggest_(); return; }
     var q = input.value.trim().toUpperCase();
-    var items = COMMON_SUBJECTS.filter(function(s){
-      return !q || [s.title, s.code, s.abbr].join(" ").toUpperCase().indexOf(q) > -1;
-    }).slice(0, 60);
+    var items = src.filter(function(s){
+      return !q || [s.title, s.code, s.abbr, s._names].join(" ").toUpperCase().indexOf(q) > -1;
+    }).slice(0, 500);
     if (!items.length) { hideSuggest_(); return; }
     var el = ensureSuggest_();
     suggestCtx = { input: input, field: field, idx: idx, items: items, active: -1 };
@@ -3650,6 +3711,7 @@ function handleAuthFailure_(result) {
   }
 
   function refreshCommonLists_(){
+    suggestCache = null;
     var dt = document.getElementById("dlCommonTitles"), dc = document.getElementById("dlCommonCodes");
     function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;"); }
     var tHtml = "", cHtml = "";
@@ -3849,6 +3911,7 @@ function handleAuthFailure_(result) {
   });
 
   loadCommonSubjects_(true);   // every user: fetch the published list for the drop-downs
+  loadRegisterCourses_();      // every user: course titles / codes / rows from the course code register
 
   switchPage("sem1"); // init will trigger initial recordHistory pass
 
