@@ -664,7 +664,7 @@ function handleAuthFailure_(result) {
   #registerOverlay table.rg-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12.5px; }
   #registerOverlay .rg-table th { position: sticky; top: 0; z-index: 2; background: #f5f3ff; color: #4c1d95; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; text-align: left; white-space: nowrap; padding: 8px 10px; border-bottom: 2px solid #ddd6fe; user-select: none; }
   #registerOverlay .rg-table th[title]:hover { background: #ede9fe; }
-  #registerOverlay .rg-table td { padding: 6px 10px; border-bottom: 1px solid #eef2f7; vertical-align: middle; text-align: left; line-height: 1.35; }
+  #registerOverlay .rg-table td { padding: 5px 10px; border-bottom: 1px solid #eef2f7; vertical-align: middle; text-align: left; line-height: 1.35; }
   #registerOverlay .rg-table tr:hover td { background: #faf5ff; }
   #registerOverlay .rg-table .rg-c { text-align: center; }
   #registerOverlay .rg-table th.rg-narrow, #registerOverlay .rg-table td.rg-narrow { width: 1%; white-space: nowrap; padding-left: 6px; padding-right: 6px; }
@@ -678,6 +678,15 @@ function handleAuthFailure_(result) {
   #registerOverlay .rg-code.has { background: #f0fdf4; border-color: #86efac; color: #15803d; }
   #registerOverlay .rg-code::placeholder { color: #cbd5e1; font-weight: 500; letter-spacing: 0; }
   #registerOverlay .rg-empty { text-align: center !important; color: var(--text-muted); padding: 30px !important; }
+  #registerOverlay .rg-clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  #registerOverlay .rg-inl { display: flex; align-items: center; gap: 6px; }
+  #registerOverlay .rg-cmt { flex: 1; min-width: 0; max-width: 190px; font-size: 11.5px; color: #334155; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #registerOverlay .btn.rg-tag { padding: 0 7px; font-size: 10.5px; margin-top: 2px; border-radius: 7px; color: #b45309; border-color: #fcd34d; background: #fffbeb; }
+  #registerOverlay .rg-hero { padding: 8px 16px; }
+  #registerOverlay #regDeptFilter, #registerOverlay #regProgFilter, #registerOverlay #regFlagFilter, #registerOverlay #regBulkDept { max-width: 165px; }
+  #registerOverlay .rg-table td.rg-ttl { max-width: 400px; }
+  #registerOverlay .rg-hero h2 { font-size: 18px; }
+  #registerOverlay .rg-table td.rg-cm { min-width: 150px; max-width: 240px; }
   #registerOverlay .btn.rg-mini { padding: 2px 8px; font-size: 11px; margin-top: 3px; border-radius: 8px; }
 </style>
 <div id="registerOverlay" style="display:none;position:fixed;inset:0;z-index:90;overflow:hidden;">
@@ -724,6 +733,8 @@ function handleAuthFailure_(result) {
         <button class="btn btn-outline btn-compact" id="btnRegClearFilters">Clear filters</button>
         <span class="rg-grow"></span>
         <span class="rg-muted" id="regShown"></span>
+      </div>
+      <div class="rg-row" id="regBulkBar" style="display:none;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);">
         <span class="rg-muted" id="regSelCount">0 selected</span>
         <select id="regBulkDept"></select>
         <button class="btn btn-outline btn-compact" id="btnRegBulkDept">Allocate selected</button>
@@ -3102,6 +3113,8 @@ function handleAuthFailure_(result) {
     });
     return best;
   }
+  function regSchemeSem_(e){ return (e.usages || []).length ? Math.min.apply(null, e.usages.map(function(u){ return semNo_(u.stageId); })) : ""; }
+  function regSchemeAbbr_(e){ return regUniq_((e.usages || []).map(function(u){ return u.abbr; }))[0] || ""; }
   var regChg = { abbr: 0, sem: 0, row: 0, semKept: 0 };
   function regApplyRows_(){
     var km = {}, added = 0;
@@ -3123,16 +3136,15 @@ function handleAuthFailure_(result) {
       var rw = regPickRow_(e.usages);
       if (rw && !e.rowEdited && JSON.stringify(rw) !== JSON.stringify(e.row || null)){ e.row = rw; regDirty = true; regChg.row++; }
       if (e.usages.length){
-        // semester follows the schemes unless it was set by hand; a course that already has a code keeps its semester digit
-        if (!e.semManual || e.sem === ""){
-          var ns = Math.min.apply(null, e.usages.map(function(u){ return semNo_(u.stageId); }));
-          if (e.sem !== ns){
-            if (e.code && String(e.code).charAt(2) !== String(ns)) regChg.semKept++;
-            else { e.sem = ns; regDirty = true; regChg.sem++; }
-          }
+        // A hand-set value stays only while the scheme still says what it said when you set it;
+        // as soon as the scheme changes, the register follows the scheme again.
+        var ns = regSchemeSem_(e), na = regSchemeAbbr_(e);
+        if (e.semManual && (e.semBase === undefined || e.semBase !== ns)) e.semManual = false;
+        if (!e.semManual && e.sem !== ns){
+          if (e.code && String(e.code).charAt(2) !== String(ns)) regChg.semKept++;   // the code carries the semester digit
+          else { e.sem = ns; regDirty = true; regChg.sem++; }
         }
-        // abbreviation follows the schemes unless it was edited by hand
-        var na = regUniq_(e.usages.map(function(u){ return u.abbr; }))[0] || "";
+        if (e.abbrManual && (e.abbrBase === undefined || e.abbrBase !== na)) e.abbrManual = false;
         if (na && !e.abbrManual && e.abbr !== na){ e.abbr = na; regDirty = true; regChg.abbr++; }
         else if (!e.abbr && na) e.abbr = na;
       }
@@ -3274,7 +3286,9 @@ function handleAuthFailure_(result) {
       return am[k].some(function(e){ return regDupOthers_(e, am).length > 0; });
     }).length;
     document.getElementById("regCount").textContent = n + " course(s) \u00b7 " + un + " not allocated \u00b7 " + cd + " with code" + (dups ? " \u00b7 " + dups + " duplicate abbreviation(s)" : "") + (regDirty ? " \u00b7 unsaved changes" : "");
-    document.getElementById("regSelCount").textContent = Object.keys(regSel).filter(function(k){ return regSel[k]; }).length + " selected";
+    var nSel = Object.keys(regSel).filter(function(k){ return regSel[k]; }).length;
+    document.getElementById("regSelCount").textContent = nSel + " selected";
+    document.getElementById("regBulkBar").style.display = nSel ? "flex" : "none";
   }
   var regSort = { key: "title", dir: 1 };
 
@@ -3405,7 +3419,7 @@ function handleAuthFailure_(result) {
       cb.addEventListener("change", function(){ regSel[e.id] = cb.checked; regUpdateCount_(); });
       c[0].appendChild(cb);
       c[1].textContent = i + 1;
-      var tt = document.createElement("div"); tt.style.fontWeight = "600"; tt.textContent = e.title; c[2].appendChild(tt);
+      var tt = document.createElement("div"); tt.className = "rg-clamp"; tt.title = e.title; tt.textContent = e.title; c[2].appendChild(tt);
       if (e.names.length > 1){
         var nm = document.createElement("div"); nm.style.cssText = "font-size:11px;color:#7c3aed;";
         nm.textContent = "\u26d3 " + e.names.length + " names merged: " + e.names.join(" / ");
@@ -3414,7 +3428,8 @@ function handleAuthFailure_(result) {
         sp.addEventListener("click", function(){ regSplit_(e); });
         c[2].appendChild(sp);
       }
-      c[3].textContent = regUsedIn_(e) || "\u2014 not in any scheme \u2014";
+      var usedTxt = regUsedIn_(e) || "\u2014 not in any scheme \u2014";
+      var ud = document.createElement("div"); ud.className = "rg-clamp"; ud.textContent = usedTxt; ud.title = usedTxt; c[3].appendChild(ud);
       c[4].textContent = regUniq_((e.usages || []).map(function(u){ return u.code; })).join(", ") || DASH;
       c[4].className += " rg-mono";
 
@@ -3432,8 +3447,15 @@ function handleAuthFailure_(result) {
       } else if (e.code && !ab){
         ai.style.background = "#fef9c3"; ai.title = "No abbreviation";
       }
-      ai.addEventListener("change", function(){ e.abbr = ai.value.trim().toUpperCase(); e.abbrManual = true; regDirty = true; regRender_(); });
+      ai.addEventListener("change", function(){ e.abbr = ai.value.trim().toUpperCase(); e.abbrManual = true; e.abbrBase = regSchemeAbbr_(e); regDirty = true; regRender_(); });
       c[5].appendChild(ai);
+      var scAb = regSchemeAbbr_(e);
+      if (scAb && scAb !== e.abbr){
+        var at = document.createElement("button"); at.className = "btn btn-outline btn-compact rg-tag";
+        at.textContent = "scheme: " + scAb; at.title = "The scheme uses this abbreviation. Click to apply.";
+        at.addEventListener("click", function(){ e.abbr = scAb; e.abbrManual = false; regDirty = true; regRender_(); });
+        c[5].appendChild(document.createElement("br")); c[5].appendChild(at);
+      }
       var sch = regUniq_((e.usages || []).map(function(u){ return u.abbr; }));
       if (sch.length > 1){
         var wn = document.createElement("div"); wn.style.cssText = "font-size:10.5px;color:#b45309;";
@@ -3445,8 +3467,19 @@ function handleAuthFailure_(result) {
       var ss = document.createElement("select"); ss.style.cssText = "padding:3px;border:1px solid #cbd5e1;border-radius:5px;";
       ss.innerHTML = '<option value="">\u2013</option>' + [1,2,3,4,5,6].map(function(n){ return '<option value="' + n + '">' + n + '</option>'; }).join("");
       ss.value = String(e.sem);
-      ss.addEventListener("change", function(){ e.sem = ss.value === "" ? "" : parseInt(ss.value, 10); e.semManual = true; regValidateCode_(e); regDirty = true; regRender_(); });
+      ss.addEventListener("change", function(){ e.sem = ss.value === "" ? "" : parseInt(ss.value, 10); e.semManual = true; e.semBase = regSchemeSem_(e); regValidateCode_(e); regDirty = true; regRender_(); });
       c[7].appendChild(ss);
+      var scSem = regSchemeSem_(e);
+      if (scSem !== "" && scSem !== e.sem){
+        var st = document.createElement("button"); st.className = "btn btn-outline btn-compact rg-tag";
+        st.textContent = "scheme: " + scSem;
+        st.title = "The scheme says semester " + scSem + ". Click to apply" + (e.code ? " (the code is cleared if it has a different semester digit)." : ".");
+        st.addEventListener("click", function(){
+          var had = e.code; e.sem = scSem; e.semManual = false; regValidateCode_(e); regDirty = true; regRender_();
+          regStatus_("Semester set to " + scSem + " for \u201c" + e.title + "\u201d." + (had && !e.code ? " Its old code was cleared \u2013 assign a new one." : ""));
+        });
+        c[7].appendChild(document.createElement("br")); c[7].appendChild(st);
+      }
       var spread = regSems_(e);
       if (spread.length > 1){ var w = document.createElement("span"); w.textContent = " \u26a0"; w.style.color = "#b45309"; w.title = "Used in different semesters: " + spread.join(", ") + ". The code carries one semester digit \u2013 choose it here."; c[7].appendChild(w); }
 
@@ -3465,23 +3498,29 @@ function handleAuthFailure_(result) {
       c[9].appendChild(ci);
 
       var nData = e.row ? Object.keys(e.row).length : 0;
-      var dv = document.createElement("div"); dv.style.cssText = "font-size:11.5px;color:" + (nData ? "#15803d" : "#b45309") + ";";
-      dv.textContent = nData ? ("\u2713 " + nData + " fields" + (e.rowEdited ? " (edited)" : "")) : "\u2014 none yet";
-      c[10].appendChild(dv);
+      var dwrap = document.createElement("div"); dwrap.className = "rg-inl";
+      var dv = document.createElement("span"); dv.style.cssText = "font-size:11.5px;white-space:nowrap;color:" + (nData ? "#15803d" : "#b45309") + ";";
+      dv.textContent = nData ? ("\u2713 " + nData + (e.rowEdited ? " (edited)" : "")) : "\u2014 none";
+      dv.title = nData ? nData + " fields stored; used to fill scheme rows" + (e.rowEdited ? " (edited by hand)" : "") : "No scheme data stored yet";
+      dwrap.appendChild(dv);
       var dvb = document.createElement("button"); dvb.className = "btn btn-outline btn-compact rg-mini";
-      dvb.textContent = "\u270e View / Edit";
+      dvb.textContent = "\u270e"; dvb.title = "View / edit the scheme data of this course";
       dvb.addEventListener("click", function(){ regEditRow_(e); });
-      c[10].appendChild(dvb);
+      dwrap.appendChild(dvb); c[10].appendChild(dwrap);
 
-      var cm = document.createElement("div"); cm.style.cssText = "max-height:84px;overflow:auto;font-size:11.5px;white-space:pre-wrap;color:#334155;";
-      cm.textContent = (e.comments || []).join("\n");
-      c[11].appendChild(cm);
-      var abn = document.createElement("button"); abn.className = "btn btn-outline btn-compact rg-mini"; abn.textContent = "\u270e Add comment";
+      var cwrap = document.createElement("div"); cwrap.className = "rg-inl";
+      var cm = document.createElement("span"); cm.className = "rg-cmt";
+      var cl = e.comments || [];
+      cm.textContent = cl.length ? cl[cl.length - 1] : "";
+      cm.title = cl.join("\n");
+      if (cl.length > 1) cm.textContent += "  (+" + (cl.length - 1) + " more)";
+      cwrap.appendChild(cm);
+      var abn = document.createElement("button"); abn.className = "btn btn-outline btn-compact rg-mini"; abn.textContent = "\uff0b"; abn.title = "Add comment";
       abn.addEventListener("click", function(){
         var t = prompt("Comment for \u201c" + e.title + "\u201d:");
         if (t && t.trim()){ e.comments.push("[" + regToday_() + "] " + t.trim()); regDirty = true; regRender_(); }
       });
-      c[11].appendChild(abn);
+      cwrap.appendChild(abn); c[11].appendChild(cwrap);
       body.appendChild(tr);
     });
     if (!list.length){
@@ -3643,7 +3682,9 @@ function handleAuthFailure_(result) {
         var ld = saved.data.data || saved.data;
         if (ld && Array.isArray(ld.entries)){
           reg = { year: ld.year || "27", nextId: ld.nextId || 1, ignore: ld.ignore || [], entries: ld.entries.map(function(e){
-            return { id: e.id, title: e.title, names: e.names && e.names.length ? e.names : [e.title], abbr: e.abbr || "", dept: e.dept === undefined ? "" : String(e.dept), sem: e.sem === "" || e.sem === undefined ? "" : parseInt(e.sem, 10), code: e.code || "", comments: e.comments || [], row: (e.row && typeof e.row === "object") ? e.row : null, rowEdited: !!e.rowEdited, abbrManual: !!e.abbrManual, semManual: !!e.semManual, usages: [] };
+            return { id: e.id, title: e.title, names: e.names && e.names.length ? e.names : [e.title], abbr: e.abbr || "", dept: e.dept === undefined ? "" : String(e.dept), sem: e.sem === "" || e.sem === undefined ? "" : parseInt(e.sem, 10), code: e.code || "", comments: e.comments || [], row: (e.row && typeof e.row === "object") ? e.row : null, rowEdited: !!e.rowEdited, abbrManual: !!e.abbrManual, semManual: !!e.semManual,
+              abbrBase: e.abbrBase === undefined || e.abbrBase === null ? undefined : String(e.abbrBase),
+              semBase: e.semBase === undefined || e.semBase === null ? undefined : (e.semBase === "" ? "" : parseInt(e.semBase, 10)), usages: [] };
           }) };
           regDirty = false;
         }
@@ -3676,7 +3717,7 @@ function handleAuthFailure_(result) {
       if (regChg.row) upd.push(regChg.row + " scheme-data row(s)");
       regStatus_(results.length + " of " + PROGRAMMES.length + " department record(s) read." + liveNote + " " + (added ? added + " new course(s) added. " : "No new courses. ")
         + (upd.length ? "Updated: " + upd.join(", ") + ". " : "Nothing else changed. ")
-        + (regChg.semKept ? regChg.semKept + " course(s) kept their semester because their code already carries it. " : "")
+        + (regChg.semKept ? regChg.semKept + " course(s) keep their old semester because their code carries it \u2013 click the amber \u201cscheme: n\u201d tag in the Sem column to apply. " : "")
         + (regDirty ? "Click \u201cSave Register Online\u201d to keep the changes." : ""), !results.length);
     }).catch(function(err){
       console.error(err);
@@ -3698,7 +3739,7 @@ function handleAuthFailure_(result) {
     if (curLen > 0) chunks.push(cur);
     // 2. main record: everything except the row data
     var payload = { formType: "LAS_COURSE_REGISTER", year: reg.year, nextId: reg.nextId, ignore: reg.ignore, rowParts: chunks.length,
-      entries: reg.entries.map(function(e){ return { id: e.id, title: e.title, names: e.names, abbr: e.abbr || "", dept: e.dept, sem: e.sem, code: e.code, comments: e.comments, abbrManual: e.abbrManual ? 1 : 0, semManual: e.semManual ? 1 : 0 }; }) };
+      entries: reg.entries.map(function(e){ return { id: e.id, title: e.title, names: e.names, abbr: e.abbr || "", dept: e.dept, sem: e.sem, code: e.code, comments: e.comments, abbrManual: e.abbrManual ? 1 : 0, semManual: e.semManual ? 1 : 0, abbrBase: e.abbrBase, semBase: e.semBase }; }) };
     // rows first, main record last, so the main record never points at rows that were not saved
     var chain = Promise.resolve();
     chunks.forEach(function(ch, i){
