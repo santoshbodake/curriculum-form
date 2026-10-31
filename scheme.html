@@ -633,35 +633,88 @@ function handleAuthFailure_(result) {
   </div>
 </div>
 
-<div id="registerOverlay" style="display:none;position:fixed;inset:0;z-index:90;background:#f1f5f9;overflow:auto;">
-  <div style="max-width:1500px;margin:0 auto;padding:20px 20px 80px;">
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-      <h2 style="margin:0;flex:1;min-width:280px;">Master Course Register &mdash; Course Code Allocation</h2>
-      <button class="btn btn-navy btn-compact" id="btnRegBack">&larr; Back to Form</button>
+<style id="regStyle">
+  #registerOverlay { background: linear-gradient(135deg, #f0f4ff 0%, #fdf4ff 50%, #f3f4f6 100%); font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color: var(--text-main); }
+  #registerOverlay .rg-wrap { max-width: 1600px; margin: 0 auto; padding: 22px 24px 90px; }
+  #registerOverlay .rg-hero { background: linear-gradient(120deg, #4f46e5 0%, #7c3aed 55%, #db2777 100%); color: #fff; border-radius: 18px; padding: 22px 26px; box-shadow: 0 12px 30px rgba(79,70,229,.28); }
+  #registerOverlay .rg-hero-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  #registerOverlay .rg-hero h2 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -.3px; }
+  #registerOverlay .rg-sub { margin-top: 4px; font-size: 13.5px; opacity: .9; }
+  #registerOverlay .rg-chip { display: inline-block; margin-top: 14px; background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.35); backdrop-filter: blur(4px); padding: 6px 14px; border-radius: 999px; font-size: 12.5px; font-weight: 500; }
+  #registerOverlay .rg-chip:empty { display: none; }
+  #registerOverlay .rg-card { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; margin-top: 14px; box-shadow: 0 2px 10px rgba(15,23,42,.05); }
+  #registerOverlay .rg-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  #registerOverlay .rg-grow { flex: 1; }
+  #registerOverlay .rg-title { font-size: 13.5px; font-weight: 700; color: #3730a3; }
+  #registerOverlay .rg-muted { font-size: 12.5px; color: var(--text-muted); }
+  #registerOverlay details.rg-card summary { cursor: pointer; font-weight: 600; font-size: 13.5px; color: #4338ca; }
+  #registerOverlay details.rg-card .hint { margin-top: 10px; font-size: 12.5px; }
+  #registerOverlay label.rg-lab { font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+  #registerOverlay select, #registerOverlay input[type="text"], #registerOverlay input:not([type]), #registerOverlay .rg-f { padding: 8px 10px; border: 1px solid var(--border-hover); border-radius: 10px; background: #fff; font: inherit; font-size: 13px; color: var(--text-main); }
+  #registerOverlay select:focus, #registerOverlay input:focus { outline: none; border-color: #7c3aed; box-shadow: 0 0 0 3px rgba(124,58,237,.18); }
+  #registerOverlay .rg-search { min-width: 260px; }
+  #registerOverlay .rg-tablecard { margin-top: 12px; background: #fff; border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 2px 10px rgba(15,23,42,.05); overflow: auto; max-height: 70vh; }
+  #registerOverlay table.rg-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+  #registerOverlay .rg-table th { position: sticky; top: 0; z-index: 2; background: #f5f3ff; color: #4c1d95; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; text-align: left; white-space: nowrap; padding: 11px 12px; border-bottom: 2px solid #ddd6fe; user-select: none; }
+  #registerOverlay .rg-table th[title]:hover { background: #ede9fe; }
+  #registerOverlay .rg-table td { padding: 10px 12px; border-bottom: 1px solid #eef2f7; vertical-align: middle; text-align: left; line-height: 1.4; }
+  #registerOverlay .rg-table tr:hover td { background: #faf5ff; }
+  #registerOverlay .rg-table .rg-c { text-align: center; }
+  #registerOverlay .rg-table th.rg-narrow, #registerOverlay .rg-table td.rg-narrow { width: 1%; white-space: nowrap; }
+  #registerOverlay .rg-table td.rg-title { min-width: 260px; max-width: 380px; }
+  #registerOverlay .rg-table td.rg-used { min-width: 170px; max-width: 260px; font-size: 12px; color: #475569; }
+  #registerOverlay .rg-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; }
+  #registerOverlay .rg-table select { max-width: 190px; padding: 5px 8px; }
+  #registerOverlay .rg-code { width: 92px; text-align: center; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13.5px; font-weight: 700; letter-spacing: .06em; padding: 6px 8px; }
+  #registerOverlay .rg-code.has { background: #f0fdf4; border-color: #86efac; color: #15803d; }
+  #registerOverlay .rg-code::placeholder { color: #cbd5e1; font-weight: 500; letter-spacing: 0; }
+  #registerOverlay .rg-empty { text-align: center !important; color: var(--text-muted); padding: 34px !important; }
+  #registerOverlay .btn.rg-mini { padding: 3px 9px; font-size: 11px; margin-top: 4px; border-radius: 8px; }
+</style>
+<div id="registerOverlay" style="display:none;position:fixed;inset:0;z-index:90;overflow:auto;">
+  <div class="rg-wrap">
+    <div class="rg-hero">
+      <div class="rg-hero-top">
+        <div>
+          <h2>Master Course Register</h2>
+          <div class="rg-sub">Course code allocation across all departments &middot; six semesters</div>
+        </div>
+        <button class="btn btn-outline btn-compact" id="btnRegBack">&larr; Back to Form</button>
+      </div>
+      <span class="rg-chip" id="regCount"></span>
     </div>
-    <div class="hint" style="margin-top:8px;">
-      Every course from the Saved-Online schemes of all departments (six semesters) is listed <b>once</b>; identical names are grouped automatically.
-      Use <b>Find Similar Names</b> to spot slightly different names, then <b>Merge</b> them &mdash; a comment is compulsory before any merge and is kept in the register.
-      Allocate each course to a department (or <b>Common to all</b>), then <b>Assign Codes</b>. Code format: <b>YY&nbsp;S&nbsp;D&nbsp;NN</b> = autonomy year, semester, department digit (0 = common, 1&ndash;9 = AN, AO, CE, CO, IH, EE, TE, ME, MK), serial.
-    </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px;">
-      <label style="font-size:13px;font-weight:600;">Autonomy year (YY)
-        <input id="regYear" maxlength="2" value="27" style="width:46px;text-align:center;margin-left:4px;padding:5px;border:1px solid #cbd5e1;border-radius:6px;">
-      </label>
-      <button class="btn btn-outline btn-compact" id="btnRegRefresh">&#8635; Refresh from Schemes</button>
-      <button class="btn btn-gold btn-compact" id="btnRegAssign">&#128290; Assign Codes</button>
-      <button class="btn btn-outline btn-compact" id="btnRegClearCodes">Clear All Codes</button>
-      <button class="btn btn-navy btn-compact" id="btnRegSave">&#9729; Save Register Online</button>
-      <button class="btn btn-outline btn-compact" id="btnRegExcel">&#128202; Export Excel</button>
-      <span id="regCount" style="font-size:12.5px;color:#475569;margin-left:6px;"></span>
-    </div>
-    <div class="status" id="regStatus" style="margin-top:8px;"></div>
 
-    <div style="background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:12px;margin-top:12px;">
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-        <b style="font-size:13.5px;">Similar course names</b>
-        <label style="font-size:12.5px;">Match level
-          <select id="regThreshold" style="padding:4px;border:1px solid #cbd5e1;border-radius:6px;">
+    <details class="rg-card">
+      <summary>How this page works</summary>
+      <div class="hint">
+        Every course from the Saved-Online schemes of all departments (six semesters, every elective) is listed <b>once</b>; identical names are grouped automatically.
+        Use <b>Find Similar Names</b> to spot slightly different names, then <b>Merge</b> them &mdash; a comment is compulsory before any merge and is kept in the register.
+        Allocate each course to a department (or <b>Common to all</b>), then <b>Assign Codes</b>. You can also <b>type a code directly</b> in the New Code column.
+        Code format: <b>YY&nbsp;S&nbsp;D&nbsp;NN</b> = autonomy year, semester, department digit (0 = common, 1&ndash;9 = AN, AO, CE, CO, IH, EE, TE, ME, MK), serial.
+      </div>
+    </details>
+
+    <div class="rg-card">
+      <div class="rg-row">
+        <label class="rg-lab">Autonomy year (YY)
+          <input id="regYear" type="text" maxlength="2" value="27" style="width:56px;text-align:center;">
+        </label>
+        <button class="btn btn-outline btn-compact" id="btnRegRefresh">&#8635; Refresh from Schemes</button>
+        <button class="btn btn-gold btn-compact" id="btnRegAssign">&#128290; Assign Codes</button>
+        <button class="btn btn-outline btn-compact" id="btnRegClearCodes">Clear All Codes</button>
+        <span class="rg-grow"></span>
+        <button class="btn btn-navy btn-compact" id="btnRegSave">&#9729; Save Register Online</button>
+        <button class="btn btn-outline btn-compact" id="btnRegExcel">&#128202; Export Excel</button>
+        <button class="btn btn-outline btn-compact" id="btnRegPdf">&#128213; Export PDF</button>
+      </div>
+      <div class="status" id="regStatus" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="rg-card">
+      <div class="rg-row">
+        <span class="rg-title">Similar course names</span>
+        <label class="rg-lab" style="font-weight:500;">Match level
+          <select id="regThreshold">
             <option value="0.9">90% (very close)</option>
             <option value="0.8" selected>80%</option>
             <option value="0.7">70%</option>
@@ -669,37 +722,41 @@ function handleAuthFailure_(result) {
           </select>
         </label>
         <button class="btn btn-outline btn-compact" id="btnRegFind">&#128269; Find Similar Names</button>
-        <span style="font-size:12px;color:#64748b;">Names that differ only by a number or roman numeral (e.g. Mathematics I / II) are never suggested.</span>
+        <span class="rg-muted">Names that differ only by a number or roman numeral (e.g. Mathematics I / II) are never suggested.</span>
       </div>
       <div id="regSuggestBox" style="margin-top:10px;"></div>
     </div>
 
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:14px;">
-      <input id="regSearch" placeholder="Search title / code..." style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;min-width:220px;">
-      <select id="regDeptFilter" style="padding:6px;border:1px solid #cbd5e1;border-radius:6px;"></select>
-      <select id="regProgFilter" style="padding:6px;border:1px solid #cbd5e1;border-radius:6px;" title="Courses used in this programme"></select>
-      <select id="regSemFilter" style="padding:6px;border:1px solid #cbd5e1;border-radius:6px;" title="Semester of the code">
-        <option value="">All semesters</option><option value="1">Sem 1</option><option value="2">Sem 2</option><option value="3">Sem 3</option><option value="4">Sem 4</option><option value="5">Sem 5</option><option value="6">Sem 6</option>
-      </select>
-      <select id="regCodeFilter" style="padding:6px;border:1px solid #cbd5e1;border-radius:6px;">
-        <option value="">Code: all</option><option value="with">With new code</option><option value="without">Without new code</option>
-      </select>
-      <select id="regFlagFilter" style="padding:6px;border:1px solid #cbd5e1;border-radius:6px;">
-        <option value="">Flags: all</option><option value="dupabbr">Duplicate abbreviation</option><option value="abbrmismatch">Same code, different abbreviation</option><option value="noabbr">Missing abbreviation</option>
-        <option value="multisem">Used in different semesters</option><option value="merged">Merged names</option><option value="orphan">Not in any scheme</option>
-      </select>
-      <button class="btn btn-outline btn-compact" id="btnRegClearFilters">Clear filters</button>
-      <span style="flex:1"></span>
-      <span style="font-size:12.5px;color:#475569;" id="regShown"></span>
-      <span style="font-size:12.5px;" id="regSelCount">0 selected</span>
-      <select id="regBulkDept" style="padding:6px;border:1px solid #cbd5e1;border-radius:6px;"></select>
-      <button class="btn btn-outline btn-compact" id="btnRegBulkDept">Allocate selected</button>
-      <button class="btn btn-gold btn-compact" id="btnRegMergeSel">&#128279; Merge selected&hellip;</button>
-      <button class="btn btn-outline btn-compact" id="btnRegClearSel">Clear selection</button>
+    <div class="rg-card">
+      <div class="rg-row">
+        <input id="regSearch" type="text" class="rg-search" placeholder="&#128269;  Search title / code...">
+        <select id="regDeptFilter"></select>
+        <select id="regProgFilter" title="Courses used in this programme"></select>
+        <select id="regSemFilter" title="Semester of the code">
+          <option value="">All semesters</option><option value="1">Sem 1</option><option value="2">Sem 2</option><option value="3">Sem 3</option><option value="4">Sem 4</option><option value="5">Sem 5</option><option value="6">Sem 6</option>
+        </select>
+        <select id="regCodeFilter">
+          <option value="">Code: all</option><option value="with">With new code</option><option value="without">Without new code</option>
+        </select>
+        <select id="regFlagFilter">
+          <option value="">Flags: all</option><option value="dupabbr">Duplicate abbreviation</option><option value="abbrmismatch">Same code, different abbreviation</option><option value="noabbr">Missing abbreviation</option>
+          <option value="multisem">Used in different semesters</option><option value="merged">Merged names</option><option value="orphan">Not in any scheme</option>
+        </select>
+        <button class="btn btn-outline btn-compact" id="btnRegClearFilters">Clear filters</button>
+      </div>
+      <div class="rg-row" style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);">
+        <span class="rg-muted" id="regShown"></span>
+        <span class="rg-grow"></span>
+        <span class="rg-muted" id="regSelCount">0 selected</span>
+        <select id="regBulkDept"></select>
+        <button class="btn btn-outline btn-compact" id="btnRegBulkDept">Allocate selected</button>
+        <button class="btn btn-gold btn-compact" id="btnRegMergeSel">&#128279; Merge selected&hellip;</button>
+        <button class="btn btn-outline btn-compact" id="btnRegClearSel">Clear selection</button>
+      </div>
     </div>
 
-    <div style="overflow:auto;margin-top:8px;background:#fff;border:1px solid #cbd5e1;border-radius:10px;">
-      <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+    <div class="rg-tablecard">
+      <table class="rg-table">
         <thead><tr id="regHead"></tr></thead>
         <tbody id="regBody"></tbody>
       </table>
@@ -2961,6 +3018,63 @@ function handleAuthFailure_(result) {
   function regSems_(e){ return regUniq_((e.usages || []).map(function(u){ return semNo_(u.stageId); })).sort(); }
 
   // a stored code only stays valid while its semester / department digits match the entry
+  /* A code typed by hand into the New Code column. */
+  function regSetCode_(e, raw){
+    var v = String(raw || "").replace(/\D/g, "");
+    function fail(msg){ regRender_(); regStatus_(msg, true); }
+    if (v === ""){
+      var had = !!e.code;
+      if (had){ e.code = ""; regDirty = true; }
+      regRender_(); regStatus_(had ? "Code removed for \u201c" + e.title + "\u201d." : ""); return;
+    }
+    if (v.length !== 6) return fail("A code must be exactly 6 digits: YY S D NN (for example 271301).");
+    var sem = parseInt(v.charAt(2), 10), dept = v.charAt(3);
+    if (sem < 1 || sem > 6) return fail("The third digit is the semester and must be 1 to 6.");
+    if (parseInt(dept, 10) > PROGRAMMES.length) return fail("The fourth digit is the department (0 = common, 1 to " + PROGRAMMES.length + ").");
+    var clash = reg.entries.filter(function(x){ return x !== e && x.code === v; })[0];
+    if (clash) return fail("Code " + v + " is already used by \u201c" + clash.title + "\u201d.");
+    if (e.sem !== "" && e.sem !== sem) return fail("The semester digit (" + sem + ") does not match this course's semester (" + e.sem + "). Change the Sem column first.");
+    if (e.dept !== "" && e.dept !== dept) return fail("The department digit (" + dept + ") does not match the department this course is allocated to. Change the Allocated To column first.");
+    if (e.sem === "") e.sem = sem;
+    if (e.dept === "") e.dept = dept;
+    e.code = v; regDirty = true;
+    regRender_(); regStatus_("Code " + v + " set for \u201c" + e.title + "\u201d. Click \u201cSave Register Online\u201d to keep it.");
+  }
+
+  /* PDF: opens a print view of the courses currently shown; choose "Save as PDF" as the destination. */
+  function regPdf_(){
+    var list = regLastList || [];
+    if (!list.length){ regStatus_("Nothing to export \u2013 no courses match the filters.", true); return; }
+    function pe(x){ return String(x === undefined || x === null ? "" : x).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+    var rows = list.map(function(e, i){
+      var other = e.names.filter(function(n){ return n !== e.title; }).join(" / ");
+      var alloc = e.dept === "" ? "Not allocated" : (e.dept === "0" ? "Common to all" : regDeptLabel_(e.dept));
+      return "<tr><td class='c'>" + (i + 1) + "</td><td class='c code'>" + pe(e.code || "\u2014") + "</td><td>" + pe(e.title)
+        + (other ? "<div class='sub'>Also: " + pe(other) + "</div>" : "") + "</td><td>" + pe(alloc) + "</td><td class='c'>" + pe(e.sem) + "</td><td class='c'>"
+        + pe(e.abbr || "") + "</td><td class='c'>" + pe(regUniq_((e.usages || []).map(function(u){ return u.credits ? tidy(u.credits) : ""; })).join(", ")) + "</td><td class='c'>"
+        + pe(regUniq_((e.usages || []).map(function(u){ return u.code; })).join(", ")) + "</td><td class='sm'>" + pe(regUsedIn_(e)) + "</td></tr>";
+    }).join("");
+    var withCode = list.filter(function(e){ return e.code; }).length;
+    var html = "<!DOCTYPE html><html><head><meta charset='utf-8'><title>Master Course Register</title><style>"
+      + "@page{size:A4 landscape;margin:10mm;}*{box-sizing:border-box;}"
+      + "body{font-family:Arial,Helvetica,sans-serif;font-size:9.5pt;color:#111;margin:0;}"
+      + ".head{border-bottom:3px solid #4f46e5;padding-bottom:6px;margin-bottom:8px;}"
+      + "h1{margin:0;font-size:16pt;color:#3730a3;}.meta{font-size:9pt;color:#475569;margin-top:2px;}"
+      + "table{width:100%;border-collapse:collapse;}thead{display:table-header-group;}tr{page-break-inside:avoid;}"
+      + "th{background:#ede9fe;color:#3730a3;font-size:8.5pt;text-transform:uppercase;letter-spacing:.03em;text-align:left;padding:6px 6px;border:1px solid #c4b5fd;}"
+      + "td{padding:5px 6px;border:1px solid #d6d9e0;vertical-align:middle;}tbody tr:nth-child(even) td{background:#f8f7ff;}"
+      + ".c{text-align:center;}.code{font-family:Consolas,monospace;font-weight:700;color:#15803d;}.sub{font-size:8pt;color:#6d28d9;margin-top:2px;}.sm{font-size:8.5pt;color:#334155;}"
+      + "</style></head><body><div class='head'><h1>Master Course Register &mdash; Course Code Allocation</h1><div class='meta'>Autonomy year "
+      + pe(document.getElementById("regYear").value) + " &nbsp;|&nbsp; " + list.length + " course(s), " + withCode + " with new code &nbsp;|&nbsp; Generated " + new Date().toLocaleDateString("en-GB")
+      + "</div></div><table><thead><tr><th class='c'>Sr</th><th class='c'>New Code</th><th>Course Title</th><th>Allocated To</th><th class='c'>Sem</th><th class='c'>Abbr.</th><th class='c'>Credits</th><th class='c'>Existing Code(s)</th><th>Used In</th></tr></thead><tbody>"
+      + rows + "</tbody></table></body></html>";
+    var w = window.open("", "_blank");
+    if (!w){ regStatus_("The browser blocked the PDF window. Allow pop-ups for this page and try again.", true); return; }
+    w.document.write(html); w.document.close();
+    setTimeout(function(){ try { w.focus(); w.print(); } catch (er) {} }, 400);
+    regStatus_("In the print window choose \u201cSave as PDF\u201d as the destination.");
+  }
+
   function regValidateCode_(e){
     if (e.code && (String(e.code).charAt(2) !== String(e.sem) || String(e.code).charAt(3) !== String(e.dept))) e.code = "";
   }
@@ -3169,6 +3283,8 @@ function handleAuthFailure_(result) {
     });
     return m;
   }
+  var regLastList = [];
+  var REG_CENTER = { 0: 1, 1: 1, 4: 1, 6: 1, 7: 1, 9: 1 };   // columns shown centred
   var REG_COLS = [
     { key: "sel",   label: "" },
     { key: "sr",    label: "Sr" },
@@ -3221,11 +3337,10 @@ function handleAuthFailure_(result) {
   }
   function regRender_(){
     var head = document.getElementById("regHead"), body = document.getElementById("regBody");
-    var cell = "border:1px solid #cbd5e1;padding:5px 7px;vertical-align:top;";
     head.innerHTML = "";
-    REG_COLS.forEach(function(c){
+    REG_COLS.forEach(function(c, ci){
       var th = document.createElement("th");
-      th.style.cssText = cell + "background:#e2e8f0;position:sticky;top:0;text-align:left;white-space:nowrap;";
+      th.className = (REG_CENTER[ci] ? "rg-c " : "") + (ci < 2 ? "rg-narrow" : "");
       var sortable = c.key !== "sel" && c.key !== "sr";
       th.textContent = c.label + (sortable && regSort.key === c.key ? (regSort.dir === 1 ? " \u25b2" : " \u25bc") : (sortable ? " \u21c5" : ""));
       if (sortable){
@@ -3256,10 +3371,15 @@ function handleAuthFailure_(result) {
       return r * regSort.dir;
     });
 
+    regLastList = list;
     body.innerHTML = "";
     list.forEach(function(e, i){
       var tr = document.createElement("tr");
-      for (var k = 0; k < REG_COLS.length; k++){ var td = document.createElement("td"); td.style.cssText = cell; tr.appendChild(td); }
+      for (var k = 0; k < REG_COLS.length; k++){
+        var td = document.createElement("td");
+        td.className = (REG_CENTER[k] ? "rg-c " : "") + (k < 2 ? "rg-narrow " : "") + (k === 2 ? "rg-title" : k === 3 ? "rg-used" : "");
+        tr.appendChild(td);
+      }
       var c = tr.children;
       var cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !!regSel[e.id];
       cb.addEventListener("change", function(){ regSel[e.id] = cb.checked; regUpdateCount_(); });
@@ -3270,12 +3390,13 @@ function handleAuthFailure_(result) {
         var nm = document.createElement("div"); nm.style.cssText = "font-size:11px;color:#7c3aed;";
         nm.textContent = "\u26d3 " + e.names.length + " names merged: " + e.names.join(" / ");
         c[2].appendChild(nm);
-        var sp = document.createElement("button"); sp.className = "btn btn-outline btn-compact"; sp.style.cssText = "margin-top:3px;padding:1px 6px;font-size:11px;"; sp.textContent = "Split";
+        var sp = document.createElement("button"); sp.className = "btn btn-outline btn-compact rg-mini"; sp.textContent = "Split";
         sp.addEventListener("click", function(){ regSplit_(e); });
         c[2].appendChild(sp);
       }
       c[3].textContent = regUsedIn_(e) || "\u2014 not in any scheme \u2014";
       c[4].textContent = regUniq_((e.usages || []).map(function(u){ return u.code; })).join(", ") || DASH;
+      c[4].className += " rg-mono";
 
       // abbreviation (editable, red when another course uses the same one)
       var ab = String(e.abbr || "").trim().toUpperCase(), others = regDupOthers_(e, am), clash = regMismatchOthers_(e);
@@ -3316,14 +3437,18 @@ function handleAuthFailure_(result) {
       ds.addEventListener("change", function(){ e.dept = ds.value; regValidateCode_(e); regDirty = true; regRender_(); });
       c[8].appendChild(ds);
 
-      c[9].textContent = e.code || DASH;
-      if (e.code) c[9].style.cssText += "font-weight:700;color:#15803d;font-family:monospace;font-size:13px;";
+      var ci = document.createElement("input"); ci.type = "text"; ci.maxLength = 6; ci.inputMode = "numeric";
+      ci.className = "rg-code" + (e.code ? " has" : ""); ci.value = e.code || ""; ci.placeholder = "YYSDNN";
+      ci.title = "Type a 6-digit code: YY (year) + S (semester) + D (department digit) + NN (serial). Leave empty to remove.";
+      ci.addEventListener("change", function(){ regSetCode_(e, ci.value); });
+      ci.addEventListener("keydown", function(ev){ if (ev.key === "Enter") ci.blur(); });
+      c[9].appendChild(ci);
 
       var nData = e.row ? Object.keys(e.row).length : 0;
       var dv = document.createElement("div"); dv.style.cssText = "font-size:11.5px;color:" + (nData ? "#15803d" : "#b45309") + ";";
       dv.textContent = nData ? ("\u2713 " + nData + " fields" + (e.rowEdited ? " (edited)" : "")) : "\u2014 none yet";
       c[10].appendChild(dv);
-      var dvb = document.createElement("button"); dvb.className = "btn btn-outline btn-compact"; dvb.style.cssText = "margin-top:3px;padding:1px 6px;font-size:11px;";
+      var dvb = document.createElement("button"); dvb.className = "btn btn-outline btn-compact rg-mini";
       dvb.textContent = "\u270e View / Edit";
       dvb.addEventListener("click", function(){ regEditRow_(e); });
       c[10].appendChild(dvb);
@@ -3331,7 +3456,7 @@ function handleAuthFailure_(result) {
       var cm = document.createElement("div"); cm.style.cssText = "max-height:84px;overflow:auto;font-size:11.5px;white-space:pre-wrap;color:#334155;";
       cm.textContent = (e.comments || []).join("\n");
       c[11].appendChild(cm);
-      var abn = document.createElement("button"); abn.className = "btn btn-outline btn-compact"; abn.style.cssText = "margin-top:3px;padding:1px 6px;font-size:11px;"; abn.textContent = "\u270e Add comment";
+      var abn = document.createElement("button"); abn.className = "btn btn-outline btn-compact rg-mini"; abn.textContent = "\u270e Add comment";
       abn.addEventListener("click", function(){
         var t = prompt("Comment for \u201c" + e.title + "\u201d:");
         if (t && t.trim()){ e.comments.push("[" + regToday_() + "] " + t.trim()); regDirty = true; regRender_(); }
@@ -3340,7 +3465,7 @@ function handleAuthFailure_(result) {
       body.appendChild(tr);
     });
     if (!list.length){
-      body.innerHTML = '<tr><td colspan="' + REG_COLS.length + '" style="' + cell + 'text-align:center;color:#64748b;">' + (reg.entries.length ? "No course matches the filters." : "No courses yet \u2013 click \u201cRefresh from Schemes\u201d.") + '</td></tr>';
+      body.innerHTML = '<tr><td colspan="' + REG_COLS.length + '" class="rg-empty">' + (reg.entries.length ? "No course matches the filters." : "No courses yet \u2013 click \u201cRefresh from Schemes\u201d.") + '</td></tr>';
     }
     regUpdateCount_();
     var shown = document.getElementById("regShown");
@@ -3647,6 +3772,7 @@ function handleAuthFailure_(result) {
   document.getElementById("btnRegRefresh").addEventListener("click", function(){ regRefresh_(false); });
   document.getElementById("btnRegSave").addEventListener("click", regSave_);
   document.getElementById("btnRegExcel").addEventListener("click", regExcel_);
+  document.getElementById("btnRegPdf").addEventListener("click", regPdf_);
   document.getElementById("btnRegAssign").addEventListener("click", regAssign_);
   document.getElementById("btnRegFind").addEventListener("click", regFindSimilar_);
   document.getElementById("btnRegClearCodes").addEventListener("click", function(){
