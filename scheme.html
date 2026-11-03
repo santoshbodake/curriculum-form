@@ -240,6 +240,11 @@ function handleAuthFailure_(result) {
     box-shadow: inset 0 0 0 2px #dc2626; border-radius: 4px;
   }
 
+  /* Values that differ from the Master Course Register */
+  table.scheme input.reg-diff, table.scheme select.reg-diff { background: #fef3c7 !important; box-shadow: inset 0 0 0 2px #f59e0b; border-radius: 4px; }
+  .reg-banner { display: none; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 10px; padding: 8px 12px; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 10px; color: #92400e; font-size: 13px; font-weight: 600; }
+  .reg-banner .btn { font-size: 12px; padding: 4px 10px; }
+  .semtabs button.has-diff::after { content: " \25cf"; color: #f59e0b; font-size: 11px; }
   /* Calculated green cells */
   table.scheme input.calc { 
     background: var(--calc-bg); font-weight: 700; color: var(--calc-text); 
@@ -433,6 +438,7 @@ function handleAuthFailure_(result) {
       <div class="dropdown-menu">
         <button type="button" class="dropdown-item" id="btnSaveLocal">&#128190; Save on this Computer</button>
         <button type="button" class="dropdown-item" id="btnSaveOnline">&#9729; Save Online</button>
+        <button type="button" class="dropdown-item" id="btnSaveAllDepts" style="display:none;" title="Admin: saves every department that has unsaved changes">&#9729; Save All Departments</button>
       </div>
     </div>
 
@@ -518,6 +524,7 @@ function handleAuthFailure_(result) {
 
   <section class="card">
     <h2>Course-wise Learning &amp; Assessment Scheme</h2>
+    <div class="reg-banner" id="regDiffBanner"></div>
     <div class="table-wrap">
       <table class="scheme" id="schemeTable">
         <thead>
@@ -675,6 +682,11 @@ function handleAuthFailure_(result) {
   #registerOverlay .rg-table select { max-width: 150px !important; padding: 4px 6px; }
   #registerOverlay .rg-table input[maxlength="20"] { width: 76px !important; padding: 4px 6px !important; }
   #registerOverlay .rg-code { width: 86px; text-align: center; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; font-weight: 700; letter-spacing: .05em; padding: 5px 6px; }
+  #registerOverlay .rg-code.dup { background: #fef2f2; border-color: #ef4444; color: #b91c1c; box-shadow: 0 0 0 2px rgba(239,68,68,.18); }
+  #registerOverlay .rg-duptag { display: block; margin-top: 2px; font-size: 10.5px; font-weight: 700; color: #b91c1c; }
+  #registerOverlay tr.rg-duprow td { background: #fef2f2; }
+  #registerOverlay .btn.rg-del { color: #b91c1c; border-color: #fca5a5; }
+  #registerOverlay .btn.rg-del:hover { background: #fee2e2; }
   #registerOverlay .rg-code.has { background: #f0fdf4; border-color: #86efac; color: #15803d; }
   #registerOverlay .rg-code::placeholder { color: #cbd5e1; font-weight: 500; letter-spacing: 0; }
   #registerOverlay .rg-empty { text-align: center !important; color: var(--text-muted); padding: 30px !important; }
@@ -728,7 +740,7 @@ function handleAuthFailure_(result) {
         </select>
         <select id="regFlagFilter">
           <option value="">Flags: all</option><option value="dupabbr">Duplicate abbreviation</option><option value="abbrmismatch">Same code, different abbreviation</option><option value="noabbr">Missing abbreviation</option>
-          <option value="multisem">Used in different semesters</option><option value="merged">Merged names</option><option value="orphan">Not in any scheme</option>
+          <option value="multisem">Used in different semesters</option><option value="dupcode">Duplicate new code</option><option value="merged">Merged names</option><option value="orphan">Not in any scheme</option>
         </select>
         <button class="btn btn-outline btn-compact" id="btnRegClearFilters">Clear filters</button>
         <span class="rg-grow"></span>
@@ -739,6 +751,7 @@ function handleAuthFailure_(result) {
         <select id="regBulkDept"></select>
         <button class="btn btn-outline btn-compact" id="btnRegBulkDept">Allocate selected</button>
         <button class="btn btn-gold btn-compact" id="btnRegMergeSel">&#128279; Merge selected&hellip;</button>
+        <button class="btn btn-outline btn-compact" id="btnRegDeleteSel" style="color:#b91c1c;border-color:#fca5a5;">&#128465; Delete selected</button>
         <button class="btn btn-outline btn-compact" id="btnRegClearSel">Clear selection</button>
       </div>
     </div>
@@ -986,6 +999,7 @@ function handleAuthFailure_(result) {
       historyIndex = historyStack.length - 1;
       updateUndoRedoUI();
       onlineDirty = true;
+      if (IS_ADMIN) adminRefreshOptions_();
     };
     if (immediate) action();
     else historyTimeout = setTimeout(action, 400);
@@ -1144,6 +1158,7 @@ function handleAuthFailure_(result) {
 
   progSelect.addEventListener("change", function(){
     if (RESTRICTED_PROG) { progSelect.value = RESTRICTED_PROG.code; return; }
+    if (IS_ADMIN) { adminSwitch_(progSelect.value); return; }
     state.programmeCode = progSelect.value;
     progCode.value = progSelect.value || "";
     recordHistory(true);
@@ -1234,11 +1249,13 @@ function handleAuthFailure_(result) {
 
       var tdType = document.createElement("td");
       var sel = document.createElement("select");
+      sel.dataset.field = "type"; sel.dataset.idx = idx;
       sel.innerHTML = '<option value="">'+DASH+'</option>' + COURSE_TYPES.map(function(t){
         return '<option value="'+t+'"'+(t===course.type?" selected":"")+'>'+t+'</option>';
       }).join("");
       sel.addEventListener("change", function(){ 
         cur().courses[idx].type = sel.value; 
+        markRegDiffs_();
         recordHistory(true); 
       });
       tdType.appendChild(sel);
@@ -1268,6 +1285,7 @@ function handleAuthFailure_(result) {
       courseBody.appendChild(tr);
     });
     recalcAll();
+    markRegDiffs_();
   }
 
   function cellInput(idx, field, value, isLeft){
@@ -1301,6 +1319,7 @@ function handleAuthFailure_(result) {
         if (UPPER.indexOf(field) > -1 || TEXTY.indexOf(field) > -1) v = v.toUpperCase();
         cur().courses[idx][field] = v;
         recalcAll();
+        markRegDiffs_();
         recordHistory(false);
       });
       if (TEXTY.indexOf(field) > -1){
@@ -1594,6 +1613,7 @@ function handleAuthFailure_(result) {
     if (submitBtn) submitBtn.disabled = locked;
     document.querySelectorAll("input, textarea, select").forEach(function(el){
       if (el.id === "fileInput" || el.id === "excelInput" || el.id === "commonExcelInput") return;
+      if (IS_ADMIN && (el.id === "progSelect" || (el.closest && el.closest("#registerOverlay")))) return;   // the admin must always be able to switch department / edit the register
       el.disabled = locked;
     });
   }
@@ -1635,7 +1655,7 @@ function handleAuthFailure_(result) {
     .then(function(r){ return r.json(); })
     .then(function(result){
       if (handleAuthFailure_(result)) return;
-      if (result.success){ markSaved(); onlineDirty = false; setStatus("All eight stages saved online in one record."); }
+      if (result.success){ markSaved(); onlineDirty = false; if (IS_ADMIN) adminAfterSave_(); setStatus("All eight stages saved online in one record."); }
       else if (result.locked){ applyLockState(true); setStatus(result.message || "Save blocked - form is locked.", true); }
       else setStatus(result.message || "Online save failed.", true);
     })
@@ -1735,6 +1755,7 @@ function handleAuthFailure_(result) {
           markSaved();
           onlineDirty = false;
           applyLockState(!!result.locked);
+          if (IS_ADMIN && state.programmeCode){ var le = adminEntry_(state.programmeCode); le.state = state; le.baseline = adminKey_(state); le.dirty = false; le.locked = !!result.locked; le.failed = false; adminRefreshOptions_(); }
           setStatus(result.locked
             ? "Data loaded. This record is LOCKED (submitted to moderator)."
             : (auto ? "Logged in as " + CURRENT_USER + " — " + RESTRICTED_PROG.code + " saved data loaded automatically."
@@ -1760,7 +1781,7 @@ function handleAuthFailure_(result) {
   window.addEventListener("beforeunload", function(e){
     // Warn specifically when there is data that has not yet been saved ONLINE —
     // saving locally or to a file does not clear this, since it does not reach the server.
-    if (hasAnyData() && onlineDirty){
+    if ((hasAnyData() && onlineDirty) || (IS_ADMIN && adminAnyDirty_())){
       e.preventDefault();
       e.returnValue = "You have data that has not been Saved Online yet. If you leave this page now, it will not be on the server. Continue?";
     }
@@ -2608,8 +2629,9 @@ function handleAuthFailure_(result) {
     var out = '<div class="doctitle">ALL DEPARTMENT SUMMARY</div>'
       + '<div class="subtitle">Consolidated from Saved-Online data across ' + results.length + ' department(s) &mdash; six semesters only</div>';
 
+    var cutA = out.length;
     // 1. All subjects
-    out += '<h4>1. All Subjects (All Departments &amp; Semesters)</h4>';
+    out += '<h4>7. All Subjects (All Departments &amp; Semesters)</h4>';
     out += '<table><thead><tr><th style="width:60px;">Sr No</th><th>Course Code</th><th>Course Name</th><th>Programme</th><th>Semester</th></tr></thead><tbody>';
     rows.forEach(function(r, i){
       out += '<tr><td>' + (i + 1) + '</td><td>' + (r.code || DASH) + '</td><td class="left">' + (r.title || DASH)
@@ -2620,7 +2642,7 @@ function handleAuthFailure_(result) {
 
     // 2. Unique by Course Code
     var byCode = groupBy(rows.filter(function(r){ return r.code; }), function(r){ return r.code; });
-    out += '<h4>2. Unique Subjects by Course Code</h4>';
+    out += '<h4>8. Unique Subjects by Course Code</h4>';
     out += '<table><thead><tr><th style="width:60px;">Sr No</th><th>Course Code</th><th>Course Name</th><th>Programme(s)</th><th>Semester(s)</th></tr></thead><tbody>';
     byCode.order.forEach(function(code, i){
       var items = byCode.map[code];
@@ -2634,7 +2656,7 @@ function handleAuthFailure_(result) {
 
     // 3. Unique by Course Name
     var byName = groupBy(rows.filter(function(r){ return r.title; }), function(r){ return r.title; });
-    out += '<h4>3. Unique Subjects by Course Name</h4>';
+    out += '<h4>9. Unique Subjects by Course Name</h4>';
     out += '<table><thead><tr><th style="width:60px;">Sr No</th><th>Course Name</th><th>Course Code(s)</th><th>Programme(s)</th><th>Semester(s)</th></tr></thead><tbody>';
     byName.order.forEach(function(title, i){
       var items = byName.map[title];
@@ -2646,8 +2668,9 @@ function handleAuthFailure_(result) {
     if (!byName.order.length) out += '<tr><td colspan="5">' + DASH + '</td></tr>';
     out += '</tbody></table>';
 
+    var cutB = out.length;
     // 4. Department-wise summary
-    out += '<h4>4. Department-wise Summary</h4>';
+    out += '<h4>1. Department-wise Summary</h4>';
     out += '<table><thead><tr><th style="width:60px;">Sr No</th><th>Department</th><th>Total Course Entries</th><th>Unique Courses (by Code)</th><th>Total Credits</th><th>Total Marks</th></tr></thead><tbody>';
     results.forEach(function(item, i){
       var deptRows = rows.filter(function(r){ return r.progCode === item.prog.code; });
@@ -2662,7 +2685,7 @@ function handleAuthFailure_(result) {
     out += '</tbody></table>';
 
     // 5. Semester-wise summary (all departments combined, six semesters only)
-    out += '<h4>5. Semester-wise Summary (All Departments)</h4>';
+    out += '<h4>2. Semester-wise Summary (All Departments)</h4>';
     out += '<table><thead><tr><th style="width:60px;">Sr No</th><th>Semester</th><th>Total Course Entries</th><th>Total Credits</th><th>Total Marks</th></tr></thead><tbody>';
     SEM_PAGES.forEach(function(p, i){
       var stRows = rows.filter(function(r){ return r.stageId === p.id; });
@@ -2674,7 +2697,7 @@ function handleAuthFailure_(result) {
     out += '</tbody></table>';
 
     // 6. Department comparison (credits by semester)
-    out += '<h4>6. Department Comparison &mdash; Credits by Semester</h4>';
+    out += '<h4>3. Department Comparison &mdash; Credits by Semester</h4>';
     out += '<table><thead><tr><th class="left">Department</th>';
     SEM_PAGES.forEach(function(p){ out += '<th>' + p.tab + '</th>'; });
     out += '<th>Total Credits</th><th>Total Marks</th></tr></thead><tbody>';
@@ -2697,7 +2720,7 @@ function handleAuthFailure_(result) {
 
     // 7. Same course code used with different course titles
     var dupRows = dupCodeDiffTitle_(rows);
-    out += '<h4>7. Courses with Duplicate Course Code but Different Course Title</h4>';
+    out += '<h4>4. Courses with Duplicate Course Code but Different Course Title</h4>';
     out += '<table><thead><tr><th style="width:60px;">Sr No</th><th>Course Code</th><th>Course Title</th><th>Programme</th><th>Semester</th><th>Type</th><th>Credits</th></tr></thead><tbody>';
     dupRows.forEach(function(r, i){
       out += '<tr><td>' + (i + 1) + '</td><td style="color:#b91c1c;font-weight:700;">' + r.code + '</td><td class="left">' + r.title
@@ -2708,7 +2731,7 @@ function handleAuthFailure_(result) {
 
     // 8. Final Reports - Curriculum at a Glance, all departments side by side
     var finalData = results.map(function(item){ return { item: item, d: finalReportData_(item.data, item.prog) }; });
-    out += '<h4>8. Final Reports &mdash; Curriculum at a Glance (All Departments)</h4>';
+    out += '<h4>5. Final Reports &mdash; Curriculum at a Glance (All Departments)</h4>';
     out += '<table><thead><tr><th class="left">Particulars</th>';
     finalData.forEach(function(fd){ out += '<th>' + fd.item.prog.code + '</th>'; });
     out += '</tr></thead><tbody>';
@@ -2727,13 +2750,15 @@ function handleAuthFailure_(result) {
     out += '</tbody></table>';
 
     // 8. Final Reports - complete set (Glance, Credit Distribution, Semester-wise Totalling) per department
-    out += '<h4>9. Final Reports &mdash; Department-wise (Complete)</h4>';
+    out += '<h4>6. Final Reports &mdash; Department-wise (Complete)</h4>';
     results.forEach(function(item, i){
-      out += '<div style="margin-top:14px;padding-top:6px;border-top:2px solid #7c3aed;font-weight:700;">9.' + (i + 1) + ' &nbsp;'
+      out += '<div style="margin-top:14px;padding-top:6px;border-top:2px solid #7c3aed;font-weight:700;">6.' + (i + 1) + ' &nbsp;'
         + item.prog.code + ' - ' + item.prog.name + '</div>';
       out += buildReportsHTML(item.data, item.prog);
     });
 
+    // the three long lists (all subjects, unique by code, unique by name) go last
+    out = out.slice(0, cutA) + out.slice(cutB) + out.slice(cutA, cutB);
     out += '<div class="note">Generated from the latest data saved online ("Save Online") for each department at the time this report was run. '
       + 'Departments with no saved online record are not included. First Year Exit and Second Year Exit stage data is not considered anywhere in this summary &mdash; '
       + 'only the six regular semesters.</div>';
@@ -2823,6 +2848,9 @@ function handleAuthFailure_(result) {
       XLSX.utils.book_append_sheet(wb, ws, nm);
     });
 
+    // the three long lists (first three sheets) go last
+    var firstThree = wb.SheetNames.splice(0, 3);
+    wb.SheetNames = wb.SheetNames.concat(firstThree);
     return wb;
   }
 
@@ -3035,6 +3063,25 @@ function handleAuthFailure_(result) {
   function regSems_(e){ return regUniq_((e.usages || []).map(function(u){ return semNo_(u.stageId); })).sort(); }
 
   // a stored code only stays valid while its semester / department digits match the entry
+  function regDelete_(list){
+    list = (list || []).filter(Boolean);
+    if (!list.length) return;
+    var used = list.filter(function(e){ return (e.usages || []).length; }).length, coded = list.filter(function(e){ return e.code; }).length;
+    var msg = list.length === 1 ? "Delete \u201c" + list[0].title + "\u201d from the register?" : "Delete " + list.length + " courses from the register?";
+    if (coded) msg += "\n\nTheir new code(s) become free again.";
+    if (used) msg += "\n\n" + used + " of them " + (used === 1 ? "is" : "are") + " still used in a scheme, so " + (used === 1 ? "it" : "they") + " will be added again the next time you click \u201cRefresh from Schemes\u201d unless removed from the scheme first.";
+    if (!confirm(msg)) return;
+    var gone = {};
+    list.forEach(function(e){ gone[e.id] = 1; delete regSel[e.id]; });
+    reg.entries = reg.entries.filter(function(e){ return !gone[e.id]; });
+    regDirty = true;
+    regRender_(); regUpdateCount_();
+    regStatus_(list.length + " course(s) deleted. Click \u201cSave Register Online\u201d to keep the change.");
+  }
+  document.getElementById("btnRegDeleteSel").addEventListener("click", function(){
+    regDelete_(reg.entries.filter(function(e){ return regSel[e.id]; }));
+  });
+
   /* A code typed by hand into the New Code column. */
   function regSetCode_(e, raw){
     var v = String(raw || "").replace(/\D/g, "");
@@ -3049,13 +3096,14 @@ function handleAuthFailure_(result) {
     if (sem < 1 || sem > 6) return fail("The third digit is the semester and must be 1 to 6.");
     if (parseInt(dept, 10) > PROGRAMMES.length) return fail("The fourth digit is the department (0 = common, 1 to " + PROGRAMMES.length + ").");
     var clash = reg.entries.filter(function(x){ return x !== e && x.code === v; })[0];
-    if (clash) return fail("Code " + v + " is already used by \u201c" + clash.title + "\u201d.");
     if (e.sem !== "" && e.sem !== sem) return fail("The semester digit (" + sem + ") does not match this course's semester (" + e.sem + "). Change the Sem column first.");
     if (e.dept !== "" && e.dept !== dept) return fail("The department digit (" + dept + ") does not match the department this course is allocated to. Change the Allocated To column first.");
     if (e.sem === "") e.sem = sem;
     if (e.dept === "") e.dept = dept;
     e.code = v; regDirty = true;
-    regRender_(); regStatus_("Code " + v + " set for \u201c" + e.title + "\u201d. Click \u201cSave Register Online\u201d to keep it.");
+    regRender_();
+    if (clash) regStatus_("\u26a0 Code " + v + " is also used by \u201c" + clash.title + "\u201d \u2014 both are highlighted in red. Give one of them a different code.", true);
+    else regStatus_("Code " + v + " set for \u201c" + e.title + "\u201d. Click \u201cSave Register Online\u201d to keep it.");
   }
 
   /* PDF: opens a print view of the courses currently shown; choose "Save as PDF" as the destination. */
@@ -3282,10 +3330,11 @@ function handleAuthFailure_(result) {
     var n = reg.entries.length, un = 0, cd = 0;
     reg.entries.forEach(function(e){ if (e.dept === "") un++; if (e.code) cd++; });
     regPrep_();
+    var dupCodes = regCountCodes_();
     var am = regAbbrMap_(), dups = Object.keys(am).filter(function(k){
       return am[k].some(function(e){ return regDupOthers_(e, am).length > 0; });
     }).length;
-    document.getElementById("regCount").textContent = n + " course(s) \u00b7 " + un + " not allocated \u00b7 " + cd + " with code" + (dups ? " \u00b7 " + dups + " duplicate abbreviation(s)" : "") + (regDirty ? " \u00b7 unsaved changes" : "");
+    document.getElementById("regCount").textContent = n + " course(s) \u00b7 " + un + " not allocated \u00b7 " + cd + " with code" + (dups ? " \u00b7 " + dups + " duplicate abbreviation(s)" : "") + (dupCodes ? " \u00b7 " + dupCodes + " DUPLICATE CODE(S)" : "") + (regDirty ? " \u00b7 unsaved changes" : "");
     var nSel = Object.keys(regSel).filter(function(k){ return regSel[k]; }).length;
     document.getElementById("regSelCount").textContent = nSel + " selected";
     document.getElementById("regBulkBar").style.display = nSel ? "flex" : "none";
@@ -3317,7 +3366,12 @@ function handleAuthFailure_(result) {
     });
     return m;
   }
-  var regLastList = [];
+  var regLastList = [], regCodeCount_ = {};
+  function regCountCodes_(){
+    regCodeCount_ = {};
+    reg.entries.forEach(function(e){ if (e.code) regCodeCount_[e.code] = (regCodeCount_[e.code] || 0) + 1; });
+    return Object.keys(regCodeCount_).filter(function(c){ return regCodeCount_[c] > 1; }).length;
+  }
   var REG_CENTER = { 0: 1, 1: 1, 4: 1, 6: 1, 7: 1, 9: 1 };   // columns shown centred
   var REG_COLS = [
     { key: "sel",   label: "" },
@@ -3361,6 +3415,7 @@ function handleAuthFailure_(result) {
     if (f.flag === "abbrmismatch" && !regMismatchOthers_(e).length) return false;
     if (f.flag === "noabbr" && ab) return false;
     if (f.flag === "multisem" && regSems_(e).length < 2) return false;
+    if (f.flag === "dupcode" && !(e.code && regCodeCount_[e.code] > 1)) return false;
     if (f.flag === "merged" && e.names.length < 2) return false;
     if (f.flag === "orphan" && (e.usages || []).length) return false;
     if (q){
@@ -3396,6 +3451,7 @@ function handleAuthFailure_(result) {
       flag: document.getElementById("regFlagFilter").value
     };
     regPrep_();
+    regCountCodes_();
     var am = regAbbrMap_();
     var list = reg.entries.filter(function(e){ return regPass_(e, f, am); }).sort(function(x, y){
       var a = regSortVal_(x, regSort.key), b = regSortVal_(y, regSort.key), r;
@@ -3491,11 +3547,14 @@ function handleAuthFailure_(result) {
       c[8].appendChild(ds);
 
       var ci = document.createElement("input"); ci.type = "text"; ci.maxLength = 6; ci.inputMode = "numeric";
-      ci.className = "rg-code" + (e.code ? " has" : ""); ci.value = e.code || ""; ci.placeholder = "YYSDNN";
+      var isDupCode = !!(e.code && regCodeCount_[e.code] > 1);
+      ci.className = "rg-code" + (isDupCode ? " dup" : (e.code ? " has" : ""));
+      if (isDupCode){ tr.classList.add("rg-duprow"); ci.title = "Duplicate code: also used by " + reg.entries.filter(function(x){ return x !== e && x.code === e.code; }).map(function(x){ return "\u201c" + x.title + "\u201d"; }).join(", "); } ci.value = e.code || ""; ci.placeholder = "YYSDNN";
       ci.title = "Type a 6-digit code: YY (year) + S (semester) + D (department digit) + NN (serial). Leave empty to remove.";
       ci.addEventListener("change", function(){ regSetCode_(e, ci.value); });
       ci.addEventListener("keydown", function(ev){ if (ev.key === "Enter") ci.blur(); });
       c[9].appendChild(ci);
+      if (isDupCode){ var dtag = document.createElement("span"); dtag.className = "rg-duptag"; dtag.textContent = "\u26a0 duplicate"; c[9].appendChild(dtag); }
 
       var nData = e.row ? Object.keys(e.row).length : 0;
       var dwrap = document.createElement("div"); dwrap.className = "rg-inl";
@@ -3520,7 +3579,10 @@ function handleAuthFailure_(result) {
         var t = prompt("Comment for \u201c" + e.title + "\u201d:");
         if (t && t.trim()){ e.comments.push("[" + regToday_() + "] " + t.trim()); regDirty = true; regRender_(); }
       });
-      cwrap.appendChild(abn); c[11].appendChild(cwrap);
+      cwrap.appendChild(abn);
+      var delb = document.createElement("button"); delb.className = "btn btn-outline btn-compact rg-mini rg-del"; delb.textContent = "\ud83d\uddd1"; delb.title = "Delete this course from the register";
+      delb.addEventListener("click", function(){ regDelete_([e]); });
+      cwrap.appendChild(delb); c[11].appendChild(cwrap);
       body.appendChild(tr);
     });
     if (!list.length){
@@ -3694,17 +3756,27 @@ function handleAuthFailure_(result) {
         var r = it.result;
         if (r && r.success && r.data){ var ld = r.data.data || r.data; if (ld && ld.pages) results.push({ prog: it.prog, data: normaliseLoaded(ld) }); }
       });
-      // the programme open on the form is read as it is now (including unsaved changes)
-      var liveNote = "";
-      var liveProg = PROGRAMMES.filter(function(x){ return x.code === state.programmeCode; })[0];
-      if (liveProg){
-        try {
-          var live = normaliseLoaded(JSON.parse(JSON.stringify({ programmeCode: state.programmeCode, effYear: state.effYear, scheme: state.scheme, pages: state.pages })));
-          var li = -1; results.forEach(function(r, ix){ if (r.prog.code === liveProg.code) li = ix; });
-          if (li > -1) results[li] = { prog: liveProg, data: live }; else results.push({ prog: liveProg, data: live });
-          liveNote = " " + liveProg.code + " was read from the form.";
-        } catch (er) { console.error(er); }
+      // the departments open on the form are read as they are now (including unsaved changes)
+      var liveNote = "", liveList = [];
+      function hasData_(st){ return PAGES.some(function(pg){ return st.pages[pg.id].courses.some(function(c){ return FIELDS.some(function(f){ return f !== "srNo" && filled(c[f]); }); }); }); }
+      if (IS_ADMIN){
+        adminSyncCurrent_();
+        Object.keys(adminStore).forEach(function(c){
+          var pr = PROGRAMMES.filter(function(x){ return x.code === c; })[0], en = adminStore[c];
+          if (pr && en.state && hasData_(en.state)) liveList.push({ prog: pr, st: en.state });
+        });
+      } else {
+        var lp = PROGRAMMES.filter(function(x){ return x.code === state.programmeCode; })[0];
+        if (lp) liveList.push({ prog: lp, st: state });
       }
+      liveList.forEach(function(x){
+        try {
+          var live = normaliseLoaded(JSON.parse(JSON.stringify({ programmeCode: x.st.programmeCode, effYear: x.st.effYear, scheme: x.st.scheme, pages: x.st.pages })));
+          var li = -1; results.forEach(function(r, ix){ if (r.prog.code === x.prog.code) li = ix; });
+          if (li > -1) results[li] = { prog: x.prog, data: live }; else results.push({ prog: x.prog, data: live });
+        } catch (er) { console.error(er); }
+      });
+      if (liveList.length) liveNote = " " + liveList.map(function(x){ return x.prog.code; }).join(", ") + " read from the form (including unsaved changes).";
       regRows = buildAllDeptRows_(results, true);   // every elective, not just the first of each Any-One group
       var added = regApplyRows_();
       if (added) regDirty = true;
@@ -3726,6 +3798,8 @@ function handleAuthFailure_(result) {
   }
   function regSave_(){
     if (!checkOnlineURL()) return;
+    var dupN = regCountCodes_();
+    if (dupN && !confirm(dupN + " new code(s) are used by more than one course (highlighted in red).\n\nSave the register anyway?")) return;
     regStatus_("Saving the register online...");
     showLoader("Saving the course register...");
     // 1. split the scheme data of the courses into small chunks
@@ -3847,6 +3921,7 @@ function handleAuthFailure_(result) {
   document.getElementById("btnRegBack").addEventListener("click", function(){
     if (regDirty && !confirm("The register has unsaved changes. Leave anyway?\n(Use \u201cSave Register Online\u201d first to keep them.)")) return;
     document.getElementById("registerOverlay").style.display = "none";
+    if (regLoaded) setRegisterCourses_(reg.entries);   // scheme cells that now differ from the register get highlighted
   });
   document.getElementById("btnRegRefresh").addEventListener("click", function(){ regRefresh_(false); });
   document.getElementById("btnRegSave").addEventListener("click", regSave_);
@@ -3925,9 +4000,12 @@ function handleAuthFailure_(result) {
 
   /* Custom drop-down (instead of a native <datalist>) so that choosing an entry
      ALWAYS fills the row - even when the cell already holds that same title. */
-  var REGISTER_COURSES = [], suggestCache = null;
+  var REGISTER_COURSES = [], suggestCache = null, REG_INDEX = {};
   function setRegisterCourses_(entries){
-    REGISTER_COURSES = (entries || []).filter(function(e){ return filled(e.title); }).map(function(e){
+    REG_INDEX = {};
+    REGISTER_COURSES = [];
+    (entries || []).forEach(function(e){
+      if (!filled(e.title)) return;
       var row = (e.row && typeof e.row === "object") ? e.row : {}, sbj = {};
       COMMON_FIELDS.forEach(function(f){ sbj[f] = (row[f] === undefined || row[f] === null) ? "" : String(row[f]); });
       sbj.title = e.title;
@@ -3936,9 +4014,219 @@ function handleAuthFailure_(result) {
       sbj._names = (e.names || []).join(" ");
       sbj._partial = !e.row;                  // saved before row data was stored: fill title/abbr/code only
       sbj._reg = true;
-      return sbj;
+      REGISTER_COURSES.push(sbj);
+      [e.title].concat(e.names || []).forEach(function(n){ var k = regKey_(n); if (k && !REG_INDEX[k]) REG_INDEX[k] = sbj; });
     });
     suggestCache = null;
+    markRegDiffs_();
+  }
+
+  /* ---------- highlight scheme values that differ from the Master Course Register ---------- */
+  var REG_DIFF_FIELDS = ["title","abbr","type","code","iks","cl","tl","ll","selfLearning","notional","credits","paperDuration","faTh","saTh","faPrMax","saPrMax","slaMax"];
+  function regSame_(a, b){
+    a = String(a === undefined || a === null ? "" : a).trim().toUpperCase();
+    b = String(b === undefined || b === null ? "" : b).trim().toUpperCase();
+    if (a === b) return true;
+    var na = parseFloat(a), nb = parseFloat(b);
+    return a !== "" && b !== "" && !isNaN(na) && !isNaN(nb) && na === nb;
+  }
+  function regDiffsForCourse_(c, pageId){
+    if (!REG_INDEX || !filled(c.title)) return null;
+    var it = REG_INDEX[regKey_(c.title)];
+    if (!it) return null;
+    var fields = it._partial ? ["title","abbr","code"] : REG_DIFF_FIELDS, out = [];
+    fields.forEach(function(f){
+      var rv = it[f];
+      if (!filled(rv)) return;                                                           // the register says nothing about this cell
+      if (f === "credits" && pageId !== "sem6" && pageId !== "exit1" && pageId !== "exit2") return;   // calculated on these pages
+      if (f === "notional" && pageId !== "exit1" && pageId !== "exit2") return;
+      if (!regSame_(c[f], rv)) out.push({ f: f, reg: rv });
+    });
+    return out;
+  }
+  function markRegDiffs_(){
+    if (!REG_INDEX || !courseBody || !state || !state.pages) return;
+    var pageId = state.current, page = cur(), count = 0;
+    Array.prototype.forEach.call(courseBody.querySelectorAll("[data-field]"), function(el){
+      el.classList.remove("reg-diff");
+      if (el.dataset.regTip){ el.title = el.dataset.regOrig || ""; delete el.dataset.regTip; }
+    });
+    (page ? page.courses : []).forEach(function(c, idx){
+      var d = regDiffsForCourse_(c, pageId);
+      if (!d) return;
+      d.forEach(function(x){
+        var el = courseBody.querySelector('[data-field="' + x.f + '"][data-idx="' + idx + '"]');
+        if (!el) return;
+        el.dataset.regOrig = el.title || ""; el.dataset.regTip = "1";
+        el.classList.add("reg-diff");
+        el.title = "Master Course Register has: " + x.reg;
+        count++;
+      });
+    });
+    var banner = document.getElementById("regDiffBanner");
+    if (banner){
+      if (count){
+        banner.innerHTML = "";
+        var t = document.createElement("span");
+        t.textContent = "\u26a0 " + count + " value(s) on this page differ from the Master Course Register (highlighted in amber).";
+        banner.appendChild(t);
+        var b1 = document.createElement("button"); b1.className = "btn btn-outline"; b1.textContent = "Apply register values to this page";
+        b1.addEventListener("click", function(){ regApplyDiffs_(false); });
+        var b2 = document.createElement("button"); b2.className = "btn btn-outline"; b2.textContent = "Apply to all pages";
+        b2.addEventListener("click", function(){ regApplyDiffs_(true); });
+        banner.appendChild(b1); banner.appendChild(b2);
+        banner.style.display = "flex";
+      } else banner.style.display = "none";
+    }
+    // amber dot on the semester tabs that have differences
+    Array.prototype.forEach.call(semTabs.children, function(btn){
+      var pid = btn.dataset.page, pg = state.pages[pid], n = 0;
+      if (pg) pg.courses.forEach(function(c){ var d = regDiffsForCourse_(c, pid); if (d) n += d.length; });
+      btn.classList.toggle("has-diff", n > 0);
+    });
+  }
+  function regApplyDiffs_(allPages){
+    if (isFormLocked){ alert("This form is locked, so it cannot be changed."); return; }
+    var changed = 0;
+    PAGES.forEach(function(p){
+      if (!allPages && p.id !== state.current) return;
+      state.pages[p.id].courses.forEach(function(c){
+        var d = regDiffsForCourse_(c, p.id);
+        if (!d || !d.length) return;
+        d.forEach(function(x){
+          c[x.f] = (UPPER.indexOf(x.f) > -1 || TEXTY.indexOf(x.f) > -1) ? String(x.reg).toUpperCase() : String(x.reg);
+          changed++;
+        });
+        computeCourse(c, p.id);
+      });
+    });
+    renderCourseTable();
+    recordHistory(true);
+    setStatus(changed + " value(s) updated from the Master Course Register" + (allPages ? " (all pages)." : "."));
+  }
+
+  /* ---------- admin: every department editable in one session ---------- */
+  var adminStore = {};   // programme code -> { state, baseline, dirty, locked, failed, fresh }
+  function adminKey_(st){ return JSON.stringify({ c: st.programmeCode, e: st.effYear, s: st.scheme, p: st.pages }); }
+  function adminEntry_(code){ return adminStore[code] || (adminStore[code] = { state: null, baseline: "", dirty: false, locked: false, failed: false, fresh: false }); }
+  function adminAnyDirty_(){
+    adminSyncCurrent_();
+    return Object.keys(adminStore).some(function(c){ return adminStore[c].state && adminStore[c].dirty; });
+  }
+  function adminSyncCurrent_(){
+    if (!IS_ADMIN || !state.programmeCode) return;
+    var e = adminEntry_(state.programmeCode);
+    if (!e.state || e.state === state || e.baseline === "") { e.state = state; if (e.baseline === "") e.baseline = adminKey_(state); }
+    e.state = state; e.locked = isFormLocked; e.failed = false;
+    e.dirty = adminKey_(state) !== e.baseline;
+  }
+  function adminAfterSave_(){
+    if (!state.programmeCode) return;
+    var e = adminEntry_(state.programmeCode);
+    e.state = state; e.baseline = adminKey_(state); e.dirty = false; e.fresh = false;
+    adminRefreshOptions_();
+  }
+  function adminRefreshOptions_(){
+    if (!IS_ADMIN) return;
+    adminSyncCurrent_();
+    var keep = progSelect.value;
+    Array.prototype.forEach.call(progSelect.options, function(o){
+      if (!o.value) return;
+      var pr = PROGRAMMES.filter(function(x){ return x.code === o.value; })[0], e = adminStore[o.value];
+      if (!pr) return;
+      o.textContent = (e && e.dirty ? "\u25cf " : "") + (e && e.locked ? "\ud83d\udd12 " : "") + pr.code + " \u2014 " + pr.name + (e && e.failed ? " (not loaded)" : "");
+    });
+    progSelect.value = keep;
+  }
+  function adminIngest_(it){
+    var r = it.result, e = adminEntry_(it.prog.code);
+    if (r && r.authRequired){ handleAuthFailure_(r); return; }
+    if (e.dirty) return;                                       // never overwrite unsaved edits
+    if (r && r.success && r.data){
+      var ld = r.data.data || r.data;
+      if (ld && ld.pages){
+        var st = normaliseLoaded(ld); st.programmeCode = it.prog.code;
+        e.state = st; e.baseline = adminKey_(st); e.dirty = false; e.locked = !!r.locked; e.failed = false; e.fresh = false;
+        return;
+      }
+    }
+    var rmsg = r ? String(r.message || "") : "";
+    var notFound = !!r && !r.success && (!rmsg || /\bno\b|not found|none|yet|exist|empty/i.test(rmsg));
+    if (notFound){                                             // answered: no saved record yet, start a blank department
+      var bl = defaultState(); bl.programmeCode = it.prog.code;
+      e.state = bl; e.baseline = adminKey_(bl); e.dirty = false; e.locked = false; e.failed = false; e.fresh = true;
+    } else { e.failed = true; }                                // network problem: retried when the department is opened
+  }
+  function adminLoadAll_(){
+    if (!IS_ADMIN || !checkOnlineURL()) return Promise.resolve();
+    setStatus("Loading all departments...", false);
+    showLoader("Loading all departments...");
+    return Promise.all(PROGRAMMES.map(fetchDeptRecord_)).then(function(items){
+      items.forEach(adminIngest_);
+      adminRefreshOptions_();
+      var ok = Object.keys(adminStore).filter(function(c){ return adminStore[c].state && !adminStore[c].fresh; }).length;
+      var bad = Object.keys(adminStore).filter(function(c){ return adminStore[c].failed; }).length;
+      setStatus("All departments loaded (" + ok + " with saved data" + (bad ? ", " + bad + " could not be loaded" : "") + "). Choose any department to edit; use Save \u2192 Save All Departments to save every change.", !!bad);
+    }).catch(function(err){
+      console.error(err);
+      setStatus("Could not load all departments. Check the Web App URL and deployment access.", true);
+    }).finally(hideLoader);
+  }
+  function adminSwitch_(code){
+    var prev = state.programmeCode || "";
+    if (prev === code) return;
+    if (!prev && hasAnyData() && !confirm("The data entered without a programme will be replaced. Continue?")){ progSelect.value = ""; return; }
+    adminSyncCurrent_();
+    function apply(){
+      var e = code ? adminEntry_(code) : null;
+      if (code && e.state) state = e.state;
+      else { state = defaultState(); state.programmeCode = code || ""; if (code){ e.state = state; e.baseline = adminKey_(state); e.fresh = true; } }
+      if (!state.current || !state.pages[state.current]) state.current = "sem1";
+      historyStack = []; historyIndex = -1;
+      applyLockState(code ? !!e.locked : false);
+      switchPage(state.current);
+      onlineDirty = false;
+      adminRefreshOptions_();
+      setStatus(!code ? "" : (e.locked ? code + " is LOCKED (submitted to the moderator); it can be viewed but not changed."
+        : (e.fresh ? code + " has no saved data yet \u2014 start entering it." : code + " loaded \u2014 edit any semester; changes in other departments are kept until saved.")));
+    }
+    var e0 = code ? adminEntry_(code) : null;
+    if (code && e0 && e0.failed && !e0.state){
+      var pr = PROGRAMMES.filter(function(x){ return x.code === code; })[0];
+      showLoader("Loading " + code + "...");
+      fetchDeptRecord_(pr).then(function(it){ adminIngest_(it); }).then(apply).finally(hideLoader);
+    } else apply();
+  }
+  function adminSaveAll_(){
+    if (!IS_ADMIN || !checkOnlineURL()) return;
+    adminSyncCurrent_();
+    var codes = Object.keys(adminStore).filter(function(c){ return adminStore[c].state && adminStore[c].dirty; });
+    if (!codes.length){ setStatus("No department has unsaved changes."); return; }
+    if (!confirm("Save " + codes.length + " department(s) online?\n\n" + codes.join(", "))) return;
+    var ok = [], bad = [], i = 0;
+    var chain = Promise.resolve();
+    codes.forEach(function(code){
+      chain = chain.then(function(){
+        showLoader("Saving " + code + " (" + (++i) + " of " + codes.length + ")...");
+        var e = adminStore[code], keep = state, payload;
+        state = e.state;
+        try { payload = buildOnlinePayload(); } finally { state = keep; }
+        return fetch(GOOGLE_SCRIPT_URL, { method: "POST", mode: "cors", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(payload) })
+          .then(function(r){ return r.json(); })
+          .then(function(res){
+            if (handleAuthFailure_(res)) throw new Error("__auth__");
+            if (res.success){ e.baseline = adminKey_(e.state); e.dirty = false; e.fresh = false; ok.push(code); }
+            else bad.push(code + (res.locked ? " (locked)" : ""));
+          })
+          .catch(function(err){ if (err && err.message === "__auth__") throw err; console.error(err); bad.push(code); });
+      });
+    });
+    chain.then(function(){
+      if (state.programmeCode && adminStore[state.programmeCode] && !adminStore[state.programmeCode].dirty) onlineDirty = false;
+      adminRefreshOptions_();
+      setStatus((ok.length ? ok.length + " department(s) saved: " + ok.join(", ") + ". " : "") + (bad.length ? "Not saved: " + bad.join(", ") + "." : ""), !!bad.length);
+    }).catch(function(err){ if (!(err && err.message === "__auth__")) { console.error(err); setStatus("Saving failed. Check the Web App URL and deployment access.", true); } })
+      .finally(hideLoader);
   }
   function loadRegisterCourses_(){
     if (!GOOGLE_SCRIPT_URL || GOOGLE_SCRIPT_URL.indexOf("PASTE_YOUR_") === 0) return Promise.resolve();
@@ -4248,6 +4536,11 @@ function handleAuthFailure_(result) {
   } else if (RESTRICTED_PROG) {
     // Department login (not admin): automatically pull this department's saved data from the online database.
     loadOnlineRecord(true);
+  } else if (IS_ADMIN) {
+    // Admin: load every department once, so any department / semester can be edited without separate loading.
+    document.getElementById("btnSaveAllDepts").style.display = "";
+    document.getElementById("btnSaveAllDepts").addEventListener("click", adminSaveAll_);
+    adminLoadAll_();
   }
 })();
 </script>
