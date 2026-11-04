@@ -240,6 +240,8 @@ function handleAuthFailure_(result) {
     box-shadow: inset 0 0 0 2px #dc2626; border-radius: 4px;
   }
 
+  /* Notional Learning Hrs/Week must be an even number */
+  table.scheme input.notional-odd { background: #fee2e2 !important; color: #b91c1c !important; font-weight: 700; box-shadow: inset 0 0 0 2px #dc2626; border-radius: 4px; }
   /* Values that differ from the Master Course Register */
   table.scheme input.reg-diff, table.scheme select.reg-diff { background: #fef3c7 !important; box-shadow: inset 0 0 0 2px #f59e0b; border-radius: 4px; }
   .reg-banner { display: none; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 10px; padding: 8px 12px; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 10px; color: #92400e; font-size: 13px; font-weight: 600; }
@@ -524,6 +526,7 @@ function handleAuthFailure_(result) {
 
   <section class="card">
     <h2>Course-wise Learning &amp; Assessment Scheme</h2>
+    <div class="reg-banner" id="notionalBanner" style="background:#fef2f2;border-color:#fca5a5;color:#991b1b;"></div>
     <div class="reg-banner" id="regDiffBanner"></div>
     <div class="table-wrap">
       <table class="scheme" id="schemeTable">
@@ -1394,6 +1397,44 @@ function handleAuthFailure_(result) {
     });
     updateTotals();
     markDuplicateCodes_();
+    markNotional_();
+  }
+
+  /* Notional Learning Hrs/Week has to be an even number (it is credits x 2). */
+  function notionalIsOdd_(v){
+    if (v === undefined || v === null || String(v).trim() === "") return false;
+    var n = parseFloat(v);
+    return isNaN(n) || Math.round(n * 1000) / 1000 % 2 !== 0;
+  }
+  function notionalErrors_(st){
+    var out = [];
+    PAGES.forEach(function(pg){
+      var page = st.pages[pg.id];
+      if (!page) return;
+      page.courses.forEach(function(c, i){
+        if (notionalIsOdd_(c.notional)) out.push({ page: pg.id, row: i + 1, title: c.title, val: c.notional });
+      });
+    });
+    return out;
+  }
+  function markNotional_(){
+    var page = cur(), bad = [];
+    Array.prototype.forEach.call(courseBody.querySelectorAll('input[data-field="notional"]'), function(inp){
+      var c = page.courses[Number(inp.dataset.idx)], odd = !!c && notionalIsOdd_(c.notional);
+      inp.classList.toggle("notional-odd", odd);
+      if (odd){
+        inp.title = "Notional Learning Hrs/Week must be an even number (now " + c.notional + "). Change the contact hours or self-learning hours.";
+        bad.push({ row: Number(inp.dataset.idx) + 1, title: c.title, val: c.notional });
+      } else if (inp.title.indexOf("Notional Learning Hrs/Week must") === 0) inp.title = "";
+    });
+    var b = document.getElementById("notionalBanner");
+    if (!b) return;
+    if (bad.length){
+      b.textContent = "\u26d4 Notional Learning Hrs/Week must be an even number. Odd value in: " + bad.slice(0, 6).map(function(x){
+        return "row " + x.row + (filled(x.title) ? " (" + x.title + ")" : "") + " = " + x.val;
+      }).join(", ") + (bad.length > 6 ? " \u2026 and " + (bad.length - 6) + " more" : "") + ".";
+      b.style.display = "flex";
+    } else b.style.display = "none";
   }
 
   function pageSums(page, pageId){
@@ -1644,6 +1685,8 @@ function handleAuthFailure_(result) {
       alert("This form has already been submitted to the moderator and is locked. Ask the admin to unlock it before saving further changes.");
       return;
     }
+    var nErr = notionalErrors_(state);
+    if (nErr.length && !confirm("Notional Learning Hrs/Week must be an even number, but " + nErr.length + " row(s) have an odd value (highlighted in red).\n\nSave anyway?")) return;
     var payload = buildOnlinePayload();
     setStatus("Saving online...", false);
     showLoader("Saving online...");
@@ -2513,8 +2556,9 @@ function handleAuthFailure_(result) {
   function fetchDeptRecord_(prog){
     var url = GOOGLE_SCRIPT_URL + "?formType=" + encodeURIComponent(FORM_TYPE)
             + "&recordKey=" + encodeURIComponent("LAS_" + prog.code + "_AllStages")
-            + "&token=" + encodeURIComponent(getSessionToken_());
-    return fetch(url, {method:"GET", mode:"cors"})
+            + "&token=" + encodeURIComponent(getSessionToken_())
+            + "&_=" + Date.now();                                  // never answered from the browser cache
+    return fetch(url, {method:"GET", mode:"cors", cache:"no-store"})
       .then(function(r){ return r.json(); })
       .then(function(result){ return { prog: prog, result: result }; })
       .catch(function(err){ console.error(err); return { prog: prog, result: null }; });
@@ -3163,11 +3207,23 @@ function handleAuthFailure_(result) {
   }
   function regSchemeSem_(e){ return (e.usages || []).length ? Math.min.apply(null, e.usages.map(function(u){ return semNo_(u.stageId); })) : ""; }
   function regSchemeAbbr_(e){ return regUniq_((e.usages || []).map(function(u){ return u.abbr; }))[0] || ""; }
-  var regChg = { abbr: 0, sem: 0, row: 0, semKept: 0 };
+  function regSchemeDept_(e){
+    var codes = regUniq_((e.usages || []).map(function(u){ return u.progCode; }));
+    if (!codes.length) return "";
+    if (codes.length > 1) return "0";                                   // used by several programmes = common
+    for (var i = 0; i < PROGRAMMES.length; i++) if (PROGRAMMES[i].code === codes[0]) return String(i + 1);
+    return "";
+  }
+  function regDeptName_(d){ return d === "0" ? "Common to all" : (PROGRAMMES[parseInt(d, 10) - 1] ? PROGRAMMES[parseInt(d, 10) - 1].code : d); }
+  function regExistCodes_(e){ return regUniq_((e.usages || []).map(function(u){ return u.code; })).join(", "); }
+  function regCredits_(e){ return regUniq_((e.usages || []).map(function(u){ return u.credits ? tidy(u.credits) : ""; })).join(", "); }
+  var regChg = { abbr: 0, sem: 0, row: 0, semKept: 0, dept: 0, deptKept: 0, codes: 0, credits: 0, used: 0 };
   function regApplyRows_(){
     var km = {}, added = 0;
-    regChg = { abbr: 0, sem: 0, row: 0, semKept: 0 };
+    regChg = { abbr: 0, sem: 0, row: 0, semKept: 0, dept: 0, deptKept: 0, codes: 0, credits: 0, used: 0 };
+    var prevSig = {};
     reg.entries.forEach(function(e){
+      prevSig[e.id] = regUsedIn_(e) + "\u0001" + regExistCodes_(e) + "\u0001" + regCredits_(e);
       e.usages = [];
       e.names.forEach(function(n){ km[regKey_(n)] = e; });
     });
@@ -3195,6 +3251,18 @@ function handleAuthFailure_(result) {
         if (e.abbrManual && (e.abbrBase === undefined || e.abbrBase !== na)) e.abbrManual = false;
         if (na && !e.abbrManual && e.abbr !== na){ e.abbr = na; regDirty = true; regChg.abbr++; }
         else if (!e.abbr && na) e.abbr = na;
+        // department: one programme = that programme, several programmes = common to all
+        var nd = regSchemeDept_(e);
+        if (e.deptManual && (e.deptBase === undefined || e.deptBase !== nd)) e.deptManual = false;
+        if (nd !== "" && !e.deptManual && e.dept !== nd){
+          if (e.code && String(e.code).charAt(3) !== nd) regChg.deptKept++;   // the code carries the department digit
+          else { e.dept = nd; regDirty = true; regChg.dept++; }
+        }
+      }
+      if (prevSig[e.id] !== undefined){
+        if (regUsedIn_(e) !== prevSig[e.id].split("\u0001")[0]) regChg.used++;
+        if (regExistCodes_(e) !== prevSig[e.id].split("\u0001")[1]) regChg.codes++;
+        if (regCredits_(e) !== prevSig[e.id].split("\u0001")[2]) regChg.credits++;
       }
     });
     return added;
@@ -3486,7 +3554,7 @@ function handleAuthFailure_(result) {
       }
       var usedTxt = regUsedIn_(e) || "\u2014 not in any scheme \u2014";
       var ud = document.createElement("div"); ud.className = "rg-clamp"; ud.textContent = usedTxt; ud.title = usedTxt; c[3].appendChild(ud);
-      c[4].textContent = regUniq_((e.usages || []).map(function(u){ return u.code; })).join(", ") || DASH;
+      c[4].textContent = regExistCodes_(e) || DASH;
       c[4].className += " rg-mono";
 
       // abbreviation (editable, red when another course uses the same one)
@@ -3518,7 +3586,7 @@ function handleAuthFailure_(result) {
         wn.textContent = "schemes use: " + sch.join(", ");
         c[5].appendChild(wn);
       }
-      c[6].textContent = regUniq_((e.usages || []).map(function(u){ return u.credits ? tidy(u.credits) : ""; })).join(", ") || DASH;
+      c[6].textContent = regCredits_(e) || DASH;
 
       var ss = document.createElement("select"); ss.style.cssText = "padding:3px;border:1px solid #cbd5e1;border-radius:5px;";
       ss.innerHTML = '<option value="">\u2013</option>' + [1,2,3,4,5,6].map(function(n){ return '<option value="' + n + '">' + n + '</option>'; }).join("");
@@ -3543,8 +3611,19 @@ function handleAuthFailure_(result) {
       ds.innerHTML = regDeptOptions_(false, '<option value="">\u2014 Select \u2014</option>');
       ds.value = e.dept;
       if (e.dept === "") ds.style.background = "#fef9c3";
-      ds.addEventListener("change", function(){ e.dept = ds.value; regValidateCode_(e); regDirty = true; regRender_(); });
+      ds.addEventListener("change", function(){ e.dept = ds.value; e.deptManual = true; e.deptBase = regSchemeDept_(e); regValidateCode_(e); regDirty = true; regRender_(); });
       c[8].appendChild(ds);
+      var scDept = regSchemeDept_(e);
+      if (scDept !== "" && scDept !== e.dept){
+        var dt = document.createElement("button"); dt.className = "btn btn-outline btn-compact rg-tag";
+        dt.textContent = "scheme: " + regDeptName_(scDept);
+        dt.title = (scDept === "0" ? "Used by several programmes, so it is common to all." : "Used only by " + regDeptName_(scDept) + ".") + " Click to apply" + (e.code ? " (the code is cleared if it has a different department digit)." : ".");
+        dt.addEventListener("click", function(){
+          var had = e.code; e.dept = scDept; e.deptManual = false; regValidateCode_(e); regDirty = true; regRender_();
+          regStatus_("Department set for \u201c" + e.title + "\u201d." + (had && !e.code ? " Its old code was cleared \u2013 assign a new one." : ""));
+        });
+        c[8].appendChild(document.createElement("br")); c[8].appendChild(dt);
+      }
 
       var ci = document.createElement("input"); ci.type = "text"; ci.maxLength = 6; ci.inputMode = "numeric";
       var isDupCode = !!(e.code && regCodeCount_[e.code] > 1);
@@ -3696,8 +3775,8 @@ function handleAuthFailure_(result) {
      Google Sheets 50,000-character cell limit that made one big record fail to save. */
   var REG_ROW_CHUNK = 20000;
   function regGetKey_(key){
-    var url = GOOGLE_SCRIPT_URL + "?formType=" + encodeURIComponent(FORM_TYPE) + "&recordKey=" + encodeURIComponent(key) + "&token=" + encodeURIComponent(getSessionToken_());
-    return fetch(url, { method: "GET", mode: "cors" }).then(function(r){ return r.json(); }).catch(function(err){ console.error(err); return null; });
+    var url = GOOGLE_SCRIPT_URL + "?formType=" + encodeURIComponent(FORM_TYPE) + "&recordKey=" + encodeURIComponent(key) + "&token=" + encodeURIComponent(getSessionToken_()) + "&_=" + Date.now();
+    return fetch(url, { method: "GET", mode: "cors", cache: "no-store" }).then(function(r){ return r.json(); }).catch(function(err){ console.error(err); return null; });
   }
   function regGetSaved_(){
     return regGetKey_(REG_KEY).then(function(saved){
@@ -3744,7 +3823,8 @@ function handleAuthFailure_(result) {
         var ld = saved.data.data || saved.data;
         if (ld && Array.isArray(ld.entries)){
           reg = { year: ld.year || "27", nextId: ld.nextId || 1, ignore: ld.ignore || [], entries: ld.entries.map(function(e){
-            return { id: e.id, title: e.title, names: e.names && e.names.length ? e.names : [e.title], abbr: e.abbr || "", dept: e.dept === undefined ? "" : String(e.dept), sem: e.sem === "" || e.sem === undefined ? "" : parseInt(e.sem, 10), code: e.code || "", comments: e.comments || [], row: (e.row && typeof e.row === "object") ? e.row : null, rowEdited: !!e.rowEdited, abbrManual: !!e.abbrManual, semManual: !!e.semManual,
+            return { id: e.id, title: e.title, names: e.names && e.names.length ? e.names : [e.title], abbr: e.abbr || "", dept: e.dept === undefined ? "" : String(e.dept), sem: e.sem === "" || e.sem === undefined ? "" : parseInt(e.sem, 10), code: e.code || "", comments: e.comments || [], row: (e.row && typeof e.row === "object") ? e.row : null, rowEdited: !!e.rowEdited, abbrManual: !!e.abbrManual, semManual: !!e.semManual, deptManual: !!e.deptManual,
+              deptBase: e.deptBase === undefined || e.deptBase === null ? undefined : String(e.deptBase),
               abbrBase: e.abbrBase === undefined || e.abbrBase === null ? undefined : String(e.abbrBase),
               semBase: e.semBase === undefined || e.semBase === null ? undefined : (e.semBase === "" ? "" : parseInt(e.semBase, 10)), usages: [] };
           }) };
@@ -3787,8 +3867,13 @@ function handleAuthFailure_(result) {
       if (regChg.sem) upd.push(regChg.sem + " semester(s)");
       if (regChg.abbr) upd.push(regChg.abbr + " abbreviation(s)");
       if (regChg.row) upd.push(regChg.row + " scheme-data row(s)");
+      if (regChg.dept) upd.push(regChg.dept + " allocation(s)");
+      if (regChg.codes) upd.push(regChg.codes + " existing-code list(s)");
+      if (regChg.credits) upd.push(regChg.credits + " credit value(s)");
+      if (regChg.used) upd.push(regChg.used + " \u201cused in\u201d list(s)");
       regStatus_(results.length + " of " + PROGRAMMES.length + " department record(s) read." + liveNote + " " + (added ? added + " new course(s) added. " : "No new courses. ")
         + (upd.length ? "Updated: " + upd.join(", ") + ". " : "Nothing else changed. ")
+        + (regChg.deptKept ? regChg.deptKept + " course(s) keep their department because their code carries it \u2013 click the amber tag in the Allocate To column to apply. " : "")
         + (regChg.semKept ? regChg.semKept + " course(s) keep their old semester because their code carries it \u2013 click the amber \u201cscheme: n\u201d tag in the Sem column to apply. " : "")
         + (regDirty ? "Click \u201cSave Register Online\u201d to keep the changes." : ""), !results.length);
     }).catch(function(err){
@@ -3813,7 +3898,7 @@ function handleAuthFailure_(result) {
     if (curLen > 0) chunks.push(cur);
     // 2. main record: everything except the row data
     var payload = { formType: "LAS_COURSE_REGISTER", year: reg.year, nextId: reg.nextId, ignore: reg.ignore, rowParts: chunks.length,
-      entries: reg.entries.map(function(e){ return { id: e.id, title: e.title, names: e.names, abbr: e.abbr || "", dept: e.dept, sem: e.sem, code: e.code, comments: e.comments, abbrManual: e.abbrManual ? 1 : 0, semManual: e.semManual ? 1 : 0, abbrBase: e.abbrBase, semBase: e.semBase }; }) };
+      entries: reg.entries.map(function(e){ return { id: e.id, title: e.title, names: e.names, abbr: e.abbr || "", dept: e.dept, sem: e.sem, code: e.code, comments: e.comments, abbrManual: e.abbrManual ? 1 : 0, semManual: e.semManual ? 1 : 0, deptManual: e.deptManual ? 1 : 0, deptBase: e.deptBase, abbrBase: e.abbrBase, semBase: e.semBase }; }) };
     // rows first, main record last, so the main record never points at rows that were not saved
     var chain = Promise.resolve();
     chunks.forEach(function(ch, i){
@@ -4202,7 +4287,9 @@ function handleAuthFailure_(result) {
     adminSyncCurrent_();
     var codes = Object.keys(adminStore).filter(function(c){ return adminStore[c].state && adminStore[c].dirty; });
     if (!codes.length){ setStatus("No department has unsaved changes."); return; }
-    if (!confirm("Save " + codes.length + " department(s) online?\n\n" + codes.join(", "))) return;
+    var oddDepts = codes.filter(function(c){ return notionalErrors_(adminStore[c].state).length; });
+    if (!confirm("Save " + codes.length + " department(s) online?\n\n" + codes.join(", ")
+      + (oddDepts.length ? "\n\nWarning: odd Notional Learning Hrs/Week values exist in " + oddDepts.join(", ") + "." : ""))) return;
     var ok = [], bad = [], i = 0;
     var chain = Promise.resolve();
     codes.forEach(function(code){
