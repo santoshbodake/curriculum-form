@@ -3296,8 +3296,16 @@ function handleAuthFailure_(result) {
   var REG_DERIVED = ["srNo","thTotal","thMin","faPrMin","saPrMin","slaMin","totalMarks"];
   function regCompactRow_(data){
     var out = {};
-    FIELDS.forEach(function(f){ if (REG_DERIVED.indexOf(f) === -1 && filled(data[f])) out[f] = String(data[f]); });
+    // every column is stored - blank cells are recorded as "" so a blank in the scheme is a blank in the register
+    FIELDS.forEach(function(f){ if (REG_DERIVED.indexOf(f) === -1) out[f] = (data[f] === undefined || data[f] === null) ? "" : String(data[f]); });
     return out;
+  }
+  function regRowCount_(r){ var n = 0; if (r) Object.keys(r).forEach(function(k){ if (filled(r[k])) n++; }); return n; }
+  function regRowNorm_(r){          // comparable form: every column present, missing = ""
+    if (!r) return null;
+    var o = {};
+    FIELDS.forEach(function(f){ if (REG_DERIVED.indexOf(f) === -1) o[f] = (r[f] === undefined || r[f] === null) ? "" : String(r[f]); });
+    return o;
   }
   // The most completely filled row among all places a course is used (first one wins a tie).
   function regPickRow_(usages){
@@ -3307,7 +3315,7 @@ function handleAuthFailure_(result) {
     if (mine.length) list = mine;             // the department you are editing is the source of truth for its courses
     list.forEach(function(u){
       if (!u.data) return;
-      var row = regCompactRow_(u.data), n = Object.keys(row).length;
+      var row = regCompactRow_(u.data), n = regRowCount_(row);
       if (n > bestN){ best = row; bestN = n; }
     });
     return best;
@@ -3362,10 +3370,13 @@ function handleAuthFailure_(result) {
     reg.entries.forEach(function(e){
       var rw = regPickRow_(e.usages);
       if (force && e.usages.length){ e.rowEdited = false; e.semManual = false; e.abbrManual = false; }   // opened from the button: the scheme wins everywhere
-      if ((rw || (force && e.usages.length)) && !e.rowEdited && JSON.stringify(rw || null) !== JSON.stringify(e.row || null)){
+      if ((rw || (force && e.usages.length)) && !e.rowEdited && JSON.stringify(regRowNorm_(rw)) !== JSON.stringify(regRowNorm_(e.row))){
         // the scheme row changed (including a hand-edited register row being replaced): the old new-code no longer applies
         if (e.row && e.code){ e.code = ""; regChg.codeRemoved++; }
         e.row = rw || null; regDirty = true; regChg.row++;
+      }
+      else if (rw && !e.rowEdited && e.row && Object.keys(e.row).length !== Object.keys(rw).length){
+        e.row = rw; regDirty = true;   // same data, but the stored copy lacked the blank cells: record them too
       }
       if (e.usages.length && e.code){
         // semester / department moved in the scheme: the code's digits are now wrong, so drop it
@@ -3597,7 +3608,7 @@ function handleAuthFailure_(result) {
       case "sem":   return e.sem === "" ? 99 : e.sem;
       case "dept":  return e.dept === "" ? 99 : parseInt(e.dept, 10);
       case "code":  return e.code || "~";
-      case "data":  return e.row ? Object.keys(e.row).length : 0;
+      case "data":  return e.row ? regRowCount_(e.row) : 0;
       case "cm":    return (e.comments || []).length;
     }
     return "";
@@ -3756,7 +3767,7 @@ function handleAuthFailure_(result) {
       c[9].appendChild(ci);
       if (isDupCode){ var dtag = document.createElement("span"); dtag.className = "rg-duptag"; dtag.textContent = "\u26a0 duplicate"; c[9].appendChild(dtag); }
 
-      var nData = e.row ? Object.keys(e.row).length : 0;
+      var nData = e.row ? regRowCount_(e.row) : 0;
       var dwrap = document.createElement("div"); dwrap.className = "rg-inl";
       var dv = document.createElement("span"); dv.style.cssText = "font-size:11.5px;white-space:nowrap;color:" + (nData ? "#15803d" : "#b45309") + ";";
       dv.textContent = nData ? ("\u2713 " + nData + (e.rowEdited ? " (edited)" : "")) : "\u2014 none";
@@ -4079,7 +4090,7 @@ function handleAuthFailure_(result) {
       Object.keys(inputs).forEach(function(f){
         var v = inputs[f].value.trim();
         if (f === "type" || f === "saTh" || f === "saPrMax") v = v.toUpperCase();
-        if (v !== "") out[f] = v;
+        out[f] = v;   // blanks are kept too
       });
       e.row = out; e.rowEdited = true; regDirty = true;
       ov.remove(); regRender_();
