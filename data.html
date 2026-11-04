@@ -818,6 +818,10 @@ body.viewer-mode header, body.viewer-mode .container { margin-left: 0 !important
 <input type="checkbox" id="excludeQPPToggle" style="width:auto; padding:0; box-shadow:none;" onchange="if($('preview').style.display==='block')showPreview();">
 Exclude "XIV. Question Paper Profile (QPP)" from Print/PDF/Word
 </label>
+<label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600; color:#475569; background:rgba(255,255,255,0.7); padding:8px 14px; border-radius:8px; border:1px solid #e2e8f0; cursor:pointer;">
+<input type="checkbox" id="excludeWeightageToggle" style="width:auto; padding:0; box-shadow:none;" onchange="if($('preview').style.display==='block')showPreview();">
+Exclude "IX. Suggested Weightage to Learning Efforts &amp; Assessment Purpose" from Preview/Print/PDF/Word
+</label>
 <span class="hint" id="printHint" style="display:none">Tip: in the Print dialog, enable "Headers and footers" to also get the date/time stamp and automatic "Page X of Y" numbering on every sheet, exactly like the original MSBTE document.</span>
 </div>
 
@@ -1118,6 +1122,14 @@ R= Remembering &nbsp;&nbsp;&nbsp; U= Understanding &nbsp;&nbsp;&nbsp; A= Applica
 <label>Industry Expert — Designation & Name</label>
 <div class="dyn-list" data-type="industryExpert"></div>
 <button type="button" class="add-btn" onclick="addDynItem(this)">+ Add Industry Expert</button>
+</div>
+<div class="field" style="margin-top:16px;">
+<label>Program Head — Name & Designation</label>
+<div style="display:flex;gap:6px;"><input id="programHeadName" placeholder="Name" style="flex:2" autocomplete="off"><input id="programHeadDesignation" placeholder="Designation" style="flex:1" autocomplete="off"></div>
+</div>
+<div class="field" style="margin-top:16px;">
+<label>CDC-Incharge — Name & Designation</label>
+<div style="display:flex;gap:6px;"><input id="cdcInchargeName" placeholder="Name" style="flex:2" autocomplete="off"><input id="cdcInchargeDesignation" placeholder="Designation" style="flex:1" autocomplete="off"></div>
 </div>
 </div>
 
@@ -1608,7 +1620,8 @@ async function saveWord(){
  try {
  let d = collect();
  let excludeQPP = !!($('excludeQPPToggle') && $('excludeQPPToggle').checked);
- let bodyHTML = buildPaperHTML(d, {excludeQPP: excludeQPP});
+ let excludeWeightage = !!($('excludeWeightageToggle') && $('excludeWeightageToggle').checked);
+ let bodyHTML = buildPaperHTML(d, {excludeQPP: excludeQPP, excludeWeightage: excludeWeightage});
 
  let docHTML = `<!DOCTYPE html>
 <html>
@@ -1826,6 +1839,7 @@ function toRoman(num){
 function buildPaperHTML(d, opts) {
     opts = opts || {};
     let excludeQPP = !!opts.excludeQPP;
+    let excludeWeightage = !!opts.excludeWeightage;
     let p = '';
     const tableStart = `<table border="1" cellspacing="0" cellpadding="5" width="100%" style="border-collapse:collapse; margin-bottom:10px; width:100%; font-family: Times New Roman; font-size: 12pt;">`;
     const thStyle = `style="border:0.5pt solid #000; padding:5px; text-align:center; font-weight:bold; font-family: Times New Roman; font-size: 12pt;"`;
@@ -1938,6 +1952,14 @@ function buildPaperHTML(d, opts) {
     p += `</div>`;
 
     p += `<h2 style="font-family: Times New Roman; font-size: 12pt; border-bottom:0.5pt solid #000; padding-bottom:3px; margin-top:18px;">V. THEORY LEARNING OUTCOMES AND ALIGNED COURSE CONTENT</h2>`;
+    const hasTheoryContent = (d.theory || []).some(t => {
+        const tloText = (t.tlo || []).filter(x => String(x).trim()).join(' ').trim();
+        const contentText = (t.content || []).filter(x => String(x).trim()).join(' ').trim();
+        return !!(tloText || contentText || String(t.unitTitle || '').trim() || String(t.ped || '').trim());
+    });
+    if (!hasTheoryContent) {
+        p += `<p style="font-family: Times New Roman; font-size: 12pt; margin:4px 0 18px 0;"><span style="font-family: Times New Roman; font-size: 12pt;"><b>Not applicable</b></span></p>`;
+    } else {
     /* Dynamically split the width between the "TLOs aligned to COs" and
        "Learning content mapped with TLOs and COs" columns based on how much
        text each holds across ALL units/chapters, so neither column is left
@@ -1976,6 +1998,7 @@ function buildPaperHTML(d, opts) {
         p += `<tr>${td(`<b>${sr}</b>`, 'center', 'middle')}${td(tloStr, 'auto', 'top')}${td(contentStr, 'auto', 'top')}${td(pedStr, 'auto', 'middle')}</tr>`;
     });
     p += `</tbody></table>`;
+    }
 
     p += `<h2 style="font-family: Times New Roman; font-size: 12pt; border-bottom:0.5pt solid #000; padding-bottom:3px; margin-top:18px;">VI. LABORATORY LEARNING OUTCOME AND ALIGNED PRACTICAL / TUTORIAL EXPERIENCES</h2>`;
     const hasLabContent = (d.lab || []).some(l => {
@@ -2004,12 +2027,14 @@ function buildPaperHTML(d, opts) {
 
     p += tableFrom('equipmentTable', ['Sr. No', 'Equipment Name with Broad Specifications', 'Relevant LLO Number'], r => `<tr>${td(r.cells[0].textContent, 'center')}${td(esc(r.cells[1].querySelector('textarea').value))}${td(esc(r.cells[2].querySelector('input').value), 'center')}</tr>`);
 
+    if (!excludeWeightage) {
     p += `<h2 style="font-family: Times New Roman; font-size: 12pt; border-bottom:0.5pt solid #000; padding-bottom:3px; margin-top:18px;">IX. SUGGESTED WEIGHTAGE TO LEARNING EFFORTS & ASSESSMENT PURPOSE</h2>`;
     p += `${tableStart}<thead><tr><th ${thStyle}>Sr. No</th><th ${thStyle}>Unit Title</th><th ${thStyle}>Aligned COs</th><th ${thStyle}>Learning Hours</th><th ${thStyle}>R-Level</th><th ${thStyle}>U-Level</th><th ${thStyle}>A-Level</th><th ${thStyle}>Total Marks</th></tr></thead><tbody>`;
     document.querySelectorAll('#weightTable tbody tr').forEach(r => {
         p += `<tr>${td(r.cells[0].textContent, 'center')}${td(esc(r.cells[1].querySelector('input').value))}${[2, 3, 4, 5, 6, 7].map(i => td(esc(r.cells[i].querySelector('input').value), 'center')).join('')}</tr>`;
     });
     p += `<tr><th colspan="3" style="text-align:right; border:0.5pt solid #000; padding:5px; font-family: Times New Roman; font-size: 12pt;"><span style="font-family: Times New Roman; font-size: 12pt;"><b>Grand Total:</b></span></th><th ${thStyle}><span style="font-family: Times New Roman; font-size: 12pt;">${$('gt-hrs').textContent}</span></th><th ${thStyle}><span style="font-family: Times New Roman; font-size: 12pt;">${$('gt-r').textContent}</span></th><th ${thStyle}><span style="font-family: Times New Roman; font-size: 12pt;">${$('gt-u').textContent}</span></th><th ${thStyle}><span style="font-family: Times New Roman; font-size: 12pt;">${$('gt-a').textContent}</span></th><th ${thStyle}><span style="font-family: Times New Roman; font-size: 12pt;">${$('gt-total').textContent}</span></th></tr></tbody></table>`;
+    }
 
     p += `<h2 style="font-family: Times New Roman; font-size: 12pt; border-bottom:0.5pt solid #000; padding-bottom:3px; margin-top:18px;">X. ASSESSMENT METHODOLOGIES / TOOLS</h2>`;
     p += `<h3 style="font-family: Times New Roman; font-size: 12pt;">Formative assessment (Assessment for Learning)</h3>`;
@@ -2116,17 +2141,23 @@ function expertNameDesignation(v) {
 }
 
 function preparedByLines(d) {
-    let num = 1;
-    let lines = '';
-    (d.courseExperts || []).map(expertNameDesignation).filter(e => e.name.trim()).forEach(e => {
-        lines += `<p style="margin:3px 0; font-family: Times New Roman; font-size: 12pt;"><span style="font-family: Times New Roman; font-size: 12pt;">${num}. Name of Course Expert: ${esc(e.name)}${e.designation.trim() ? ', ' + esc(e.designation) : ''}</span></p>`;
-        num++;
+    const F = 'font-family: Times New Roman; font-size: 12pt;';
+    const cell = (html, align) => `<td align="${align || 'left'}" valign="middle" height="64" style="height:64pt; text-align:${align || 'left'}; vertical-align:middle; border:0.5pt solid #000; padding:5px; ${F}"><p style="margin:0; ${F}"><span style="${F}">${html}</span></p></td>`;
+    const head = t => `<th style="border:0.5pt solid #000; padding:5px; text-align:center; font-weight:bold; ${F}"><span style="${F}">${t}</span></th>`;
+    const rows = [];
+    const add = (role, name, desi) => rows.push({ role, text: (name || '').trim() ? esc(name.trim()) + ((desi || '').trim() ? ', ' + esc(desi.trim()) : '') : '' });
+    (d.courseExperts || []).map(expertNameDesignation).filter(e => e.name.trim()).forEach(e => add('Course Expert', e.name, e.designation));
+    (d.industryExperts || []).map(expertNameDesignation).filter(e => e.name.trim()).forEach(e => add('Industry Expert', e.name, e.designation));
+    add('Program Head', d.programHeadName, d.programHeadDesignation);
+    add('CDC-Incharge', d.cdcInchargeName, d.cdcInchargeDesignation);
+    let t = `<table border="1" cellspacing="0" cellpadding="5" width="100%" style="border-collapse:collapse; width:100%; table-layout:fixed; mso-table-layout-alt:fixed; page-break-inside:avoid; ${F}">
+ <colgroup><col style="width:7%"><col style="width:20%"><col style="width:38%"><col style="width:35%"></colgroup>
+ <thead><tr>${head('Sr. No')}${head('Role')}${head('Name &amp; Designation')}${head('Signature')}</tr></thead><tbody>`;
+    rows.forEach((r, i) => {
+        t += `<tr style="height:64pt; page-break-inside:avoid;">${cell(String(i + 1), 'center')}${cell('<b>' + r.role + '</b>')}${cell(r.text)}${cell('&nbsp;')}</tr>`;
     });
-    (d.industryExperts || []).map(expertNameDesignation).filter(e => e.name.trim()).forEach(e => {
-        lines += `<p style="margin:3px 0; font-family: Times New Roman; font-size: 12pt;"><span style="font-family: Times New Roman; font-size: 12pt;">${num}. Name of Industry Expert: ${esc(e.name)}${e.designation.trim() ? ', ' + esc(e.designation) : ''}</span></p>`;
-        num++;
-    });
-    return lines;
+    t += `</tbody></table>`;
+    return t;
 }
 
 function listAsTable(items, heads) {
@@ -2146,7 +2177,8 @@ function showPreview(){
  let excludeQPP = !!($('excludeQPPToggle') && $('excludeQPPToggle').checked);
 
  buildRunningHeaderFooter(d);
- $('paper').innerHTML = buildPaperHTML(d, {excludeQPP: excludeQPP});
+ let excludeWeightage = !!($('excludeWeightageToggle') && $('excludeWeightageToggle').checked);
+ $('paper').innerHTML = buildPaperHTML(d, {excludeQPP: excludeQPP, excludeWeightage: excludeWeightage});
  $('form').style.display='none';
  $('preview').style.display='block';
  $('editBtn').style.display='inline-block';
