@@ -3316,10 +3316,10 @@ function handleAuthFailure_(result) {
   function regDeptName_(d){ return d === "0" ? "Common to all" : (PROGRAMMES[parseInt(d, 10) - 1] ? PROGRAMMES[parseInt(d, 10) - 1].code : d); }
   function regExistCodes_(e){ return regUniq_((e.usages || []).map(function(u){ return u.code; })).join(", "); }
   function regCredits_(e){ return regUniq_((e.usages || []).map(function(u){ return u.credits ? tidy(u.credits) : ""; })).join(", "); }
-  var regChg = { abbr: 0, sem: 0, row: 0, semKept: 0, dept: 0, deptKept: 0, codes: 0, credits: 0, used: 0, renamed: 0 };
-  function regApplyRows_(){
+  var regChg = { codeRemoved: 0, abbr: 0, sem: 0, row: 0, semKept: 0, dept: 0, deptKept: 0, codes: 0, credits: 0, used: 0, renamed: 0 };
+  function regApplyRows_(force){
     var km = {}, added = 0;
-    regChg = { abbr: 0, sem: 0, row: 0, semKept: 0, dept: 0, deptKept: 0, codes: 0, credits: 0, used: 0, renamed: 0 };
+    regChg = { codeRemoved: 0, abbr: 0, sem: 0, row: 0, semKept: 0, dept: 0, deptKept: 0, codes: 0, credits: 0, used: 0, renamed: 0 };
     var prevSig = {};
     reg.entries.forEach(function(e){
       prevSig[e.id] = regUsedIn_(e) + "\u0001" + regExistCodes_(e) + "\u0001" + regCredits_(e);
@@ -3352,7 +3352,17 @@ function handleAuthFailure_(result) {
     });
     reg.entries.forEach(function(e){
       var rw = regPickRow_(e.usages);
-      if (rw && !e.rowEdited && JSON.stringify(rw) !== JSON.stringify(e.row || null)){ e.row = rw; regDirty = true; regChg.row++; }
+      if (force && e.usages.length){ e.rowEdited = false; e.semManual = false; e.abbrManual = false; e.deptManual = false; }   // opened from the button: the scheme wins everywhere
+      if (rw && !e.rowEdited && JSON.stringify(rw) !== JSON.stringify(e.row || null)){
+        // the scheme row changed (including a hand-edited register row being replaced): the old new-code no longer applies
+        if (e.row && e.code){ e.code = ""; regChg.codeRemoved++; }
+        e.row = rw; regDirty = true; regChg.row++;
+      }
+      if (e.usages.length && e.code){
+        // semester / department moved in the scheme: the code's digits are now wrong, so drop it
+        var cs = regSchemeSem_(e), cd = regSchemeDept_(e);
+        if ((cs !== "" && String(e.code).charAt(2) !== String(cs)) || (cd !== "" && String(e.code).charAt(3) !== cd)){ e.code = ""; regChg.codeRemoved++; }
+      }
       if (e.usages.length){
         // A hand-set value stays only while the scheme still says what it said when you set it;
         // as soon as the scheme changes, the register follows the scheme again.
@@ -3924,7 +3934,7 @@ function handleAuthFailure_(result) {
       return result;
     });
   }
-  function regRefresh_(loadSaved){
+  function regRefresh_(loadSaved, force){
     if (!checkOnlineURL()) return;
     regStatus_("Fetching saved data of all departments...");
     showLoader("Building the course register...");
@@ -3972,7 +3982,7 @@ function handleAuthFailure_(result) {
       });
       if (liveList.length) liveNote = " " + liveList.map(function(x){ return x.prog.code; }).join(", ") + " read from the form (including unsaved changes).";
       regRows = buildAllDeptRows_(results, true);   // every elective, not just the first of each Any-One group
-      var added = regApplyRows_();
+      var added = regApplyRows_(force);
       if (added) regDirty = true;
       regLoaded = true;
       document.getElementById("regYear").value = reg.year;
@@ -3981,6 +3991,7 @@ function handleAuthFailure_(result) {
       if (regChg.sem) upd.push(regChg.sem + " semester(s)");
       if (regChg.abbr) upd.push(regChg.abbr + " abbreviation(s)");
       if (regChg.renamed) upd.push(regChg.renamed + " renamed course(s)");
+      if (regChg.codeRemoved){ upd.push(regChg.codeRemoved + " new code(s) removed because the scheme changed"); regDirty = true; }
       if (regChg.row) upd.push(regChg.row + " scheme-data row(s)");
       if (regChg.dept) upd.push(regChg.dept + " allocation(s)");
       if (regChg.codes) upd.push(regChg.codes + " existing-code list(s)");
@@ -4116,8 +4127,9 @@ function handleAuthFailure_(result) {
   document.getElementById("btnCodeRegister").addEventListener("click", function(){
     document.getElementById("registerOverlay").style.display = "block";
     regRender_();
-    if (regLoaded && regDirty && !confirm("The register has changes that are not saved yet.\n\nOK = load the register from the database again (the unsaved changes are discarded).\nCancel = keep the unsaved register as it is.")) return;
-    regRefresh_(true);          // every time the register is opened: saved register + all departments from the database
+    // every click: pull ALL rows from every department's scheme into the register (the scheme overrides the register's copies).
+    // Unsaved register edits (codes, comments, merges) are kept; only the scheme-derived data is replaced.
+    regRefresh_(!(regLoaded && regDirty), true);
   });
   document.getElementById("btnRegBack").addEventListener("click", function(){
     if (regDirty && !confirm("The register has unsaved changes. Leave anyway?\n(Use \u201cSave Register Online\u201d first to keep them.)")) return;
