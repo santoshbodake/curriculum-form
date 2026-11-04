@@ -467,7 +467,6 @@ function handleAuthFailure_(result) {
     <input type="file" id="fileInput" accept="application/json" style="display:none;">
     <input type="file" id="excelInput" accept=".xlsx,.xls,.csv" style="display:none;">
     <input type="file" id="commonExcelInput" accept=".xlsx,.xls,.csv" style="display:none;">
-    <button type="button" class="btn btn-gold btn-compact" id="btnCommonSubjects" style="display:none;" title="Admin only: manage the common subject list shown as a drop-down to every user">&#128218; Common Subjects</button>
 
     <div class="dropdown" id="ddPreview">
       <button type="button" class="btn btn-gold btn-compact dropdown-toggle">&#128065; Preview <span class="caret">&#9662;</span></button>
@@ -1166,10 +1165,6 @@ function handleAuthFailure_(result) {
       PROGRAMMES.map(function(p){
         return '<option value="'+p.code+'">'+p.code+' &mdash; '+p.name+'</option>';
       }).join("");
-  }
-  if (IS_ADMIN) {
-    var commonBtn = document.getElementById("btnCommonSubjects");
-    if (commonBtn) commonBtn.style.display = "inline-flex";
   }
 
   progSelect.addEventListener("change", function(){
@@ -3309,7 +3304,8 @@ function handleAuthFailure_(result) {
   function regSchemeDept_(e){
     var codes = regUniq_((e.usages || []).map(function(u){ return u.progCode; }));
     if (!codes.length) return "";
-    if (codes.length > 1) return "0";                                   // used by several programmes = common
+    if (codes.length >= PROGRAMMES.length) return "0";                  // used by ALL departments = common to all
+    if (codes.length > 1) return "";                                    // some (not all) departments: no automatic allocation
     for (var i = 0; i < PROGRAMMES.length; i++) if (PROGRAMMES[i].code === codes[0]) return String(i + 1);
     return "";
   }
@@ -3352,7 +3348,7 @@ function handleAuthFailure_(result) {
     });
     reg.entries.forEach(function(e){
       var rw = regPickRow_(e.usages);
-      if (force && e.usages.length){ e.rowEdited = false; e.semManual = false; e.abbrManual = false; e.deptManual = false; }   // opened from the button: the scheme wins everywhere
+      if (force && e.usages.length){ e.rowEdited = false; e.semManual = false; e.abbrManual = false; }   // opened from the button: the scheme wins everywhere
       if ((rw || (force && e.usages.length)) && !e.rowEdited && JSON.stringify(rw || null) !== JSON.stringify(e.row || null)){
         // the scheme row changed (including a hand-edited register row being replaced): the old new-code no longer applies
         if (e.row && e.code){ e.code = ""; regChg.codeRemoved++; }
@@ -3360,8 +3356,8 @@ function handleAuthFailure_(result) {
       }
       if (e.usages.length && e.code){
         // semester / department moved in the scheme: the code's digits are now wrong, so drop it
-        var cs = regSchemeSem_(e), cd = regSchemeDept_(e);
-        if ((cs !== "" && String(e.code).charAt(2) !== String(cs)) || (cd !== "" && String(e.code).charAt(3) !== cd)){ e.code = ""; regChg.codeRemoved++; }
+        var cs = regSchemeSem_(e);
+        if ((cs !== "" && String(e.code).charAt(2) !== String(cs))){ e.code = ""; regChg.codeRemoved++; }
       }
       if (e.usages.length){
         // A hand-set value stays only while the scheme still says what it said when you set it;
@@ -3375,12 +3371,11 @@ function handleAuthFailure_(result) {
         if (e.abbrManual && (e.abbrBase === undefined || e.abbrBase !== na)) e.abbrManual = false;
         if ((na || force) && !e.abbrManual && e.abbr !== na){ e.abbr = na; regDirty = true; regChg.abbr++; }   // forced refresh also clears an abbreviation the scheme no longer has
         else if (!e.abbr && na) e.abbr = na;
-        // department: one programme = that programme, several programmes = common to all
-        var nd = regSchemeDept_(e);
-        if (e.deptManual && (e.deptBase === undefined || e.deptBase !== nd)) e.deptManual = false;
-        if (nd !== "" && !e.deptManual && e.dept !== nd){
-          if (e.code && String(e.code).charAt(3) !== nd) regChg.deptKept++;   // the code carries the department digit
-          else { e.dept = nd; regDirty = true; regChg.dept++; }
+        // "Allocate To" is user-defined: a refresh never changes it. Only a still-empty cell is filled
+        // (one programme = that programme, all departments = common to all).
+        if (e.dept === "" || e.dept === undefined){
+          var nd = regSchemeDept_(e);
+          if (nd !== ""){ e.dept = nd; regDirty = true; regChg.dept++; }
         }
       }
       if (prevSig[e.id] !== undefined){
@@ -3737,17 +3732,6 @@ function handleAuthFailure_(result) {
       if (e.dept === "") ds.style.background = "#fef9c3";
       ds.addEventListener("change", function(){ e.dept = ds.value; e.deptManual = true; e.deptBase = regSchemeDept_(e); regValidateCode_(e); regDirty = true; regRender_(); });
       c[8].appendChild(ds);
-      var scDept = regSchemeDept_(e);
-      if (scDept !== "" && scDept !== e.dept){
-        var dt = document.createElement("button"); dt.className = "btn btn-outline btn-compact rg-tag";
-        dt.textContent = "scheme: " + regDeptName_(scDept);
-        dt.title = (scDept === "0" ? "Used by several programmes, so it is common to all." : "Used only by " + regDeptName_(scDept) + ".") + " Click to apply" + (e.code ? " (the code is cleared if it has a different department digit)." : ".");
-        dt.addEventListener("click", function(){
-          var had = e.code; e.dept = scDept; e.deptManual = false; regValidateCode_(e); regDirty = true; regRender_();
-          regStatus_("Department set for \u201c" + e.title + "\u201d." + (had && !e.code ? " Its old code was cleared \u2013 assign a new one." : ""));
-        });
-        c[8].appendChild(document.createElement("br")); c[8].appendChild(dt);
-      }
 
       var ci = document.createElement("input"); ci.type = "text"; ci.maxLength = 6; ci.inputMode = "numeric";
       var isDupCode = !!(e.code && regCodeCount_[e.code] > 1);
@@ -4671,12 +4655,6 @@ function handleAuthFailure_(result) {
     return out;
   }
 
-  document.getElementById("btnCommonSubjects").addEventListener("click", function(){
-    document.getElementById("commonBackdrop").classList.add("open");
-    renderCommonTable_();
-    setCommonStatus_("");
-    if (!commonDirty) loadCommonSubjects_(false);
-  });
   document.getElementById("closeCommon").addEventListener("click", function(){
     if (commonDirty && !confirm("You have unsaved changes to the common subject list. Close anyway?")) return;
     document.getElementById("commonBackdrop").classList.remove("open");
