@@ -268,6 +268,11 @@ function handleAuthFailure_(result) {
   .rowmove { background: #eef2ff; color: #4338ca; border: none; border-radius: 6px; width: 28px; height: 28px; cursor: pointer; font-size: 13px; line-height: 1; transition: var(--transition); font-weight: bold; }
   .rowmove:hover:not(:disabled) { background: #4f46e5; color: #fff; transform: scale(1.05); }
   .rowmove:disabled { opacity: .3; cursor: default; }
+  .rowmove.rowins { background: #ecfdf5; color: #047857; }
+  .rowmove.rowins:hover:not(:disabled) { background: #059669; color: #fff; }
+  #rowMenu { position: fixed; z-index: 600; background: #fff; border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 30px rgba(15,23,42,.22); padding: 5px; min-width: 250px; }
+  #rowMenu button { display: block; width: 100%; text-align: left; background: none; border: none; border-radius: 7px; padding: 8px 10px; font: inherit; font-size: 13px; cursor: pointer; color: var(--text-main); }
+  #rowMenu button:hover { background: #f5f3ff; color: #4c1d95; }
   @keyframes rowMoved { 0% { background: #ddd6fe; } 100% { background: transparent; } }
   tr.row-moved td { animation: rowMoved 1.4s ease-out; }
   
@@ -586,6 +591,7 @@ function handleAuthFailure_(result) {
       <div>
         <button class="btn btn-outline" id="addRowBtn">&#43; Add Course Row</button>
         <button class="btn btn-outline" id="addElectiveBtn" style="margin-left:8px;">&#43; Add Elective Subject</button>
+        <button class="btn btn-outline" id="autoNumBtn" style="margin-left:8px;" title="Renumber the Sr No column 1, 2, 3 ... (rows that share a number stay grouped)">&#128290; Auto-number Rows</button>
         <button class="btn btn-outline" id="clearPageBtn" style="margin-left:8px;color:var(--danger);border-color:var(--danger);">&#128465; Clear This Semester</button>
       </div>
       <span style="font-size:12px;color:var(--text-muted);">
@@ -1286,6 +1292,7 @@ function handleAuthFailure_(result) {
         var cs = cur().courses;
         cs.splice(idx,1);
         if (cs.length === 0) cs.push(emptyCourse(1));
+        renumberRows_(cs);
         renderCourseTable();
         recordHistory(true);
       });
@@ -1295,8 +1302,11 @@ function handleAuthFailure_(result) {
       var downBtn = document.createElement("button");
       downBtn.className = "rowmove"; downBtn.textContent = "\u25bc"; downBtn.title = "Move row down"; downBtn.disabled = idx === page.courses.length - 1;
       downBtn.addEventListener("click", function(){ moveCourseRow_(idx, 1); });
+      var insBtn = document.createElement("button");
+      insBtn.className = "rowmove rowins"; insBtn.textContent = "\uff0b"; insBtn.title = "Insert a row above / below this row";
+      insBtn.addEventListener("click", function(ev){ ev.stopPropagation(); showRowMenu_(insBtn, idx); });
       var acts = document.createElement("div"); acts.className = "rowacts";
-      acts.appendChild(upBtn); acts.appendChild(downBtn); acts.appendChild(delBtn);
+      acts.appendChild(upBtn); acts.appendChild(downBtn); acts.appendChild(insBtn); acts.appendChild(delBtn);
       tdDel.appendChild(acts);
       tr.appendChild(tdDel);
 
@@ -1315,6 +1325,46 @@ function handleAuthFailure_(result) {
   /* Move a course row up (-1) or down (+1). The Sr No stays with the position, so the numbering
      (and any "Any-One" elective group, which shares one Sr No) stays valid after the move. */
   var movedRowIdx = -1;
+
+  /* Automatic Sr No: 1, 2, 3 ... in order. Rows that share a number (an "Any-One" elective group) keep sharing one. */
+  function renumberRows_(cs){
+    var n = 0, prevOld = null;
+    cs.forEach(function(c){
+      var old = (c.srNo === undefined || c.srNo === null) ? "" : String(c.srNo).trim();
+      if (old !== "" && prevOld !== null && old === prevOld) c.srNo = String(n);   // same group as the row above
+      else { n++; c.srNo = String(n); }
+      prevOld = old;
+    });
+  }
+  function closeRowMenu_(){ var m = document.getElementById("rowMenu"); if (m) m.remove(); }
+  function showRowMenu_(btn, idx){
+    closeRowMenu_();
+    var m = document.createElement("div"); m.id = "rowMenu";
+    [["\u2191  Insert row above", "above", false], ["\u2193  Insert row below", "below", false], ["\u21b3  Insert elective option below (same Sr No)", "below", true]].forEach(function(it){
+      var b = document.createElement("button"); b.textContent = it[0];
+      b.addEventListener("click", function(){ closeRowMenu_(); insertCourseRow_(idx, it[1], it[2]); });
+      m.appendChild(b);
+    });
+    var r = btn.getBoundingClientRect();
+    m.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 270)) + "px";
+    m.style.top = (r.bottom + 4 + 130 > window.innerHeight ? Math.max(8, r.top - 134) : r.bottom + 4) + "px";
+    document.body.appendChild(m);
+    setTimeout(function(){ document.addEventListener("click", closeRowMenu_, { once: true }); }, 0);
+  }
+  function insertCourseRow_(idx, where, asElective){
+    if (isFormLocked){ alert("This form is locked, so rows cannot be inserted."); return; }
+    var cs = cur().courses, ref = cs[idx], at = where === "above" ? idx : idx + 1, sr = "";
+    if (asElective && filled(ref.srNo)) sr = ref.srNo;
+    else if (where === "above" && idx > 0 && filled(ref.srNo) && String(cs[idx - 1].srNo) === String(ref.srNo)) sr = ref.srNo;       // between two members of a group: joins it
+    else if (where === "below" && cs[idx + 1] && filled(ref.srNo) && String(cs[idx + 1].srNo) === String(ref.srNo)) sr = ref.srNo;
+    cs.splice(at, 0, emptyCourse(sr));
+    renumberRows_(cs);
+    movedRowIdx = at;
+    renderCourseTable();
+    recordHistory(true);
+    var ti = courseBody.querySelector('input[data-field="title"][data-idx="' + at + '"]');
+    if (ti) ti.focus();
+  }
   function moveCourseRow_(idx, dir){
     if (isFormLocked){ alert("This form is locked, so rows cannot be moved."); return; }
     var cs = cur().courses, j = idx + dir;
@@ -1322,6 +1372,7 @@ function handleAuthFailure_(result) {
     var a = cs[idx], b = cs[j], sa = a.srNo, sb = b.srNo;
     cs[idx] = b; cs[j] = a;
     a.srNo = sb; b.srNo = sa;
+    renumberRows_(cs);
     movedRowIdx = j;
     renderCourseTable();
     recordHistory(true);
@@ -1518,7 +1569,8 @@ function handleAuthFailure_(result) {
       var n = parseInt(c.srNo);
       if (!isNaN(n) && n > lastSrNum) lastSrNum = n;
     });
-    cs.push(emptyCourse(lastSrNum + 1));
+    cs.push(emptyCourse(""));
+    renumberRows_(cs);
     renderCourseTable();
     recordHistory(true);
   });
@@ -1527,10 +1579,18 @@ function handleAuthFailure_(result) {
     var cs = cur().courses;
     var lastSr = cs.length > 0 ? cs[cs.length-1].srNo : 1;
     cs.push(emptyCourse(lastSr));
+    renumberRows_(cs);
     renderCourseTable();
     recordHistory(true);
   });
 
+  document.getElementById("autoNumBtn").addEventListener("click", function(){
+    if (isFormLocked){ alert("This form is locked."); return; }
+    renumberRows_(cur().courses);
+    renderCourseTable();
+    recordHistory(true);
+    setStatus("Rows numbered automatically.");
+  });
   document.getElementById("clearPageBtn").addEventListener("click", function(){
     var p = pageById(state.current);
     if (!confirm('Clear all data entered for "' + p.name + '" only?\n\nOther semesters/stages will not be affected. This cannot be undone (though Undo may still recover it).')) return;
@@ -3234,7 +3294,10 @@ function handleAuthFailure_(result) {
   // The most completely filled row among all places a course is used (first one wins a tie).
   function regPickRow_(usages){
     var best = null, bestN = -1;
-    (usages || []).forEach(function(u){
+    var list = (usages || []).filter(function(u){ return u.data; });
+    var mine = list.filter(function(u){ return u.progCode === state.programmeCode; });
+    if (mine.length) list = mine;             // the department you are editing is the source of truth for its courses
+    list.forEach(function(u){
       if (!u.data) return;
       var row = regCompactRow_(u.data), n = Object.keys(row).length;
       if (n > bestN){ best = row; bestN = n; }
@@ -3253,19 +3316,34 @@ function handleAuthFailure_(result) {
   function regDeptName_(d){ return d === "0" ? "Common to all" : (PROGRAMMES[parseInt(d, 10) - 1] ? PROGRAMMES[parseInt(d, 10) - 1].code : d); }
   function regExistCodes_(e){ return regUniq_((e.usages || []).map(function(u){ return u.code; })).join(", "); }
   function regCredits_(e){ return regUniq_((e.usages || []).map(function(u){ return u.credits ? tidy(u.credits) : ""; })).join(", "); }
-  var regChg = { abbr: 0, sem: 0, row: 0, semKept: 0, dept: 0, deptKept: 0, codes: 0, credits: 0, used: 0 };
+  var regChg = { abbr: 0, sem: 0, row: 0, semKept: 0, dept: 0, deptKept: 0, codes: 0, credits: 0, used: 0, renamed: 0 };
   function regApplyRows_(){
     var km = {}, added = 0;
-    regChg = { abbr: 0, sem: 0, row: 0, semKept: 0, dept: 0, deptKept: 0, codes: 0, credits: 0, used: 0 };
+    regChg = { abbr: 0, sem: 0, row: 0, semKept: 0, dept: 0, deptKept: 0, codes: 0, credits: 0, used: 0, renamed: 0 };
     var prevSig = {};
     reg.entries.forEach(function(e){
       prevSig[e.id] = regUsedIn_(e) + "\u0001" + regExistCodes_(e) + "\u0001" + regCredits_(e);
+      e._prevCodes = (e.usages || []).map(function(u){ return u.code; }).filter(function(c){ return filled(c); });
       e.usages = [];
       e.names.forEach(function(n){ km[regKey_(n)] = e; });
     });
+    var matched = {};
+    regRows.forEach(function(r){ if (r.title && km[regKey_(r.title)]) matched[km[regKey_(r.title)].id] = 1; });
     regRows.forEach(function(r){
       if (!r.title) return;
       var k = regKey_(r.title), e = km[k];
+      if (!e && filled(r.code)){
+        // a course renamed in the scheme: its old name is gone everywhere and the same course code is still used
+        var cands = reg.entries.filter(function(x){ return !matched[x.id] && (x.code === r.code || (x._prevCodes || []).indexOf(r.code) > -1); });
+        if (cands.length === 1){
+          e = cands[0];
+          var oldTitle = e.title;
+          e.names.forEach(function(n){ delete km[regKey_(n)]; });
+          e.title = r.title; e.names = [r.title]; km[k] = e; matched[e.id] = 1;
+          e.comments.push("[" + regToday_() + "] Renamed from \u201c" + oldTitle + "\u201d (matched by course code " + r.code + ").");
+          regDirty = true; regChg.renamed++;
+        }
+      }
       if (!e){
         e = { id: "C" + (reg.nextId++), title: r.title, names: [r.title], abbr: "", dept: "", sem: "", code: "", comments: [], usages: [] };
         reg.entries.push(e); km[k] = e; added++;
@@ -3902,6 +3980,7 @@ function handleAuthFailure_(result) {
       var upd = [];
       if (regChg.sem) upd.push(regChg.sem + " semester(s)");
       if (regChg.abbr) upd.push(regChg.abbr + " abbreviation(s)");
+      if (regChg.renamed) upd.push(regChg.renamed + " renamed course(s)");
       if (regChg.row) upd.push(regChg.row + " scheme-data row(s)");
       if (regChg.dept) upd.push(regChg.dept + " allocation(s)");
       if (regChg.codes) upd.push(regChg.codes + " existing-code list(s)");
@@ -4037,14 +4116,18 @@ function handleAuthFailure_(result) {
   document.getElementById("btnCodeRegister").addEventListener("click", function(){
     document.getElementById("registerOverlay").style.display = "block";
     regRender_();
-    if (!regLoaded) regRefresh_(true);
+    if (regLoaded && regDirty && !confirm("The register has changes that are not saved yet.\n\nOK = load the register from the database again (the unsaved changes are discarded).\nCancel = keep the unsaved register as it is.")) return;
+    regRefresh_(true);          // every time the register is opened: saved register + all departments from the database
   });
   document.getElementById("btnRegBack").addEventListener("click", function(){
     if (regDirty && !confirm("The register has unsaved changes. Leave anyway?\n(Use \u201cSave Register Online\u201d first to keep them.)")) return;
     document.getElementById("registerOverlay").style.display = "none";
     if (regLoaded) setRegisterCourses_(reg.entries);   // scheme cells that now differ from the register get highlighted
   });
-  document.getElementById("btnRegRefresh").addEventListener("click", function(){ regRefresh_(false); });
+  document.getElementById("btnRegRefresh").addEventListener("click", function(){
+    // nothing unsaved: also reload the saved register from the database; otherwise keep the typed-in edits and merge the schemes into them
+    regRefresh_(!regDirty);
+  });
   document.getElementById("btnRegSave").addEventListener("click", regSave_);
   document.getElementById("btnRegExcel").addEventListener("click", regExcel_);
   document.getElementById("btnRegPdf").addEventListener("click", regPdf_);
