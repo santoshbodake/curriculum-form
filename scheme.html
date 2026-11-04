@@ -3308,9 +3308,10 @@ function handleAuthFailure_(result) {
     return o;
   }
   // The most completely filled row among all places a course is used (first one wins a tie).
-  function regPickRow_(usages){
+  function regPickRow_(usages, pref){
     var best = null, bestN = -1;
     var list = (usages || []).filter(function(u){ return u.data; });
+    if (pref){ var pl = list.filter(function(u){ return u.progCode === pref; }); if (pl.length) list = pl; }   // programme chosen by hand in the Used in column
     list.forEach(function(u){
       if (!u.data) return;
       var row = regCompactRow_(u.data), n = regRowCount_(row);
@@ -3366,7 +3367,7 @@ function handleAuthFailure_(result) {
       e.usages.push(r);
     });
     reg.entries.forEach(function(e){
-      var rw = regPickRow_(e.usages);
+      var rw = regPickRow_(e.usages, e.srcProg);
       if (force && e.usages.length){ e.rowEdited = false; e.semManual = false; e.abbrManual = false; e.deptManual = false; }   // opened from the button: the scheme wins everywhere
       if ((rw || (force && e.usages.length)) && !e.rowEdited && JSON.stringify(regRowNorm_(rw)) !== JSON.stringify(regRowNorm_(e.row))){
         // the scheme row changed (including a hand-edited register row being replaced): the old new-code no longer applies
@@ -3697,6 +3698,27 @@ function handleAuthFailure_(result) {
       }
       var usedTxt = regUsedIn_(e) || "\u2014 not in any scheme \u2014";
       var ud = document.createElement("div"); ud.className = "rg-clamp"; ud.textContent = usedTxt; ud.title = usedTxt; c[3].appendChild(ud);
+      var progs = regUniq_((e.usages || []).map(function(u){ return u.progCode; }));
+      if (progs.length > 1){
+        var byP = {}; progs.forEach(function(pc){ byP[pc] = JSON.stringify(regRowNorm_(regPickRow_(e.usages, pc))); });
+        var differs = progs.some(function(pc){ return byP[pc] !== byP[progs[0]]; });
+        var sw = document.createElement("div"); sw.style.cssText = "margin-top:3px;font-size:11px;";
+        var sl = document.createElement("span"); sl.textContent = "Data from: "; sl.style.color = differs ? "#b45309" : "#64748b"; sw.appendChild(sl);
+        var sp = document.createElement("select"); sp.style.cssText = "padding:2px;font-size:11px;border:1px solid " + (differs ? "#f59e0b" : "#cbd5e1") + ";border-radius:5px;";
+        sp.innerHTML = '<option value="">Auto (most filled)</option>' + progs.map(function(pc){ return '<option value="' + pc + '">' + pc + '</option>'; }).join("");
+        sp.value = progs.indexOf(e.srcProg) > -1 ? e.srcProg : "";
+        sp.title = differs ? "These programmes have different scheme data for this course. Choose which one the register uses." : "All programmes have the same scheme data for this course.";
+        sp.addEventListener("change", function(){
+          e.srcProg = sp.value;
+          var rw = regPickRow_(e.usages, e.srcProg);
+          if (rw){ e.row = rw; e.rowEdited = false; }
+          regDirty = true; regRender_(); regUpdateCount_();
+          regStatus_("Scheme data of \u201c" + e.title + "\u201d now taken from " + (e.srcProg || "the most completely filled programme") + ". Click \u201cSave Register Online\u201d to keep it.");
+        });
+        sw.appendChild(sp);
+        if (differs){ var wd = document.createElement("span"); wd.textContent = " \u26a0 differs"; wd.style.color = "#b45309"; sw.appendChild(wd); }
+        c[3].appendChild(sw);
+      }
       c[4].textContent = regExistCodes_(e) || DASH;
       c[4].className += " rg-mono";
 
@@ -3955,7 +3977,7 @@ function handleAuthFailure_(result) {
         var ld = saved.data.data || saved.data;
         if (ld && Array.isArray(ld.entries)){
           reg = { year: ld.year || "27", nextId: ld.nextId || 1, ignore: ld.ignore || [], entries: ld.entries.map(function(e){
-            return { id: e.id, title: e.title, names: e.names && e.names.length ? e.names : [e.title], abbr: e.abbr || "", dept: e.dept === undefined ? "" : String(e.dept), sem: e.sem === "" || e.sem === undefined ? "" : parseInt(e.sem, 10), code: e.code || "", comments: e.comments || [], row: (e.row && typeof e.row === "object") ? e.row : null, rowEdited: !!e.rowEdited, abbrManual: !!e.abbrManual, semManual: !!e.semManual, deptManual: !!e.deptManual,
+            return { id: e.id, title: e.title, names: e.names && e.names.length ? e.names : [e.title], abbr: e.abbr || "", dept: e.dept === undefined ? "" : String(e.dept), sem: e.sem === "" || e.sem === undefined ? "" : parseInt(e.sem, 10), code: e.code || "", comments: e.comments || [], row: (e.row && typeof e.row === "object") ? e.row : null, rowEdited: !!e.rowEdited, abbrManual: !!e.abbrManual, semManual: !!e.semManual, deptManual: !!e.deptManual, srcProg: e.srcProg || "",
               deptBase: e.deptBase === undefined || e.deptBase === null ? undefined : String(e.deptBase),
               abbrBase: e.abbrBase === undefined || e.abbrBase === null ? undefined : String(e.abbrBase),
               semBase: e.semBase === undefined || e.semBase === null ? undefined : (e.semBase === "" ? "" : parseInt(e.semBase, 10)), usages: [] };
@@ -4033,7 +4055,7 @@ function handleAuthFailure_(result) {
     if (curLen > 0) chunks.push(cur);
     // 2. main record: everything except the row data
     var payload = { formType: "LAS_COURSE_REGISTER", year: reg.year, nextId: reg.nextId, ignore: reg.ignore, rowParts: chunks.length,
-      entries: reg.entries.map(function(e){ return { id: e.id, title: e.title, names: e.names, abbr: e.abbr || "", dept: e.dept, sem: e.sem, code: e.code, comments: e.comments, abbrManual: e.abbrManual ? 1 : 0, semManual: e.semManual ? 1 : 0, deptManual: e.deptManual ? 1 : 0, deptBase: e.deptBase, abbrBase: e.abbrBase, semBase: e.semBase }; }) };
+      entries: reg.entries.map(function(e){ return { id: e.id, title: e.title, names: e.names, abbr: e.abbr || "", dept: e.dept, sem: e.sem, code: e.code, comments: e.comments, abbrManual: e.abbrManual ? 1 : 0, semManual: e.semManual ? 1 : 0, deptManual: e.deptManual ? 1 : 0, srcProg: e.srcProg || "", deptBase: e.deptBase, abbrBase: e.abbrBase, semBase: e.semBase }; }) };
     // rows first, main record last, so the main record never points at rows that were not saved
     var chain = Promise.resolve();
     chunks.forEach(function(ch, i){
