@@ -263,6 +263,13 @@ function handleAuthFailure_(result) {
     transition: var(--transition); font-weight: bold;
   }
   .rowdel:hover { background: var(--danger); color: #fff; transform: scale(1.05); }
+  /* Move row up / down */
+  .rowacts { display: flex; gap: 4px; align-items: center; justify-content: center; }
+  .rowmove { background: #eef2ff; color: #4338ca; border: none; border-radius: 6px; width: 28px; height: 28px; cursor: pointer; font-size: 13px; line-height: 1; transition: var(--transition); font-weight: bold; }
+  .rowmove:hover:not(:disabled) { background: #4f46e5; color: #fff; transform: scale(1.05); }
+  .rowmove:disabled { opacity: .3; cursor: default; }
+  @keyframes rowMoved { 0% { background: #ddd6fe; } 100% { background: transparent; } }
+  tr.row-moved td { animation: rowMoved 1.4s ease-out; }
   
   .addrow-bar { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; flex-wrap: wrap; gap: 12px; }
 
@@ -1282,13 +1289,42 @@ function handleAuthFailure_(result) {
         renderCourseTable();
         recordHistory(true);
       });
-      tdDel.appendChild(delBtn);
+      var upBtn = document.createElement("button");
+      upBtn.className = "rowmove"; upBtn.textContent = "\u25b2"; upBtn.title = "Move row up"; upBtn.disabled = idx === 0;
+      upBtn.addEventListener("click", function(){ moveCourseRow_(idx, -1); });
+      var downBtn = document.createElement("button");
+      downBtn.className = "rowmove"; downBtn.textContent = "\u25bc"; downBtn.title = "Move row down"; downBtn.disabled = idx === page.courses.length - 1;
+      downBtn.addEventListener("click", function(){ moveCourseRow_(idx, 1); });
+      var acts = document.createElement("div"); acts.className = "rowacts";
+      acts.appendChild(upBtn); acts.appendChild(downBtn); acts.appendChild(delBtn);
+      tdDel.appendChild(acts);
       tr.appendChild(tdDel);
 
       courseBody.appendChild(tr);
     });
     recalcAll();
     markRegDiffs_();
+    if (movedRowIdx > -1){
+      var mi = courseBody.querySelector('input[data-field="title"][data-idx="' + movedRowIdx + '"]');
+      movedRowIdx = -1;
+      var mtr = mi && mi.closest("tr");
+      if (mtr){ mtr.classList.add("row-moved"); if (mtr.scrollIntoView) mtr.scrollIntoView({ block: "nearest" }); }
+    }
+  }
+
+  /* Move a course row up (-1) or down (+1). The Sr No stays with the position, so the numbering
+     (and any "Any-One" elective group, which shares one Sr No) stays valid after the move. */
+  var movedRowIdx = -1;
+  function moveCourseRow_(idx, dir){
+    if (isFormLocked){ alert("This form is locked, so rows cannot be moved."); return; }
+    var cs = cur().courses, j = idx + dir;
+    if (j < 0 || j >= cs.length) return;
+    var a = cs[idx], b = cs[j], sa = a.srNo, sb = b.srNo;
+    cs[idx] = b; cs[j] = a;
+    a.srNo = sb; b.srNo = sa;
+    movedRowIdx = j;
+    renderCourseTable();
+    recordHistory(true);
   }
 
   function cellInput(idx, field, value, isLeft){
