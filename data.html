@@ -814,14 +814,6 @@ body.viewer-mode header, body.viewer-mode .container { margin-left: 0 !important
 
 <button class="red" onclick="clearAll()">Clear</button>
 
-<label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600; color:#475569; background:rgba(255,255,255,0.7); padding:8px 14px; border-radius:8px; border:1px solid #e2e8f0; cursor:pointer;">
-<input type="checkbox" id="excludeQPPToggle" style="width:auto; padding:0; box-shadow:none;" onchange="if($('preview').style.display==='block')showPreview();">
-Exclude "XIV. Question Paper Profile (QPP)" from Print/PDF/Word
-</label>
-<label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600; color:#475569; background:rgba(255,255,255,0.7); padding:8px 14px; border-radius:8px; border:1px solid #e2e8f0; cursor:pointer;">
-<input type="checkbox" id="excludeWeightageToggle" style="width:auto; padding:0; box-shadow:none;" onchange="if($('preview').style.display==='block')showPreview();">
-Exclude "IX. Suggested Weightage to Learning Efforts &amp; Assessment Purpose" from Preview/Print/PDF/Word
-</label>
 <span class="hint" id="printHint" style="display:none">Tip: in the Print dialog, enable "Headers and footers" to also get the date/time stamp and automatic "Page X of Y" numbering on every sheet, exactly like the original MSBTE document.</span>
 </div>
 
@@ -1000,6 +992,10 @@ It's been 20 minutes since your last save. Click "Save Data" to avoid losing you
 
 <div class="card" id="weightageCard">
 <h2>9. IX. Suggested Weightage to Learning Efforts & Assessment Purpose</h2>
+<label style="display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; color:#475569; background:#f8fafc; padding:6px 12px; border-radius:8px; border:1px solid #e2e8f0; cursor:pointer; margin:0 0 12px 0; text-transform:none; letter-spacing:0;">
+<input type="checkbox" id="excludeWeightageToggle" style="width:auto; padding:0; margin:0; box-shadow:none;" onchange="if($('preview').style.display==='block')showPreview();">
+Exclude this section from Preview / Print / PDF / Word
+</label>
 <table id="weightTable">
 <thead>
 <tr>
@@ -1063,6 +1059,10 @@ It's been 20 minutes since your last save. Click "Save Data" to avoid losing you
 
 <div class="card" id="qppCard">
 <h2>14. XIV. Question Paper Profile (QPP)</h2>
+<label style="display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; color:#475569; background:#f8fafc; padding:6px 12px; border-radius:8px; border:1px solid #e2e8f0; cursor:pointer; margin:0 0 12px 0; text-transform:none; letter-spacing:0;">
+<input type="checkbox" id="excludeQPPToggle" style="width:auto; padding:0; margin:0; box-shadow:none;" onchange="if($('preview').style.display==='block')showPreview();">
+Exclude this section from Preview / Print / PDF / Word
+</label>
 <div style="overflow-x:auto;">
 <table style="font-size:12px;">
 <thead>
@@ -1125,11 +1125,11 @@ R= Remembering &nbsp;&nbsp;&nbsp; U= Understanding &nbsp;&nbsp;&nbsp; A= Applica
 </div>
 <div class="field" style="margin-top:16px;">
 <label>Program Head — Name & Designation</label>
-<div style="display:flex;gap:6px;"><input id="programHeadName" placeholder="Name" style="flex:2" autocomplete="off"><input id="programHeadDesignation" placeholder="Designation" style="flex:1" autocomplete="off"></div>
+<div style="display:flex;gap:6px;"><input id="programHeadName" placeholder="Name" style="flex:2" autocomplete="off"><input id="programHeadDesignation" list="programHeadDesignationList" placeholder="Designation (select or type)" style="flex:1" autocomplete="off"></div>
 </div>
 <div class="field" style="margin-top:16px;">
 <label>CDC-Incharge — Name & Designation</label>
-<div style="display:flex;gap:6px;"><input id="cdcInchargeName" placeholder="Name" style="flex:2" autocomplete="off"><input id="cdcInchargeDesignation" placeholder="Designation" style="flex:1" autocomplete="off"></div>
+<div style="display:flex;gap:6px;"><input id="cdcInchargeName" value="Mr. A. D. Patil" placeholder="Name" style="flex:2" autocomplete="off"><input id="cdcInchargeDesignation" value="Lecturer in Mechatronics" placeholder="Designation" style="flex:1" autocomplete="off"></div>
 </div>
 </div>
 
@@ -1167,6 +1167,7 @@ R= Remembering &nbsp;&nbsp;&nbsp; U= Understanding &nbsp;&nbsp;&nbsp; A= Applica
 </table>
 </div>
 
+<datalist id="programHeadDesignationList"></datalist>
 <datalist id="assessmentOptions">
     <option value="Written Test">
     <option value="Practical Exam">
@@ -2142,8 +2143,8 @@ function expertNameDesignation(v) {
 
 function preparedByLines(d) {
     const F = 'font-family: Times New Roman; font-size: 12pt;';
-    const cell = (html, align) => `<td align="${align || 'left'}" valign="middle" height="64" style="height:64pt; text-align:${align || 'left'}; vertical-align:middle; border:0.5pt solid #000; padding:5px; ${F}"><p style="margin:0; ${F}"><span style="${F}">${html}</span></p></td>`;
-    const head = t => `<th style="border:0.5pt solid #000; padding:5px; text-align:center; font-weight:bold; ${F}"><span style="${F}">${t}</span></th>`;
+    const cell = (html, align) => `<td align="${align || 'left'}" valign="middle" height="64" style="height:64pt; text-align:${align || 'left'}; vertical-align:middle; border:0.5pt solid #000; padding:5px; ${F}"><p align="${align || 'left'}" style="margin:0; text-align:${align || 'left'}; ${F}"><span style="${F}">${html}</span></p></td>`;
+    const head = t => `<th align="center" valign="middle" style="border:0.5pt solid #000; padding:5px; text-align:center; vertical-align:middle; font-weight:bold; ${F}"><p align="center" style="margin:0; text-align:center; ${F}"><span style="${F}">${t}</span></p></th>`;
     const rows = [];
     const add = (role, name, desi) => rows.push({ role, text: (name || '').trim() ? esc(name.trim()) + ((desi || '').trim() ? ', ' + esc(desi.trim()) : '') : '' });
     (d.courseExperts || []).map(expertNameDesignation).filter(e => e.name.trim()).forEach(e => add('Course Expert', e.name, e.designation));
@@ -2247,6 +2248,7 @@ document.addEventListener('keydown', function (e) { if (e.key === 'Escape') clos
 })();
 
 buildProgrammePanel();
+$('programHeadDesignationList').innerHTML = PROGRAMME_OPTIONS.map(o => `<option value="HOD ${esc(o.name)}"></option>`).join('') + '<option value="HOD Science and Humanities"></option>';
 for(let i=0;i<5;i++)addCO();
 for(let i=0;i<5;i++)addTheory();
 for(let i=0;i<3;i++)addLab();
