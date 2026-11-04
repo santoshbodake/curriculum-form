@@ -246,6 +246,9 @@ function handleAuthFailure_(result) {
   /* cells changed by picking a course from the Course Title / Code drop-down - this session only, cleared on save */
   table.scheme input.fill-new, table.scheme select.fill-new { background: #dbeafe !important; box-shadow: inset 0 0 0 1px #93c5fd; border-radius: 4px; }
   @media print { table.scheme input.fill-new, table.scheme select.fill-new { background: transparent !important; box-shadow: none !important; } }
+  /* Self Learning vs SLA Max: exactly one of the two is filled */
+  table.scheme input.sla-miss { background: #fecaca !important; box-shadow: inset 0 0 0 2px #dc2626; border-radius: 4px; }
+  @media print { table.scheme input.sla-miss { background: transparent !important; box-shadow: none !important; } }
   table.scheme input.reg-diff, table.scheme select.reg-diff { background: #fef3c7 !important; box-shadow: inset 0 0 0 2px #f59e0b; border-radius: 4px; }
   .reg-banner { display: none; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 10px; padding: 8px 12px; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 10px; color: #92400e; font-size: 13px; font-weight: 600; }
   .reg-banner .btn { font-size: 12px; padding: 4px 10px; }
@@ -4269,6 +4272,18 @@ function handleAuthFailure_(result) {
     Array.prototype.forEach.call(courseBody.querySelectorAll("[data-field]"), function(el){
       el.classList.remove("reg-diff");
       if (el.dataset.regTip){ el.title = el.dataset.regOrig || ""; delete el.dataset.regTip; }
+    });
+    Array.prototype.forEach.call(courseBody.querySelectorAll(".sla-miss"), function(el){ el.classList.remove("sla-miss"); el.title = el.dataset.slaOrig || ""; });
+    (page ? page.courses : []).forEach(function(c, idx){
+      // Self Learning Hrs and SLA Max: highlight both cells in red when only one of them has a value
+      if (filled(c.selfLearning) === filled(c.slaMax)) return;
+      ["selfLearning", "slaMax"].forEach(function(f){
+        var el = courseBody.querySelector('[data-field="' + f + '"][data-idx="' + idx + '"]');
+        if (!el) return;
+        el.dataset.slaOrig = el.title || "";
+        el.classList.add("sla-miss");
+        el.title = "Self Learning and SLA Max must both be filled, or both left empty.";
+      });
     });
     Array.prototype.forEach.call(courseBody.querySelectorAll(".fill-new"), function(el){ el.classList.remove("fill-new"); });
     (page ? page.courses : []).forEach(function(c, idx){
