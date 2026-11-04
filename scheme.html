@@ -243,6 +243,9 @@ function handleAuthFailure_(result) {
   /* Notional Learning Hrs/Week must be an even number */
   table.scheme input.notional-odd { background: #fee2e2 !important; color: #b91c1c !important; font-weight: 700; box-shadow: inset 0 0 0 2px #dc2626; border-radius: 4px; }
   /* Values that differ from the Master Course Register */
+  /* cells changed by picking a course from the Course Title / Code drop-down - this session only, cleared on save */
+  table.scheme input.fill-new, table.scheme select.fill-new { background: #dcfce7 !important; box-shadow: inset 0 0 0 1px #86efac; border-radius: 4px; }
+  @media print { table.scheme input.fill-new, table.scheme select.fill-new { background: transparent !important; box-shadow: none !important; } }
   table.scheme input.reg-diff, table.scheme select.reg-diff { background: #fef3c7 !important; box-shadow: inset 0 0 0 2px #f59e0b; border-radius: 4px; }
   .reg-banner { display: none; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 10px; padding: 8px 12px; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 10px; color: #92400e; font-size: 13px; font-weight: 600; }
   .reg-banner .btn { font-size: 12px; padding: 4px 10px; }
@@ -1135,6 +1138,7 @@ function handleAuthFailure_(result) {
 
   var semTabs   = document.getElementById("semTabs");
   var courseBody= document.getElementById("courseBody");
+  var fillNew = new WeakMap();   // course row object -> { field: true }; session only, never saved
   var progSelect= document.getElementById("progSelect");
   var progCode  = document.getElementById("progCode");
   var semLabelEl= document.getElementById("semLabel");
@@ -1266,6 +1270,7 @@ function handleAuthFailure_(result) {
       }).join("");
       sel.addEventListener("change", function(){ 
         cur().courses[idx].type = sel.value; 
+        fillNewClear_(cur().courses[idx], "type");
         markRegDiffs_();
         recordHistory(true); 
       });
@@ -1403,6 +1408,7 @@ function handleAuthFailure_(result) {
         var v = input.value;
         if (UPPER.indexOf(field) > -1 || TEXTY.indexOf(field) > -1) v = v.toUpperCase();
         cur().courses[idx][field] = v;
+        fillNewClear_(cur().courses[idx], field);
         recalcAll();
         markRegDiffs_();
         recordHistory(false);
@@ -1655,7 +1661,11 @@ function handleAuthFailure_(result) {
     var t = document.getElementById("saveToast");
     if (t) t.classList.remove("show");
   }
-  function markSaved(){ lastSavedAt = Date.now(); hideToast(); }
+  function markSaved(){
+    lastSavedAt = Date.now(); hideToast();
+    fillNew = new WeakMap();   // green "changed by drop-down" cells only live until the data is saved
+    if (typeof courseBody !== "undefined" && courseBody) Array.prototype.forEach.call(courseBody.querySelectorAll(".fill-new"), function(el){ el.classList.remove("fill-new"); });
+  }
 
   document.getElementById("btnSaveLocal").addEventListener("click", saveLocal);
   function saveLocal(){
@@ -4184,15 +4194,24 @@ function handleAuthFailure_(result) {
     }
     return null;
   }
+  function fillNewClear_(c, field){ var m = c && fillNew.get(c); if (m && m[field]) delete m[field]; }
   function applyCommonSubject_(idx, subj){
     var c = cur().courses[idx];
     if (!c) return;
+    var before = {};
+    COMMON_FIELDS.forEach(function(f){ before[f] = c[f]; });
     COMMON_FIELDS.forEach(function(f){
       if (subj._partial && !filled(subj[f])) return;
       c[f] = subj[f] === undefined || subj[f] === null ? "" : String(subj[f]);
     });
     if (state.current === "exit2") c.notional = "";   // Second Year Exit: no Notional Learning Hrs/Week
     computeCourse(c, state.current);
+    // remember which cells now hold a value different from before (light green until the data is saved)
+    var marks = fillNew.get(c) || {};
+    COMMON_FIELDS.forEach(function(f){
+      if (!regSame_(before[f], c[f])) marks[f] = true; else delete marks[f];
+    });
+    fillNew.set(c, marks);
     renderCourseTable();
     recordHistory(true);
     setStatus('Row filled from ' + (subj._reg ? 'course register' : 'common subject') + ' "' + (subj.title || subj.code) + '".');
@@ -4250,6 +4269,14 @@ function handleAuthFailure_(result) {
     Array.prototype.forEach.call(courseBody.querySelectorAll("[data-field]"), function(el){
       el.classList.remove("reg-diff");
       if (el.dataset.regTip){ el.title = el.dataset.regOrig || ""; delete el.dataset.regTip; }
+    });
+    Array.prototype.forEach.call(courseBody.querySelectorAll(".fill-new"), function(el){ el.classList.remove("fill-new"); });
+    (page ? page.courses : []).forEach(function(c, idx){
+      var fm = fillNew.get(c);
+      if (fm) Object.keys(fm).forEach(function(f){
+        var el = courseBody.querySelector('[data-field="' + f + '"][data-idx="' + idx + '"]');
+        if (el) el.classList.add("fill-new");
+      });
     });
     (page ? page.courses : []).forEach(function(c, idx){
       var d = regDiffsForCourse_(c, pageId);
