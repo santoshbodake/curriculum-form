@@ -798,7 +798,7 @@ function handleAuthFailure_(result) {
         <summary>How this page works</summary>
         <div class="hint">
           Every course from the schemes of all departments (six semesters, every elective) is listed <b>once</b>; identical names are grouped automatically.
-          <b>Refresh from Schemes</b> reads the saved-online schemes (and your open programme as it is on the form, including unsaved changes) and updates semester, abbreviation, credits and scheme data; values you edit here by hand are kept.
+          <b>Refresh from Schemes</b> reads the saved-online schemes and updates semester, abbreviation, credits and scheme data; values you edit here by hand are kept.
           Use <b>Find Similar Names</b> to spot slightly different names, then <b>Merge</b> them &mdash; a comment is compulsory.
           Allocate each course to a department (or <b>Common to all</b>), then <b>Assign Codes</b>, or <b>type a code directly</b> in the New Code column.
           Code format: <b>YY&nbsp;S&nbsp;D&nbsp;NN</b> = autonomy year, semester, department digit (0 = common, 1&ndash;9 = AN, AO, CE, CO, IH, EE, TE, ME, MK), serial.
@@ -3311,8 +3311,6 @@ function handleAuthFailure_(result) {
   function regPickRow_(usages){
     var best = null, bestN = -1;
     var list = (usages || []).filter(function(u){ return u.data; });
-    var mine = list.filter(function(u){ return u.progCode === state.programmeCode; });
-    if (mine.length) list = mine;             // the department you are editing is the source of truth for its courses
     list.forEach(function(u){
       if (!u.data) return;
       var row = regCompactRow_(u.data), n = regRowCount_(row);
@@ -3369,7 +3367,7 @@ function handleAuthFailure_(result) {
     });
     reg.entries.forEach(function(e){
       var rw = regPickRow_(e.usages);
-      if (force && e.usages.length){ e.rowEdited = false; e.semManual = false; e.abbrManual = false; }   // opened from the button: the scheme wins everywhere
+      if (force && e.usages.length){ e.rowEdited = false; e.semManual = false; e.abbrManual = false; e.deptManual = false; }   // opened from the button: the scheme wins everywhere
       if ((rw || (force && e.usages.length)) && !e.rowEdited && JSON.stringify(regRowNorm_(rw)) !== JSON.stringify(regRowNorm_(e.row))){
         // the scheme row changed (including a hand-edited register row being replaced): the old new-code no longer applies
         if (e.row && e.code){ e.code = ""; regChg.codeRemoved++; }
@@ -3397,9 +3395,11 @@ function handleAuthFailure_(result) {
         else if (!e.abbr && na) e.abbr = na;
         // "Allocate To" is user-defined: a refresh never changes it. Only a still-empty cell is filled
         // (one programme = that programme, all departments = common to all).
-        if (e.dept === "" || e.dept === undefined){
-          var nd = regSchemeDept_(e);
-          if (nd !== ""){ e.dept = nd; regDirty = true; regChg.dept++; }
+        // a forced refresh (the button) re-reads it from the schemes even when already allocated
+        var nd = regSchemeDept_(e);
+        if (nd !== "" && (force || e.dept === "" || e.dept === undefined) && e.dept !== nd){
+          e.dept = nd; e.deptManual = false; regDirty = true; regChg.dept++;
+          if (e.code && String(e.code).charAt(3) !== nd){ e.code = ""; regChg.codeRemoved++; }   // the code carries the department digit
         }
       }
       if (prevSig[e.id] !== undefined){
@@ -3981,6 +3981,7 @@ function handleAuthFailure_(result) {
         var lp = PROGRAMMES.filter(function(x){ return x.code === state.programmeCode; })[0];
         if (lp) liveList.push({ prog: lp, st: state });
       }
+      liveList = [];   // refresh reads the saved-online database only, never the form
       liveList.forEach(function(x){
         try {
           var live = normaliseLoaded(JSON.parse(JSON.stringify({ programmeCode: x.st.programmeCode, effYear: x.st.effYear, scheme: x.st.scheme, pages: x.st.pages })));
