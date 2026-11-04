@@ -3353,10 +3353,10 @@ function handleAuthFailure_(result) {
     reg.entries.forEach(function(e){
       var rw = regPickRow_(e.usages);
       if (force && e.usages.length){ e.rowEdited = false; e.semManual = false; e.abbrManual = false; e.deptManual = false; }   // opened from the button: the scheme wins everywhere
-      if (rw && !e.rowEdited && JSON.stringify(rw) !== JSON.stringify(e.row || null)){
+      if ((rw || (force && e.usages.length)) && !e.rowEdited && JSON.stringify(rw || null) !== JSON.stringify(e.row || null)){
         // the scheme row changed (including a hand-edited register row being replaced): the old new-code no longer applies
         if (e.row && e.code){ e.code = ""; regChg.codeRemoved++; }
-        e.row = rw; regDirty = true; regChg.row++;
+        e.row = rw || null; regDirty = true; regChg.row++;
       }
       if (e.usages.length && e.code){
         // semester / department moved in the scheme: the code's digits are now wrong, so drop it
@@ -3373,7 +3373,7 @@ function handleAuthFailure_(result) {
           else { e.sem = ns; regDirty = true; regChg.sem++; }
         }
         if (e.abbrManual && (e.abbrBase === undefined || e.abbrBase !== na)) e.abbrManual = false;
-        if (na && !e.abbrManual && e.abbr !== na){ e.abbr = na; regDirty = true; regChg.abbr++; }
+        if ((na || force) && !e.abbrManual && e.abbr !== na){ e.abbr = na; regDirty = true; regChg.abbr++; }   // forced refresh also clears an abbreviation the scheme no longer has
         else if (!e.abbr && na) e.abbr = na;
         // department: one programme = that programme, several programmes = common to all
         var nd = regSchemeDept_(e);
@@ -4138,7 +4138,7 @@ function handleAuthFailure_(result) {
   });
   document.getElementById("btnRegRefresh").addEventListener("click", function(){
     // nothing unsaved: also reload the saved register from the database; otherwise keep the typed-in edits and merge the schemes into them
-    regRefresh_(!regDirty);
+    regRefresh_(!regDirty, true);   // same as opening: every cell is re-read from the schemes
   });
   document.getElementById("btnRegSave").addEventListener("click", regSave_);
   document.getElementById("btnRegExcel").addEventListener("click", regExcel_);
