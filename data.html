@@ -2914,7 +2914,7 @@ function setToolbarBusy(busy) {
       else if (s.img !== undefined) {
         const data = imgMap.get(s.img);
         if (data) runs.push(new D.ImageRun({ type: 'png', data, transformation: { width: s.w, height: s.h }, altText: { title: 'QR Code', description: 'QR Code', name: 'QR Code' } }));
-      } else runs.push(new D.TextRun({ text: s.t, bold: !!s.b, italics: !!s.i, size: s.sz, font: FONT }));
+      } else runs.push(new D.TextRun({ text: s.t, bold: !!s.b, italics: !!s.i, size: s.sz, font: FONT, color: '000000' }));
     });
     return runs;
   }
@@ -2949,7 +2949,7 @@ function setToolbarBusy(busy) {
     const topSp = (o.before || 0) + (o.fixedBefore !== undefined ? o.fixedBefore : before);
     const botSp = o.fixedAfter !== undefined ? o.fixedAfter : after;
     const mk = (parts, bef, aft, keep) => {
-      const p = { children: makeRuns(parts, ctx.imgMap), alignment, spacing: { before: bef, after: aft, line: LINE, lineRule: D.LineRuleType.AUTO } };
+      const p = { children: makeRuns(parts, ctx.imgMap), alignment, run: { font: FONT, size: sz, color: '000000' }, spacing: { before: bef, after: aft, line: LINE, lineRule: D.LineRuleType.AUTO } };
       if (keep) p.keepNext = true;
       if (o.border) p.border = o.border;
       return new D.Paragraph(p);
@@ -3152,7 +3152,7 @@ function setToolbarBusy(busy) {
     };
     if (WORD_INCLUDE_HEADER_FOOTER) {
       const title = String(d.courseTitle || '').toUpperCase(), code = String(d.courseCode || '');
-      const bold12 = { bold: true, size: 24, font: FONT };
+      const bold12 = { bold: true, size: 24, font: FONT, color: '000000' };
       const rule = { style: D.BorderStyle.SINGLE, size: 6, space: 4, color: '000000' };   // horizontal separator line
       section.headers = { default: new D.Header({ children: [new D.Paragraph({
         border: { bottom: rule },
@@ -3169,7 +3169,10 @@ function setToolbarBusy(busy) {
     const doc = new D.Document({
       creator: 'Curriculum Document Generator',
       title: String(d.courseTitle || 'Curriculum Document'),
-      styles: { default: { document: { run: { font: FONT, size: 24 }, paragraph: { spacing: { line: LINE } } } } },
+      styles: {
+        default: { document: { run: { font: FONT, size: 24, color: '000000' }, paragraph: { spacing: { line: LINE } } } },
+        paragraphStyles: [{ id: 'Normal', name: 'Normal', quickFormat: true, run: { font: FONT, size: 24, color: '000000' }, paragraph: { spacing: { line: LINE } } }]
+      },
       sections: [section]
     });
     return D.Packer.toBlob(doc);
