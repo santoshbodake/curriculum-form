@@ -3153,11 +3153,14 @@ function setToolbarBusy(busy) {
     if (WORD_INCLUDE_HEADER_FOOTER) {
       const title = String(d.courseTitle || '').toUpperCase(), code = String(d.courseCode || '');
       const bold12 = { bold: true, size: 24, font: FONT };
+      const rule = { style: D.BorderStyle.SINGLE, size: 6, space: 4, color: '000000' };   // horizontal separator line
       section.headers = { default: new D.Header({ children: [new D.Paragraph({
+        border: { bottom: rule },
         tabStops: [{ type: D.TabStopType.RIGHT, position: CONTENT_W }],
         children: [new D.TextRun(Object.assign({ text: title }, bold12)), new D.TextRun(Object.assign({ children: [new D.Tab(), 'Subject Code : ' + code] }, bold12))]
       })] }) };
       section.footers = { default: new D.Footer({ children: [new D.Paragraph({
+        border: { top: rule },
         alignment: D.AlignmentType.CENTER,
         children: [new D.TextRun(Object.assign({ text: 'Sharad Institute of Technology, Polytechnic, Yadrav' }, bold12))]
       })] }) };
