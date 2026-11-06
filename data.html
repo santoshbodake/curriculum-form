@@ -42,6 +42,7 @@ function handleAuthFailure_(result) {
 <!-- JSZip & HTML-to-DOCX conversion libraries -->
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html-docx-js@0.3.1/dist/html-docx.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docx@9.6.1/dist/index.iife.js"></script>
 <style>
 /* ===== Elegant & Colorful Modern UI ===== */
 * { box-sizing: border-box; }
@@ -1623,6 +1624,21 @@ async function saveWord(){
  let excludeQPP = !!($('excludeQPPToggle') && $('excludeQPPToggle').checked);
  let excludeWeightage = !!($('excludeWeightageToggle') && $('excludeWeightageToggle').checked);
  let bodyHTML = buildPaperHTML(d, {excludeQPP: excludeQPP, excludeWeightage: excludeWeightage});
+ // Preferred path: native Word file built with the "docx" library (true OOXML).
+ // If anything goes wrong, the original html-docx-js export below still runs.
+ if (typeof buildDocxBlob === 'function' && typeof docx !== 'undefined') {
+     try {
+         const docxOut = await buildDocxBlob(d, {excludeQPP: excludeQPP, excludeWeightage: excludeWeightage});
+         let a0 = document.createElement('a');
+         a0.href = URL.createObjectURL(docxOut);
+         a0.download = docxFileName(d);
+         a0.click();
+         setTimeout(() => URL.revokeObjectURL(a0.href), 2000);
+         return;
+     } catch (err) {
+         console.warn("docx-library export failed, reverting to html-docx-js:", err);
+     }
+ }
 
  let docHTML = `<!DOCTYPE html>
 <html>
@@ -2779,5 +2795,384 @@ function setToolbarBusy(busy) {
     }
 }
 </script>
+<script>
+/* =====================================================================
+   WORD (.docx) EXPORT USING THE "docx" LIBRARY  (true OOXML, no server)
+   ---------------------------------------------------------------------
+   buildDocxBlob(d, opts) takes the same collect() data and the same
+   options as buildPaperHTML(d, opts), and turns the document that
+   buildPaperHTML() produces into native Word objects (headings,
+   paragraphs, real tables with merged cells / column widths / row heights,
+   images). Because it follows buildPaperHTML(), the Word file always has
+   the same content and rules as the preview, print and PDF output
+   (Not applicable sections, excluded sections, signature table, ...).
+   saveWord() tries this first and falls back to the old html-docx-js path
+   if anything fails, so nothing else is affected.
+   ===================================================================== */
+(function () {
+  const FONT = 'Times New Roman';
+  const PAGE = { w: 11906, h: 16838, left: 850, right: 850, top: 1134, bottom: 1134, header: 454, footer: 454 };
+  const CONTENT_W = PAGE.w - PAGE.left - PAGE.right;      // 10206 twips (18 cm)
+  const LINE = 324;                                         // 1.35 line spacing, as in the HTML output
+  const WORD_INCLUDE_HEADER_FOOTER = true;                  // running title / code header and institute footer
+
+  function lib() {
+    if (typeof docx === 'undefined' || !docx.Document || !docx.Packer) throw new Error('docx library is not loaded');
+    return docx;
+  }
+
+  /* ---------- small style helpers ---------- */
+  function styleOf(el, prop) {
+    const st = (el.getAttribute && el.getAttribute('style')) || '';
+    const m = new RegExp('(?:^|;)\\s*' + prop + '\\s*:\\s*([^;]+)', 'i').exec(st);
+    return m ? m[1].replace(/!important/i, '').trim() : '';
+  }
+  function lenToTwips(v) {
+    const m = /^(-?[\d.]+)\s*(px|pt|em)?$/.exec(String(v || '').trim());
+    if (!m) return 0;
+    const n = parseFloat(m[1]), u = m[2] || 'px';
+    return Math.round(u === 'pt' ? n * 20 : u === 'em' ? n * 240 : n * 15);
+  }
+  function marginOf(el) {                                    // {top,bottom,has}
+    let top = 0, bottom = 0, has = false;
+    const sh = styleOf(el, 'margin');
+    if (sh) {
+      has = true;
+      const p = sh.split(/\s+/).map(lenToTwips);
+      if (p.length < 3) { top = p[0]; bottom = p[0]; } else { top = p[0]; bottom = p[2]; }
+    }
+    const t = styleOf(el, 'margin-top'), b = styleOf(el, 'margin-bottom');
+    if (t) { top = lenToTwips(t); has = true; }
+    if (b) { bottom = lenToTwips(b); has = true; }
+    return { top, bottom, has };
+  }
+  function alignOf(el, fallback) {
+    const D = lib();
+    const a = (styleOf(el, 'text-align') || (el.getAttribute && el.getAttribute('align')) || '').toLowerCase();
+    if (a === 'center') return D.AlignmentType.CENTER;
+    if (a === 'right') return D.AlignmentType.END;
+    if (a === 'justify') return D.AlignmentType.BOTH;
+    if (a === 'left') return D.AlignmentType.START;
+    return fallback;
+  }
+  function sizeOf(el, cur) {                                  // half-points
+    const m = /([\d.]+)\s*pt/i.exec(styleOf(el, 'font-size'));
+    return m ? Math.round(parseFloat(m[1]) * 2) : cur;
+  }
+
+  /* ---------- inline content -> runs ---------- */
+  function collectInline(node, st, segs) {
+    node.childNodes.forEach(ch => {
+      if (ch.nodeType === 3) {
+        const t = ch.nodeValue.replace(/[ \t\r\n\f]+/g, ' ');
+        if (t) segs.push({ t, b: st.b, i: st.i, sz: st.sz });
+        return;
+      }
+      if (ch.nodeType !== 1) return;
+      const tag = ch.tagName.toLowerCase();
+      if (tag === 'br') { segs.push({ br: true }); return; }
+      if (tag === 'img') {
+        segs.push({ img: ch.getAttribute('src') || '', w: parseInt(ch.getAttribute('width'), 10) || 90, h: parseInt(ch.getAttribute('height'), 10) || 90 });
+        return;
+      }
+      if (tag === 'script' || tag === 'style') return;
+      const fw = styleOf(ch, 'font-weight'), fs = styleOf(ch, 'font-style');
+      collectInline(ch, {
+        b: st.b || tag === 'b' || tag === 'strong' || /bold|[6-9]00/.test(fw),
+        i: st.i || tag === 'i' || tag === 'em' || /italic/.test(fs),
+        sz: sizeOf(ch, st.sz)
+      }, segs);
+    });
+  }
+  function normalise(segs) {                                  // HTML-style whitespace collapsing
+    const out = [];
+    let prevSpace = true;
+    segs.forEach(s => {
+      if (s.t !== undefined) {
+        let t = s.t;
+        if (prevSpace) t = t.replace(/^ /, '');
+        if (!t) return;
+        prevSpace = / $/.test(t);
+        out.push(Object.assign({}, s, { t }));
+      } else {
+        if (s.br) {
+          const last = out[out.length - 1];
+          if (last && last.t !== undefined) last.t = last.t.replace(/ $/, '');
+          prevSpace = true;
+        } else prevSpace = false;
+        out.push(s);
+      }
+    });
+    const last = out[out.length - 1];
+    if (last && last.t !== undefined) last.t = last.t.replace(/ $/, '');
+    return out.filter(s => s.t === undefined || s.t !== '');
+  }
+  function makeRuns(segs, imgMap) {
+    const D = lib(), runs = [];
+    segs.forEach(s => {
+      if (s.br) runs.push(new D.TextRun({ break: 1 }));
+      else if (s.img !== undefined) {
+        const data = imgMap.get(s.img);
+        if (data) runs.push(new D.ImageRun({ type: 'png', data, transformation: { width: s.w, height: s.h }, altText: { title: 'QR Code', description: 'QR Code', name: 'QR Code' } }));
+      } else runs.push(new D.TextRun({ text: s.t, bold: !!s.b, italics: !!s.i, size: s.sz, font: FONT }));
+    });
+    return runs;
+  }
+
+  /* ---------- block content -> paragraphs ---------- */
+  // Flatten nested <div>s into a list of {el, tag, before} blocks (div margin-top becomes spacing before)
+  function flatten(parent, out, state) {
+    parent.childNodes.forEach(ch => {
+      if (ch.nodeType !== 1) return;
+      const tag = ch.tagName.toLowerCase();
+      if (tag === 'div') {
+        state.before += lenToTwips(styleOf(ch, 'margin-top'));
+        flatten(ch, out, state);
+      } else if (/^(p|h1|h2|h3|h4|table)$/.test(tag)) {
+        out.push({ el: ch, tag, before: state.before });
+        state.before = 0;
+      }
+    });
+  }
+  function makePara(el, ctx, o) {
+    const D = lib();
+    o = o || {};
+    const sz = sizeOf(el, ctx.sz);
+    const segs = [];
+    collectInline(el, { b: !!(o.bold || ctx.bold), i: false, sz }, segs);
+    const m = marginOf(el);
+    let before, after;
+    if (o.inCell) { before = m.has ? m.top : 0; after = m.has ? m.bottom : 0; }
+    else { before = m.has ? m.top : 60; after = m.has ? m.bottom : 60; }
+    const clean = normalise(segs);
+    const alignment = alignOf(el, o.align || ctx.align);
+    const topSp = (o.before || 0) + (o.fixedBefore !== undefined ? o.fixedBefore : before);
+    const botSp = o.fixedAfter !== undefined ? o.fixedAfter : after;
+    const mk = (parts, bef, aft, keep) => {
+      const p = { children: makeRuns(parts, ctx.imgMap), alignment, spacing: { before: bef, after: aft, line: LINE, lineRule: D.LineRuleType.AUTO } };
+      if (keep) p.keepNext = true;
+      if (o.border) p.border = o.border;
+      return new D.Paragraph(p);
+    };
+    // Justified text with manual line breaks: Word would stretch every line that ends in a break
+    // (browsers do not), so each line becomes its own paragraph with no gap between them.
+    if (alignment === D.AlignmentType.BOTH && clean.some(x => x.br)) {
+      const lines = [[]];
+      clean.forEach(x => { if (x.br) lines.push([]); else lines[lines.length - 1].push(x); });
+      return lines.map((ln, i) => mk(ln, i === 0 ? topSp : 0, i === lines.length - 1 ? botSp : 0, o.keepNext && i === lines.length - 1));
+    }
+    return mk(clean, topSp, botSp, o.keepNext);
+  }
+  function blockToNodes(b, ctx, nextIsTable) {
+    const D = lib();
+    if (b.tag === 'table') return [buildTable(b.el, ctx)];
+    if (b.tag === 'h2')
+      return [].concat(makePara(b.el, ctx, { bold: true, keepNext: true, fixedBefore: 270, fixedAfter: 120, before: b.before,
+        border: { bottom: { style: D.BorderStyle.SINGLE, size: 4, space: 2, color: '000000' } } }));
+    if (b.tag === 'h1' || b.tag === 'h3' || b.tag === 'h4')
+      return [].concat(makePara(b.el, ctx, { bold: true, keepNext: true, fixedBefore: 120, fixedAfter: 80, before: b.before }));
+    return [].concat(makePara(b.el, ctx, { before: b.before, keepNext: nextIsTable }));
+  }
+
+  /* ---------- keep narrow columns wide enough for their longest word ---------- */
+  let _cv = null;
+  function textWidthTwips(txt, szHalf, bold) {
+    try {
+      _cv = _cv || document.createElement('canvas').getContext('2d');
+      _cv.font = (bold ? 'bold ' : '') + (szHalf / 2) + 'pt "' + FONT + '", "Liberation Serif", Times, serif';
+      return _cv.measureText(txt).width * 15;               // px -> twips
+    } catch (e) { return txt.length * szHalf * 5.5; }
+  }
+  function fitWidths(widths, grid, margins, tableSz) {
+    const n = widths.length, hard = new Array(n).fill(0), soft = new Array(n).fill(0), pad = margins.left + margins.right + 16;
+    grid.forEach(row => row.forEach(cell => {
+      if (cell.cs !== 1) return;
+      const el = cell.el, isTh = cell.tag === 'th', sz = sizeOf(el, tableSz), bold = isTh || !!el.querySelector('b,strong');
+      const txt = (el.textContent || '').replace(/\s+/g, ' ').trim();
+      let need;
+      if (!txt && el.querySelector('img')) need = 90 * 15 + pad;
+      else {
+        let longest = 0;
+        txt.split(' ').forEach(w => w.split(/(?<=-)/).forEach(part => { if (part) longest = Math.max(longest, textWidthTwips(part, sz, bold)); }));
+        need = Math.ceil(Math.min(longest, 1500)) + pad;
+      }
+      soft[cell.c] = Math.max(soft[cell.c], need);                 // every word fits
+      if (isTh) hard[cell.c] = Math.max(hard[cell.c], need);       // header words must not break
+    }));
+    for (let i = 0; i < n; i++) soft[i] = Math.max(soft[i], hard[i]);
+    const sum = arr => arr.reduce((x, y) => x + y, 0);
+    let mins;
+    if (sum(soft) <= CONTENT_W) mins = soft;
+    else if (sum(hard) <= CONTENT_W) {                             // honour headers, give data cells what is left
+      const room = CONTENT_W - sum(hard), want = sum(soft) - sum(hard);
+      mins = hard.map((h, i) => h + Math.floor((soft[i] - h) * room / want));
+    } else mins = hard.map(h => Math.floor(h * CONTENT_W / sum(hard)));
+    let out = widths.map((x, i) => Math.max(x, mins[i]));
+    const excess = sum(out) - CONTENT_W;
+    if (excess > 0) {
+      const sur = out.map((x, i) => Math.max(0, x - mins[i])), ts = sum(sur);
+      if (ts > 0) out = out.map((x, i) => x - Math.floor(excess * sur[i] / ts));
+    }
+    const diff = CONTENT_W - sum(out);
+    let big = 0;
+    out.forEach((x, i) => { if (x > out[big]) big = i; });
+    out[big] += diff;
+    return out;
+  }
+
+  /* ---------- tables ---------- */
+  function buildTable(tEl, ctx) {
+    const D = lib();
+    const cls = tEl.className || '';
+    const margins = /scheme-table/.test(cls) ? { top: 15, bottom: 15, left: 30, right: 30 }
+                  : /qpp-table/.test(cls)    ? { top: 30, bottom: 30, left: 30, right: 30 }
+                  :                            { top: 75, bottom: 75, left: 75, right: 75 };
+    const tableSz = /scheme-table|qpp-table/.test(cls) ? 16 : 24;
+
+    const trs = [...tEl.querySelectorAll('tr')].filter(tr => tr.closest('table') === tEl);
+    // map every cell to its grid position (handles rowspan / colspan)
+    const occ = [], grid = [];
+    trs.forEach((tr, r) => {
+      occ[r] = occ[r] || [];
+      let c = 0;
+      const cells = [];
+      [...tr.children].forEach(cell => {
+        const tag = cell.tagName.toLowerCase();
+        if (tag !== 'td' && tag !== 'th') return;
+        while (occ[r][c]) c++;
+        const cs = Math.max(1, parseInt(cell.getAttribute('colspan'), 10) || 1);
+        const rs = Math.max(1, parseInt(cell.getAttribute('rowspan'), 10) || 1);
+        for (let i = 0; i < rs; i++) { occ[r + i] = occ[r + i] || []; for (let j = 0; j < cs; j++) occ[r + i][c + j] = true; }
+        cells.push({ el: cell, tag, c, cs, rs });
+        c += cs;
+      });
+      grid.push(cells);
+    });
+    const nCols = Math.max.apply(null, occ.map(o => o.length));
+
+    // column widths: <colgroup> percentages when present, otherwise proportional to content length
+    const colEls = [...tEl.children].filter(x => x.tagName.toLowerCase() === 'colgroup').reduce((a, g) => a.concat([...g.children]), []);
+    let pct = colEls.map(c => parseFloat(styleOf(c, 'width')) || 0);
+    if (pct.length !== nCols || pct.some(x => !x)) {
+      const w = new Array(nCols).fill(0);
+      grid.forEach(row => row.forEach(cell => {
+        if (cell.cs === 1) {
+          const len = (cell.el.textContent || '').replace(/\s+/g, ' ').trim().length;
+          w[cell.c] = Math.max(w[cell.c], cell.el.querySelector('img') ? 14 : len);
+        }
+      }));
+      pct = w.map(x => Math.min(80, Math.max(6, x)));
+    }
+    const total = pct.reduce((a, b) => a + b, 0);
+    let widths = pct.map(p => Math.floor(CONTENT_W * p / total));
+    widths[widths.length - 1] += CONTENT_W - widths.reduce((a, b) => a + b, 0);
+    widths = fitWidths(widths, grid, margins, tableSz);      // keep short words (Credits, Max, Duration...) from breaking mid-word
+
+    const B = { style: D.BorderStyle.SINGLE, size: 4, color: '000000' };
+    const rows = trs.map((tr, r) => {
+      const isHead = !!(tr.parentElement && tr.parentElement.tagName.toLowerCase() === 'thead');
+      const cells = grid[r].map(cell => {
+        const el = cell.el, isTh = cell.tag === 'th';
+        const va = (styleOf(el, 'vertical-align') || el.getAttribute('valign') || 'middle').toLowerCase();
+        const cctx = { sz: sizeOf(el, tableSz), align: alignOf(el, isTh ? D.AlignmentType.CENTER : D.AlignmentType.START), bold: isTh, imgMap: ctx.imgMap };
+        let kids = [];
+        if ([...el.children].some(x => /^(p|div)$/i.test(x.tagName))) {
+          const blocks = [];
+          flatten(el, blocks, { before: 0 });
+          kids = blocks.filter(b => b.tag === 'p').reduce((acc, b) => acc.concat(makePara(b.el, cctx, { inCell: true })), []);
+        } else kids = [].concat(makePara(el, cctx, { inCell: true, fixedBefore: 0, fixedAfter: 0 }));
+        if (!kids.length) kids = [new D.Paragraph({ children: [] })];
+        let wsum = 0;
+        for (let k = 0; k < cell.cs; k++) wsum += widths[cell.c + k] || 0;
+        const opt = {
+          children: kids,
+          width: { size: wsum, type: D.WidthType.DXA },
+          verticalAlign: va === 'top' ? D.VerticalAlign.TOP : va === 'bottom' ? D.VerticalAlign.BOTTOM : D.VerticalAlign.CENTER,
+          borders: { top: B, bottom: B, left: B, right: B }
+        };
+        if (cell.cs > 1) opt.columnSpan = cell.cs;
+        if (cell.rs > 1) opt.rowSpan = cell.rs;
+        return new D.TableCell(opt);
+      });
+      const ro = { children: cells };
+      if (isHead) ro.tableHeader = true;
+      if (/avoid/i.test(styleOf(tr, 'page-break-inside'))) ro.cantSplit = true;
+      const h = /([\d.]+)\s*pt/i.exec(styleOf(tr, 'height'));
+      if (h) ro.height = { value: Math.round(parseFloat(h[1]) * 20), rule: D.HeightRule.ATLEAST };
+      return new D.TableRow(ro);
+    });
+
+    return new D.Table({
+      width: { size: CONTENT_W, type: D.WidthType.DXA },
+      columnWidths: widths,
+      layout: D.TableLayoutType.FIXED,
+      margins,
+      borders: { top: B, bottom: B, left: B, right: B, insideHorizontal: B, insideVertical: B },
+      rows
+    });
+  }
+
+  /* ---------- images (QR codes) ---------- */
+  async function loadImages(root) {
+    const map = new Map();
+    const srcs = [...new Set([...root.querySelectorAll('img')].map(i => i.getAttribute('src')).filter(Boolean))];
+    await Promise.all(srcs.map(async src => {
+      try {
+        const ctl = new AbortController();
+        const to = setTimeout(() => ctl.abort(), 8000);
+        const r = await fetch(src, { signal: ctl.signal });
+        clearTimeout(to);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        map.set(src, new Uint8Array(await r.arrayBuffer()));
+      } catch (e) { console.warn('QR image could not be embedded in Word file:', src, e); }
+    }));
+    return map;
+  }
+
+  /* ---------- main entry ---------- */
+  window.buildDocxBlob = async function (d, opts) {
+    const D = lib();
+    const html = buildPaperHTML(d, opts || {});
+    const root = new DOMParser().parseFromString('<body>' + html + '</body>', 'text/html').body;
+    const imgMap = await loadImages(root);
+    const ctx = { sz: 24, align: D.AlignmentType.START, bold: false, imgMap };
+
+    const blocks = [];
+    flatten(root, blocks, { before: 0 });
+    const children = [];
+    blocks.forEach((b, i) => {
+      const nxt = blocks[i + 1];
+      blockToNodes(b, ctx, !!(nxt && nxt.tag === 'table')).forEach(n => children.push(n));
+    });
+    children.push(new D.Paragraph({ children: [], spacing: { before: 0, after: 0 } }));   // Word needs a paragraph after a final table
+
+    const section = {
+      properties: { page: { size: { width: PAGE.w, height: PAGE.h }, margin: { top: PAGE.top, right: PAGE.right, bottom: PAGE.bottom, left: PAGE.left, header: PAGE.header, footer: PAGE.footer } } },
+      children
+    };
+    if (WORD_INCLUDE_HEADER_FOOTER) {
+      const title = String(d.courseTitle || '').toUpperCase(), code = String(d.courseCode || '');
+      const bold12 = { bold: true, size: 24, font: FONT };
+      section.headers = { default: new D.Header({ children: [new D.Paragraph({
+        tabStops: [{ type: D.TabStopType.RIGHT, position: CONTENT_W }],
+        children: [new D.TextRun(Object.assign({ text: title }, bold12)), new D.TextRun(Object.assign({ children: [new D.Tab(), 'Subject Code : ' + code] }, bold12))]
+      })] }) };
+      section.footers = { default: new D.Footer({ children: [new D.Paragraph({
+        alignment: D.AlignmentType.CENTER,
+        children: [new D.TextRun(Object.assign({ text: 'Sharad Institute of Technology, Polytechnic, Yadrav' }, bold12))]
+      })] }) };
+    }
+
+    const doc = new D.Document({
+      creator: 'Curriculum Document Generator',
+      title: String(d.courseTitle || 'Curriculum Document'),
+      styles: { default: { document: { run: { font: FONT, size: 24 }, paragraph: { spacing: { line: LINE } } } } },
+      sections: [section]
+    });
+    return D.Packer.toBlob(doc);
+  };
+})();
+</script>
+
 </body>
 </html>
