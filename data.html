@@ -24,6 +24,13 @@ function getSessionToken_() {
     return (auth && auth.token) || '';
   } catch (e) { return ''; }
 }
+/* The administrator is the user named "admin". */
+function isAdminUser_() {
+  try {
+    var auth = JSON.parse(sessionStorage.getItem('autonomy2026_auth') || 'null');
+    return !!auth && String(auth.username || '').trim().toLowerCase() === 'admin';
+  } catch (e) { return false; }
+}
 /* If the server says our session is gone/expired, send the user back to login. */
 function handleAuthFailure_(result) {
   if (result && result.authRequired) {
@@ -1137,6 +1144,7 @@ R= Remembering &nbsp;&nbsp;&nbsp; U= Understanding &nbsp;&nbsp;&nbsp; A= Applica
 <div class="card" id="submitCdcCard" style="text-align:center;">
 <h2 style="justify-content:center;">Submit to CDC</h2>
 <p class="hint" style="margin:0 0 16px;">Submitting will save this data online and lock the form from further edits unless an admin unlocks it.</p>
+<p id="submitGateMsg" style="display:none; margin:0 0 10px; font-size:13px; font-weight:600; color:#b91c1c;"></p>
 <span id="lockBanner" style="display:none; font-weight:700; color:#b91c1c;">🔒 This form is locked (already submitted). Further edits cannot be saved online.</span>
 <div style="margin-top:12px;">
 <button class="red" id="submitModeratorBtn" onclick="submitToModerator()" style="padding:12px 28px; font-size:14px;">Submit data to CDC</button>
@@ -2149,8 +2157,7 @@ function buildPaperHTML(d, opts) {
     }
     }
 
-    p += `<div style="margin-top:20px;"><p style="margin:3px 0; font-family: Times New Roman; font-size: 12pt;"><span style="font-family: Times New Roman; font-size: 12pt;"><b>Prepared by:</b></span></p></div>`;
-    p += `<div style="margin-top:6px;">${preparedByLines(d)}</div>`;
+    p += preparedByLines(d);     // "i. Prepared by:" and "ii. Approved by:" signature tables
 
     return p;
 }
@@ -2162,22 +2169,29 @@ function expertNameDesignation(v) {
 
 function preparedByLines(d) {
     const F = 'font-family: Times New Roman; font-size: 12pt;';
-    const cell = (html, align) => `<td align="${align || 'left'}" valign="middle" height="64" style="height:64pt; text-align:${align || 'left'}; vertical-align:middle; border:0.5pt solid #000; padding:5px; ${F}"><p align="${align || 'left'}" style="margin:0; text-align:${align || 'left'}; ${F}"><span style="${F}">${html}</span></p></td>`;
+    const ROW_PT = 38.4;                                  // 60% of the former 64 pt row height (reduced by 40%)
+    const cell = (html, align) => `<td align="${align || 'left'}" valign="middle" height="38" style="height:${ROW_PT}pt; text-align:${align || 'left'}; vertical-align:middle; border:0.5pt solid #000; padding:5px; ${F}"><p align="${align || 'left'}" style="margin:0; text-align:${align || 'left'}; ${F}"><span style="${F}">${html}</span></p></td>`;
     const head = t => `<th align="center" valign="middle" style="border:0.5pt solid #000; padding:5px; text-align:center; vertical-align:middle; font-weight:bold; ${F}"><p align="center" style="margin:0; text-align:center; ${F}"><span style="${F}">${t}</span></p></th>`;
-    const rows = [];
-    const add = (role, name, desi) => rows.push({ role, text: (name || '').trim() ? esc(name.trim()) + ((desi || '').trim() ? ', ' + esc(desi.trim()) : '') : '' });
-    (d.courseExperts || []).map(expertNameDesignation).filter(e => e.name.trim()).forEach(e => add('Course Expert', e.name, e.designation));
-    (d.industryExperts || []).map(expertNameDesignation).filter(e => e.name.trim()).forEach(e => add('Industry Expert', e.name, e.designation));
-    add('Program Head', d.programHeadName, d.programHeadDesignation);
-    add('CDC-Incharge', d.cdcInchargeName, d.cdcInchargeDesignation);
-    let t = `<table border="1" cellspacing="0" cellpadding="5" width="100%" style="border-collapse:collapse; width:100%; table-layout:fixed; mso-table-layout-alt:fixed; page-break-inside:avoid; ${F}">
+    const mk = (role, name, desi) => ({ role, text: (name || '').trim() ? esc(name.trim()) + ((desi || '').trim() ? ', ' + esc(desi.trim()) : '') : '' });
+    const table = rows => {
+        let t = `<table border="1" cellspacing="0" cellpadding="5" width="100%" style="border-collapse:collapse; width:100%; table-layout:fixed; mso-table-layout-alt:fixed; page-break-inside:avoid; ${F}">
  <colgroup><col style="width:7%"><col style="width:20%"><col style="width:38%"><col style="width:35%"></colgroup>
  <thead><tr>${head('Sr. No')}${head('Role')}${head('Name &amp; Designation')}${head('Signature')}</tr></thead><tbody>`;
-    rows.forEach((r, i) => {
-        t += `<tr style="height:64pt; page-break-inside:avoid;">${cell(String(i + 1), 'center')}${cell('<b>' + r.role + '</b>')}${cell(r.text)}${cell('&nbsp;')}</tr>`;
-    });
-    t += `</tbody></table>`;
-    return t;
+        rows.forEach((r, i) => {
+            t += `<tr style="height:${ROW_PT}pt; page-break-inside:avoid;">${cell(String(i + 1), 'center')}${cell('<b>' + r.role + '</b>')}${cell(r.text)}${cell('&nbsp;')}</tr>`;
+        });
+        return t + `</tbody></table>`;
+    };
+    const title = (t, top) => `<div style="margin-top:${top}px;"><p style="margin:3px 0; ${F}"><span style="${F}"><b>${t}</b></span></p></div>`;
+
+    const prepared = [];
+    (d.courseExperts || []).map(expertNameDesignation).filter(e => e.name.trim()).forEach(e => prepared.push(mk('Course Expert', e.name, e.designation)));
+    (d.industryExperts || []).map(expertNameDesignation).filter(e => e.name.trim()).forEach(e => prepared.push(mk('Industry Expert', e.name, e.designation)));
+    if (!prepared.length) { prepared.push(mk('Course Expert', '', '')); prepared.push(mk('Industry Expert', '', '')); }
+    const approved = [mk('Program Head', d.programHeadName, d.programHeadDesignation), mk('CDC-Incharge', d.cdcInchargeName, d.cdcInchargeDesignation)];
+
+    return title('i. Prepared by:', 20) + `<div style="margin-top:6px;">${table(prepared)}</div>`
+         + title('ii. Approved by:', 16) + `<div style="margin-top:6px;">${table(approved)}</div>`;
 }
 
 function listAsTable(items, heads) {
@@ -2385,6 +2399,7 @@ function renderAllCurr(q) {
         if (q && hay.indexOf(q) === -1) return;
         n++;
         rows += '<tr>' +
+            (isAdminUser_() ? '<td ' + tdS + '><button type="button" class="secondary" onclick="editRecord(' + i + ')">&#9998; Edit</button></td>' : '') +
             '<td ' + tdS + '>' + n + '</td>' +
             '<td ' + tdS + '><b>' + esc(d.courseCode) + '</b></td>' +
             '<td ' + tdS + '>' + esc(d.courseTitle) + '</td>' +
@@ -2399,7 +2414,7 @@ function renderAllCurr(q) {
     });
     document.getElementById('allCurrCount').textContent = n + ' of ' + allCurr.length + ' shown';
     document.getElementById('allCurrList').innerHTML = n
-        ? '<table style="width:100%; border-collapse:collapse;"><thead><tr><th ' + th + '>#</th><th ' + th + '>Course Code</th><th ' + th + '>Course Title</th><th ' + th + '>Programme</th><th ' + th + '>Sem</th><th ' + th + '>Status</th><th ' + th + '>Actions</th></tr></thead><tbody>' + rows + '</tbody></table>'
+        ? '<table style="width:100%; border-collapse:collapse;"><thead><tr>' + (isAdminUser_() ? '<th ' + th + '>Edit</th>' : '') + '<th ' + th + '>#</th><th ' + th + '>Course Code</th><th ' + th + '>Course Title</th><th ' + th + '>Programme</th><th ' + th + '>Sem</th><th ' + th + '>Status</th><th ' + th + '>Actions</th></tr></thead><tbody>' + rows + '</tbody></table>'
         : '<p class="hint">No matching records.</p>';
 }
 
@@ -2421,6 +2436,40 @@ async function viewRecord(idx, action) {
     if (action === 'print') doPrint(); else showPreview();
     if (VIEWER_MODE && $('viewerBackBar')) $('viewerBackBar').style.display = 'block';
     setOnlineStatus("👁 Viewing saved record " + rec.d.courseCode + " (read-only). Click 'Back to Edit' to return to your form.", false);
+}
+
+// Admin only: open the normal data-entry form in a new tab with this record loaded for editing
+function editRecord(idx) {
+    if (!isAdminUser_()) return;
+    const rec = allCurr[idx];
+    if (!rec) return;
+    window.open(location.href.split('#')[0].split('?')[0] + '?edit=' + encodeURIComponent(rec.d.courseCode), '_blank');
+}
+const EDIT_CODE = (function () { try { return new URLSearchParams(location.search).get('edit') || ''; } catch (e) { return ''; } })();
+async function loadForEdit_(code) {
+    try {
+        setOnlineStatus("⏳ Loading " + code + " for editing...", false);
+        setToolbarBusy(true);
+        showLoader("Loading " + code + " for editing...");
+        const response = await fetch(GOOGLE_SCRIPT_URL + "?subjectCode=" + encodeURIComponent(code) + "&token=" + encodeURIComponent(getSessionToken_()));
+        const result = await response.json();
+        if (handleAuthFailure_(result)) return;
+        if (!result.success || !result.data) throw new Error(result.message || "No saved record found for " + code);
+        loadData(result.data);
+        applyLockState(false);                         // admin may edit even a submitted record; the server has the final say on saving
+        hasUnsavedOnlineChanges = false;
+        setOnlineStatus("✏️ Admin edit mode: " + code + (result.locked ? " (this record was submitted - if the server refuses the save, unlock it in the database first)" : "") + ". Change what you need, then Save online.", false);
+        try { history.replaceState(null, '', location.pathname); } catch (e) { /* ignore */ }
+    } catch (error) {
+        setOnlineStatus("❌ Could not load the record for editing.", true);
+        alert("Could not load the record for editing: " + error.message);
+    } finally {
+        setToolbarBusy(false);
+        hideLoader();
+    }
+}
+if (EDIT_CODE && isAdminUser_() && !VIEWER_MODE) {
+    document.addEventListener('DOMContentLoaded', function () { setTimeout(function () { loadForEdit_(EDIT_CODE); }, 300); });
 }
 
 function restoreFromRecordView() {
@@ -2457,7 +2506,7 @@ const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxxG_0OTue9ov
   function build(e){
     const r = (e.row && typeof e.row === "object") ? e.row : {};
     const g = f => (r[f] === undefined || r[f] === null) ? "" : String(r[f]);
-    const o = { title: e.title, names: (e.names || []).join(" "), partial: !e.row,
+    const o = { title: e.title, names: (e.names || []).join(" "), partial: !e.row, usedIn: Array.isArray(e.usedIn) ? e.usedIn.map(x => String(x).trim()).filter(Boolean) : [],
       code: e.code || g("code"), abbr: e.abbr || g("abbr"), type: g("type") };
     const f = { cl: g("cl"), tl: g("tl"), ll: g("ll"), slh: g("selfLearning"), nlh: g("notional"), credits: g("credits"),
       duration: g("paperDuration"), fathMax: g("faTh"), sathMax: g("saTh"),
@@ -2488,7 +2537,7 @@ const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxxG_0OTue9ov
       return Promise.all(jobs).then(res => {
         const map = {};
         res.forEach(x => { const d = x && x.success && x.data ? (x.data.data || x.data) : null; if (d && d.rows) Object.keys(d.rows).forEach(id => { map[id] = d.rows[id]; }); });
-        courses = ld.entries.filter(e => filled(e.title)).map(e => { const m = map[e.id]; return build({ title: e.title, names: e.names, abbr: e.abbr, code: e.code, row: m ? m.r : null }); });
+        courses = ld.entries.filter(e => filled(e.title)).map(e => { const m = map[e.id]; return build({ title: e.title, names: e.names, abbr: e.abbr, code: e.code, usedIn: e.usedIn, row: m ? m.r : null }); });
         courses.sort((a, b) => a.title.localeCompare(b.title));
         state = "ready";
       });
@@ -2508,6 +2557,17 @@ const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxxG_0OTue9ov
     el.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
+  function setProgrammes(codes){
+    if (!codes || !codes.length) return;               // register has no "used in" data: leave the programme as it is
+    const want = new Set(codes.map(x => String(x).trim().toUpperCase()));
+    let any = false;
+    document.querySelectorAll('#programmePanel input[type="checkbox"]').forEach(cb => {
+      const on = want.has(String(cb.value).toUpperCase());
+      cb.checked = on; if (on) any = true;
+    });
+    if (any && typeof updateProgrammeSelection === "function") updateProgrammeSelection();
+  }
+
   function applyCourse(c){
     applying = true;
     try {
@@ -2515,6 +2575,8 @@ const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxxG_0OTue9ov
       setVal("courseCode", c.code, true);
       setVal("abbr", c.abbr, true);
       setVal("category", c.type);                       // keeps the current value when the register has none
+      setVal("curriculumScheme", "A", true);            // scheme is always A for register courses
+      setProgrammes(c.usedIn);                          // programmes = where the course is "Used in" (register)
       if (!c.partial) Object.keys(c.fields).forEach(id => setVal(id, c.fields[id], true));
     } finally { applying = false; }
     if (typeof markUnsavedOnlineChanges === "function") markUnsavedOnlineChanges();
@@ -2567,7 +2629,7 @@ const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxxG_0OTue9ov
         const d = document.createElement("div"); d.className = "cs-item" + (i === ctx.active ? " active" : "");
         const t = document.createElement("div"); t.className = "cs-title"; t.textContent = c.title;
         const m = document.createElement("div"); m.className = "cs-meta";
-        m.textContent = [c.code, c.abbr, c.type].filter(filled).join("  \u00b7  ") + (c.partial ? "  \u00b7  (title / code / abbr only)" : "");
+        m.textContent = [c.code, c.abbr, c.type, c.usedIn && c.usedIn.length ? "Used in: " + c.usedIn.join(", ") : ""].filter(filled).join("  \u00b7  ") + (c.partial ? "  \u00b7  (title / code / abbr only)" : "");
         d.appendChild(t); d.appendChild(m);
         d.addEventListener("mousedown", ev => { ev.preventDefault(); pick(i); });
         d.addEventListener("mouseenter", () => { ctx.active = i; mark(); });
@@ -2667,6 +2729,12 @@ async function submitToModerator() {
         alert("Please enter the Subject/Course Code before submitting.");
         return;
     }
+    const gateIssues = submitGateIssues_();
+    if (gateIssues.length) {
+        alert("Cannot submit yet. Please complete: " + gateIssues.join("; ") + ".");
+        updateSubmitGate();
+        return;
+    }
 
     const confirmed = confirm(
         "WARNING\n\n" +
@@ -2720,7 +2788,46 @@ function applyLockState(locked) {
     document.querySelectorAll("#form input, #form textarea, #form select, #form button.add, #form button.add-btn, #form button.red")
         .forEach(el => { el.disabled = locked; });
     document.querySelectorAll('#viewAllCard input, #viewAllCard button').forEach(el => { el.disabled = false; });
+    updateSubmitGate();
 }
+
+/* "Submit to CDC" stays disabled until the Prepared by (i) and Approved by (ii) tables are completely filled */
+function submitGateIssues_() {
+    const d = collect(), issues = [], has = v => String(v || '').trim() !== '';
+    const experts = (list, label) => {
+        const rows = (list || []).map(expertNameDesignation);
+        const done = rows.filter(r => has(r.name) && has(r.designation)).length;
+        const partial = rows.some(r => (has(r.name) || has(r.designation)) && !(has(r.name) && has(r.designation)));
+        if (!done) issues.push('at least one ' + label + ' (name and designation)');
+        else if (partial) issues.push('a ' + label + ' row that is only partly filled');
+    };
+    experts(d.courseExperts, 'Course Expert');
+    experts(d.industryExperts, 'Industry Expert');
+    if (!has(d.programHeadName) || !has(d.programHeadDesignation)) issues.push('Program Head name and designation');
+    if (!has(d.cdcInchargeName) || !has(d.cdcInchargeDesignation)) issues.push('CDC-Incharge name and designation');
+    return issues;
+}
+function updateSubmitGate() {
+    const btn = document.getElementById('submitModeratorBtn'); if (!btn) return;
+    const issues = submitGateIssues_(), msg = document.getElementById('submitGateMsg');
+    btn.disabled = !!isFormLocked || issues.length > 0;
+    if (msg) {
+        const show = issues.length > 0 && !isFormLocked;
+        msg.style.display = show ? 'block' : 'none';
+        msg.textContent = show ? 'Submit is disabled until these are filled: ' + issues.join('; ') + '.' : '';
+    }
+}
+(function () {
+    let t = null;
+    const later = () => { clearTimeout(t); t = setTimeout(updateSubmitGate, 150); };
+    document.addEventListener('input', later, true);
+    document.addEventListener('change', later, true);
+    document.addEventListener('click', later, true);              // add / remove expert rows
+    const origLoad = window.loadData;
+    if (typeof origLoad === 'function') window.loadData = function () { const r = origLoad.apply(this, arguments); updateSubmitGate(); return r; };
+    document.addEventListener('DOMContentLoaded', updateSubmitGate);
+    setTimeout(updateSubmitGate, 400);
+})();
 
 async function loadOnline() {
     if (blockedWhileViewing_()) return;
@@ -3543,19 +3650,20 @@ body.cmt-open #cmtFab { display: none !important; }
     widths[widths.length - 1] += CONTENT_W - widths.reduce((a, b) => a + b, 0);
     widths = fitWidths(widths, grid, margins, tableSz);      // keep short words (Credits, Max, Duration...) from breaking mid-word
 
+    const keepTogether = /avoid/i.test(styleOf(tEl, 'page-break-inside'));     // short tables (signatures) stay on one page
     const B = { style: D.BorderStyle.SINGLE, size: 4, color: '000000' };
     const rows = trs.map((tr, r) => {
       const isHead = !!(tr.parentElement && tr.parentElement.tagName.toLowerCase() === 'thead');
       const cells = grid[r].map(cell => {
         const el = cell.el, isTh = cell.tag === 'th';
         const va = (styleOf(el, 'vertical-align') || el.getAttribute('valign') || 'middle').toLowerCase();
-        const cctx = { sz: sizeOf(el, tableSz), align: alignOf(el, isTh ? D.AlignmentType.CENTER : D.AlignmentType.START), bold: isTh, imgMap: ctx.imgMap, cm: ctx.cm };
+        const cctx = { sz: sizeOf(el, tableSz), align: alignOf(el, isTh ? D.AlignmentType.CENTER : D.AlignmentType.START), bold: isTh, imgMap: ctx.imgMap, cm: ctx.cm, keep: keepTogether && r < trs.length - 1 };
         let kids = [];
         if ([...el.children].some(x => /^(p|div)$/i.test(x.tagName))) {
           const blocks = [];
           flatten(el, blocks, { before: 0 });
-          kids = blocks.filter(b => b.tag === 'p').reduce((acc, b) => acc.concat(makePara(b.el, cctx, { inCell: true })), []);
-        } else kids = [].concat(makePara(el, cctx, { inCell: true, fixedBefore: 0, fixedAfter: 0 }));
+          kids = blocks.filter(b => b.tag === 'p').reduce((acc, b) => acc.concat(makePara(b.el, cctx, { inCell: true, keepNext: cctx.keep })), []);
+        } else kids = [].concat(makePara(el, cctx, { inCell: true, fixedBefore: 0, fixedAfter: 0, keepNext: cctx.keep }));
         if (!kids.length) kids = [new D.Paragraph({ children: [] })];
         let wsum = 0;
         for (let k = 0; k < cell.cs; k++) wsum += widths[cell.c + k] || 0;

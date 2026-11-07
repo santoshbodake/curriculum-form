@@ -3980,7 +3980,7 @@ function handleAuthFailure_(result) {
             return { id: e.id, title: e.title, names: e.names && e.names.length ? e.names : [e.title], abbr: e.abbr || "", dept: e.dept === undefined ? "" : String(e.dept), sem: e.sem === "" || e.sem === undefined ? "" : parseInt(e.sem, 10), code: e.code || "", comments: e.comments || [], row: (e.row && typeof e.row === "object") ? e.row : null, rowEdited: !!e.rowEdited, abbrManual: !!e.abbrManual, semManual: !!e.semManual, deptManual: !!e.deptManual, srcProg: e.srcProg || "",
               deptBase: e.deptBase === undefined || e.deptBase === null ? undefined : String(e.deptBase),
               abbrBase: e.abbrBase === undefined || e.abbrBase === null ? undefined : String(e.abbrBase),
-              semBase: e.semBase === undefined || e.semBase === null ? undefined : (e.semBase === "" ? "" : parseInt(e.semBase, 10)), usages: [] };
+              semBase: e.semBase === undefined || e.semBase === null ? undefined : (e.semBase === "" ? "" : parseInt(e.semBase, 10)), usages: [], usedInSaved: Array.isArray(e.usedIn) ? e.usedIn : [] };
           }) };
           regDirty = false;
         }
@@ -4055,7 +4055,8 @@ function handleAuthFailure_(result) {
     if (curLen > 0) chunks.push(cur);
     // 2. main record: everything except the row data
     var payload = { formType: "LAS_COURSE_REGISTER", year: reg.year, nextId: reg.nextId, ignore: reg.ignore, rowParts: chunks.length,
-      entries: reg.entries.map(function(e){ return { id: e.id, title: e.title, names: e.names, abbr: e.abbr || "", dept: e.dept, sem: e.sem, code: e.code, comments: e.comments, abbrManual: e.abbrManual ? 1 : 0, semManual: e.semManual ? 1 : 0, deptManual: e.deptManual ? 1 : 0, srcProg: e.srcProg || "", deptBase: e.deptBase, abbrBase: e.abbrBase, semBase: e.semBase }; }) };
+      entries: reg.entries.map(function(e){ return { id: e.id, title: e.title, names: e.names, abbr: e.abbr || "", dept: e.dept, sem: e.sem, code: e.code, comments: e.comments, abbrManual: e.abbrManual ? 1 : 0, semManual: e.semManual ? 1 : 0, deptManual: e.deptManual ? 1 : 0, srcProg: e.srcProg || "", deptBase: e.deptBase, abbrBase: e.abbrBase, semBase: e.semBase,
+        usedIn: (e.usages && e.usages.length) ? regUniq_(e.usages.map(function(u){ return u.progCode; })) : ((e.usedInSaved && e.usedInSaved.length) ? e.usedInSaved : (e.srcProg ? [e.srcProg] : [])) }; }) };
     // rows first, main record last, so the main record never points at rows that were not saved
     var chain = Promise.resolve();
     chunks.forEach(function(ch, i){
