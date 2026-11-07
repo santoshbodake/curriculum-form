@@ -1639,6 +1639,9 @@ async function saveWord(){
          console.warn("docx-library export failed, reverting to html-docx-js:", err);
      }
  }
+ // Fallback export: add highlighted text, [n] markers and the Review Comments list
+ try { if (window.CMT && typeof CMT.decorateHTML === 'function') bodyHTML = await CMT.decorateHTML(bodyHTML); }
+ catch (err) { console.warn("Review comments were left out of the fallback Word export:", err); }
 
  let docHTML = `<!DOCTYPE html>
 <html>
@@ -2795,6 +2798,460 @@ function setToolbarBusy(busy) {
     }
 }
 </script>
+<style>
+/* ===== Review comments (preview) ===== */
+mark.cmt-hl { background: #fff176; color: inherit; cursor: pointer; padding: 0; border-radius: 2px; }
+mark.cmt-hl[data-status="solved"] { background: #d7f0df; }
+mark.cmt-hl.cmt-focus { outline: 2px solid #7c3aed; outline-offset: 1px; }
+sup.cmt-ref { font-size: 9px; font-weight: 700; color: #b45309; cursor: pointer; margin-left: 1px; font-family: Arial, sans-serif; }
+sup.cmt-ref::after { content: "[" attr(data-n) "]"; }
+sup.cmt-ref[data-status="solved"] { color: #15803d; }
+.cmt-ui, .cmt-ui * { font-family: 'Inter', system-ui, -apple-system, sans-serif; box-sizing: border-box; }
+#cmtFab { position: fixed; right: 18px; bottom: 18px; z-index: 500; display: none; align-items: center; gap: 8px; padding: 10px 16px; border: 0; border-radius: 999px; cursor: pointer;
+  background: linear-gradient(135deg, #4f46e5, #9333ea); color: #fff; font-size: 13px; font-weight: 700; box-shadow: 0 8px 22px rgba(79,70,229,.4); }
+body.cmt-open #cmtFab { display: none !important; }
+#cmtFab span { background: #fff; color: #4f46e5; border-radius: 999px; padding: 1px 8px; font-size: 12px; }
+#cmtAddBtn { position: fixed; z-index: 700; display: none; padding: 7px 12px; border: 0; border-radius: 8px; cursor: pointer; background: #1e293b; color: #fff; font-size: 12.5px; font-weight: 600; box-shadow: 0 6px 18px rgba(15,23,42,.35); }
+#cmtCompose { position: fixed; z-index: 710; display: none; width: 320px; max-width: 92vw; background: #fff; border: 1px solid #cbd5e1; border-radius: 12px; box-shadow: 0 16px 40px rgba(15,23,42,.28); padding: 12px; }
+#cmtCompose .q { font-size: 11.5px; color: #64748b; border-left: 3px solid #fbbf24; padding: 2px 8px; margin-bottom: 8px; max-height: 54px; overflow: hidden; }
+#cmtCompose textarea { width: 100%; min-height: 78px; resize: vertical; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px; font-size: 13px; }
+#cmtCompose .row, #cmtPanel .acts { display: flex; gap: 6px; justify-content: flex-end; margin-top: 8px; }
+.cmt-btn { border: 1px solid #cbd5e1; background: #f8fafc; color: #334155; border-radius: 7px; padding: 5px 10px; font-size: 12px; font-weight: 600; cursor: pointer; box-shadow: none; }
+.cmt-btn:hover { background: #eef2ff; }
+.cmt-btn.primary { background: #4f46e5; border-color: #4f46e5; color: #fff; }
+.cmt-btn.danger { color: #b91c1c; border-color: #fecaca; background: #fff5f5; }
+#cmtPanel { position: fixed; top: 0; right: 0; bottom: 0; width: 370px; max-width: 94vw; z-index: 650; background: #fff; box-shadow: -10px 0 34px rgba(15,23,42,.2);
+  display: flex; flex-direction: column; transform: translateX(105%); transition: transform .2s ease; }
+#cmtPanel.open { transform: none; }
+#cmtPanel .hd { padding: 14px 16px 10px; border-bottom: 1px solid #e2e8f0; }
+#cmtPanel .hd h3 { margin: 0 0 8px; font-size: 15px; color: #1e293b; display: flex; justify-content: space-between; align-items: center; }
+#cmtPanel .ctl { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12px; color: #475569; }
+#cmtPanel select { width: auto; padding: 4px 6px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; }
+#cmtPanel label { display: inline-flex; gap: 5px; align-items: center; font-size: 12px; font-weight: 500; color: #475569; margin: 0; text-transform: none; letter-spacing: 0; }
+#cmtPanel label input { width: auto; padding: 0; margin: 0; box-shadow: none; }
+#cmtList { flex: 1; overflow: auto; padding: 10px 12px; background: #f8fafc; }
+.cmt-item { background: #fff; border: 1px solid #e2e8f0; border-left: 4px solid #f59e0b; border-radius: 9px; padding: 9px 11px; margin-bottom: 9px; font-size: 12.5px; color: #1e293b; }
+.cmt-item.solved { border-left-color: #22c55e; opacity: .82; }
+.cmt-item.flash { box-shadow: 0 0 0 3px rgba(124,58,237,.35); }
+.cmt-item .top { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; font-size: 11.5px; color: #64748b; }
+.cmt-item .top b { color: #1e293b; }
+.cmt-item .badge { margin-left: auto; font-weight: 700; font-size: 10.5px; padding: 1px 7px; border-radius: 999px; background: #fef3c7; color: #92400e; }
+.cmt-item.solved .badge { background: #dcfce7; color: #166534; }
+.cmt-item .sec { font-size: 11px; color: #94a3b8; margin-top: 3px; }
+.cmt-item .quote { margin: 5px 0; padding-left: 8px; border-left: 3px solid #fde68a; color: #64748b; font-style: italic; font-size: 12px; }
+.cmt-item .txt { white-space: pre-wrap; word-break: break-word; }
+.cmt-item .by { font-size: 11px; color: #16a34a; margin-top: 4px; }
+#cmtPanel .ft { padding: 8px 14px; border-top: 1px solid #e2e8f0; font-size: 11.5px; color: #64748b; min-height: 34px; }
+#cmtPanel .ft.err { color: #b91c1c; }
+#cmtPrint { display: none; }
+@media print {
+  .cmt-ui { display: none !important; }
+  mark.cmt-hl { background: #fff176 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  mark.cmt-hl[data-status="solved"] { background: #d7f0df !important; }
+  .cmt-hide-solved mark.cmt-hl[data-status="solved"] { background: none !important; }
+  .cmt-hide-solved sup.cmt-ref[data-status="solved"] { display: none !important; }
+  sup.cmt-ref { color: #92400e !important; font-size: 8pt !important; font-weight: bold !important; }
+  #cmtPrint { display: block; margin-top: 8mm; font-family: "Times New Roman", Times, serif !important; }
+  #cmtPrint * { font-family: "Times New Roman", Times, serif !important; }
+  #cmtPrint tr { page-break-inside: avoid; break-inside: avoid; }
+}
+</style>
+<script>
+/* =====================================================================
+   REVIEW COMMENTS
+   - Admin (user name "admin"): select text in the preview, click "Add comment".
+   - Everyone: sees the highlighted text + comments, can mark a comment Solved / Reopen.
+   - Only admin can add or delete comments.
+   - Stored online (same server as the register) under record key LAS_COMMENTS_<course code>,
+     merged on every save so two people working at once do not overwrite each other.
+   - Output: PDF/print shows highlights, [n] markers and a "Review Comments" list;
+     the Word file gets native Word comments + highlight.
+   NOTE: add/delete rules are enforced in this page. The server stores generic records,
+   so it cannot enforce them on its own.
+   ===================================================================== */
+(function () {
+  "use strict";
+  const REC_FORM = "secondForm", KEY_PREFIX = "LAS_COMMENTS_", POLL_MS = 45000, MAX_TEXT = 2000, QUOTE_KEEP = 300;
+  function session() { try { return JSON.parse(sessionStorage.getItem("autonomy2026_auth") || "null") || {}; } catch (e) { return {}; } }
+  const ME = String(session().username || "").trim();
+  const isAdminName = n => String(n || "").trim().toLowerCase() === "admin";
+  const IS_ADMIN = isAdminName(ME);
+  const CMT = window.CMT = { list: [], deleted: {}, code: "", incSolved: false, filter: "all", status: "", statusErr: false, dirty: false, numbered: [] };
+
+  const byId = id => document.getElementById(id);
+  const paperEl = () => byId("paper");
+  const previewOn = () => { const p = byId("preview"); return !!p && p.style.display === "block"; };
+  const currentCode = () => { const e = byId("courseCode"); return e ? String(e.value || "").trim() : ""; };
+  const norm = s => String(s || "").replace(/\s+/g, " ").trim();
+  function el(tag, cls, txt) { const e = document.createElement(tag); if (cls) e.className = cls; if (txt !== undefined) e.textContent = txt; return e; }
+
+  /* ---------- text index / anchoring ---------- */
+  function textIndex(root) {
+    const doc = root.ownerDocument || document, nodes = [];
+    let pos = 0, text = "";
+    const w = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode(n) {
+      const p = n.parentNode && n.parentNode.nodeName;
+      return (p === "SCRIPT" || p === "STYLE") ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT; } });
+    while (w.nextNode()) { const n = w.currentNode, len = n.nodeValue.length; nodes.push({ n, s: pos, e: pos + len }); pos += len; text += n.nodeValue; }
+    return { nodes, text };
+  }
+  function clearMarks(root) {
+    root.querySelectorAll("sup.cmt-ref").forEach(x => x.remove());
+    root.querySelectorAll("mark.cmt-hl").forEach(m => { const p = m.parentNode; while (m.firstChild) p.insertBefore(m.firstChild, m); p.removeChild(m); });
+    root.normalize();
+  }
+  const comSuffix = (a, b) => { let i = 0; while (i < a.length && i < b.length && a[a.length - 1 - i] === b[b.length - 1 - i]) i++; return i; };
+  const comPrefix = (a, b) => { let i = 0; while (i < a.length && i < b.length && a[i] === b[i]) i++; return i; };
+  function resolve(c, text) {
+    const q = c.q || "", len = c.len || q.length;
+    if (!q) return null;
+    if (text.substr(c.s, q.length) === q && c.s + len <= text.length) return { s: c.s, e: c.s + len };
+    let best = -1, bestScore = -1e9, from = 0, i;
+    while ((i = text.indexOf(q, from)) !== -1) {
+      const sc = comSuffix(text.slice(Math.max(0, i - (c.pre || "").length), i), c.pre || "") + comPrefix(text.slice(i + len, i + len + (c.suf || "").length), c.suf || "") - Math.abs(i - c.s) / 100000;
+      if (sc > bestScore) { bestScore = sc; best = i; }
+      from = i + 1;
+    }
+    return (best >= 0 && best + len <= text.length) ? { s: best, e: best + len } : null;
+  }
+  // returns {anch:[{c,s,e}], orph:[c]} in document order
+  function resolveAll(root, comments) {
+    const text = textIndex(root).text, anch = [], orph = [];
+    comments.forEach(c => { const r = resolve(c, text); if (r) anch.push({ c, s: r.s, e: r.e }); else orph.push(c); });
+    anch.sort((a, b) => a.s - b.s || (a.c.at || 0) - (b.c.at || 0));
+    orph.sort((a, b) => (a.at || 0) - (b.at || 0));
+    return { anch, orph };
+  }
+  // wrap [s,e) in <mark>; returns the marks created (empty if nothing visible could be wrapped)
+  function wrapRange(root, s, e, c) {
+    const doc = root.ownerDocument || document, idx = textIndex(root), frags = [], marks = [];
+    idx.nodes.forEach(o => { if (o.e <= s || o.s >= e) return; frags.push({ n: o.n, a: Math.max(s, o.s) - o.s, b: Math.min(e, o.e) - o.s }); });
+    frags.forEach(f => {
+      let node = f.n;
+      if (!/\S/.test(node.nodeValue.slice(f.a, f.b))) return;
+      const par = node.parentNode;
+      if (par && /^(TABLE|TBODY|THEAD|TFOOT|TR|COLGROUP)$/.test(par.nodeName)) return;
+      if (f.b < node.nodeValue.length) node.splitText(f.b);
+      let target = node;
+      if (f.a > 0) target = node.splitText(f.a);
+      const m = doc.createElement("mark");
+      m.className = "cmt-hl"; m.setAttribute("data-cid", c.id); m.setAttribute("data-status", c.status === "solved" ? "solved" : "open");
+      m.title = (c.by || "") + ": " + String(c.text || "").slice(0, 200);
+      target.parentNode.insertBefore(m, target); m.appendChild(target); marks.push(m);
+    });
+    return marks;
+  }
+  // applies marks for items [{c,s,e}]; returns the items that could be placed, each with .marks and .n
+  function applyMarks(root, items, opts) {
+    opts = opts || {};
+    const placed = [];
+    items.forEach(it => { const marks = wrapRange(root, it.s, it.e, it.c); if (marks.length) { it.marks = marks; placed.push(it); } });
+    if (opts.refs) placed.forEach(it => {
+      const last = it.marks[it.marks.length - 1], doc = root.ownerDocument || document;
+      const sup = doc.createElement("sup");
+      sup.className = "cmt-ref"; sup.setAttribute("data-cid", it.c.id); sup.setAttribute("data-status", it.c.status === "solved" ? "solved" : "open");
+      if (opts.refs === "text") { sup.textContent = "[" + it.n + "]"; sup.setAttribute("style", "font-size:8pt;font-weight:bold;color:#92400e;"); }
+      else sup.setAttribute("data-n", it.n);
+      last.parentNode.insertBefore(sup, last.nextSibling);
+    });
+    if (opts.inline) placed.forEach(it => it.marks.forEach(m => m.setAttribute("style", "background-color:" + (it.c.status === "solved" ? "#d7f0df" : "#fff176") + ";")));
+    return placed;
+  }
+
+  /* ---------- data model / merge / server ---------- */
+  function clean(c) {
+    if (!c || typeof c !== "object" || !c.id) return null;
+    const n = x => { x = Number(x); return isFinite(x) ? x : 0; };
+    return { id: String(c.id).slice(0, 60), s: n(c.s), len: n(c.len), q: String(c.q || "").slice(0, QUOTE_KEEP), pre: String(c.pre || "").slice(0, 60), suf: String(c.suf || "").slice(0, 60),
+      sec: String(c.sec || "").slice(0, 200), text: String(c.text || "").slice(0, MAX_TEXT), by: String(c.by || "").slice(0, 60), at: n(c.at),
+      status: c.status === "solved" ? "solved" : "open", solvedBy: String(c.solvedBy || "").slice(0, 60), solvedAt: n(c.solvedAt), upd: n(c.upd) };
+  }
+  function merge(a, b) {
+    const del = {};
+    [a.deleted, b.deleted].forEach(m => Object.keys(m || {}).forEach(id => {
+      const t = m[id];
+      if (t && isAdminName(t.by) && (!del[id] || (t.at || 0) > (del[id].at || 0))) del[id] = { at: Number(t.at) || 0, by: String(t.by) };
+    }));
+    const map = {};
+    [].concat(a.comments || [], b.comments || []).forEach(raw => { const c = clean(raw); if (c && (!map[c.id] || c.upd > map[c.id].upd)) map[c.id] = c; });
+    Object.keys(del).forEach(id => delete map[id]);
+    return { comments: Object.keys(map).map(k => map[k]), deleted: del };
+  }
+  const recKey = code => KEY_PREFIX + String(code).trim().toUpperCase().replace(/\s+/g, "_");
+  function getUrl(key) { return GOOGLE_SCRIPT_URL + "?formType=" + encodeURIComponent(REC_FORM) + "&recordKey=" + encodeURIComponent(key) + "&token=" + encodeURIComponent(getSessionToken_()); }
+  async function fetchRemote(code) {
+    const r = await fetch(getUrl(recKey(code)), { method: "GET", mode: "cors" }), j = await r.json();
+    if (j && j.authRequired) { handleAuthFailure_(j); throw new Error("auth"); }
+    if (!j || !j.success || !j.data) return { comments: [], deleted: {} };
+    const ld = j.data.data || j.data;
+    return { comments: Array.isArray(ld.comments) ? ld.comments : [], deleted: (ld.deleted && typeof ld.deleted === "object") ? ld.deleted : {} };
+  }
+  function setStatus(msg, err) { CMT.status = msg || ""; CMT.statusErr = !!err; const f = byId("cmtFoot"); if (f) { f.textContent = CMT.status; f.className = "ft" + (err ? " err" : ""); } }
+  async function load() {
+    const code = currentCode();
+    if (!code) { CMT.code = ""; CMT.list = []; CMT.deleted = {}; setStatus("Enter the Course Code to use review comments.", true); return; }
+    if (CMT.code !== code) { CMT.list = []; CMT.deleted = {}; CMT.code = code; CMT.dirty = false; }
+    try {
+      const m = merge({ comments: CMT.list, deleted: CMT.deleted }, await fetchRemote(code));
+      CMT.list = m.comments; CMT.deleted = m.deleted; if (!CMT.dirty) setStatus("");
+    } catch (e) { if (e.message !== "auth") setStatus("Could not load comments: " + e.message, true); }
+  }
+  let chain = Promise.resolve();
+  function save() { CMT.dirty = true; chain = chain.then(doSave).catch(() => {}); return chain; }
+  async function doSave() {
+    const code = CMT.code; if (!code) return;
+    setStatus("Saving...");
+    try {
+      const m = merge({ comments: CMT.list, deleted: CMT.deleted }, await fetchRemote(code));
+      CMT.list = m.comments; CMT.deleted = m.deleted;
+      const res = await fetch(GOOGLE_SCRIPT_URL, { method: "POST", mode: "cors", headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ formType: REC_FORM, token: getSessionToken_(), recordKey: recKey(code), courseCode: "COMMENTS_" + code, courseTitle: "Review comments - " + code,
+          data: { comments: CMT.list, deleted: CMT.deleted, savedAt: Date.now(), savedBy: ME } }) });
+      const j = await res.json();
+      if (handleAuthFailure_(j)) return;
+      if (!j.success) throw new Error(j.message || "the server refused the save");
+      CMT.dirty = false; setStatus("Saved " + new Date().toLocaleTimeString());
+    } catch (e) { setStatus("Not saved: " + e.message + " - press Refresh to retry.", true); }
+    render();
+  }
+
+  /* ---------- rendering in the preview ---------- */
+  let obs = null;
+  const obsOn = () => { const p = paperEl(); if (!p) return; if (!obs) obs = new MutationObserver(onPaper); obs.observe(p, { childList: true }); };
+  const obsOff = () => { if (obs) { obs.disconnect(); obs.takeRecords(); } };
+  function sortedAll() { return CMT.list.slice().sort((a, b) => (a.at || 0) - (b.at || 0)); }
+  function render() {
+    const paper = paperEl(); if (!paper) return;
+    obsOff();
+    clearMarks(paper);
+    CMT.numbered = [];
+    if (previewOn() && paper.firstChild) {
+      const r = resolveAll(paper, sortedAll());
+      const placed = applyMarks(paper, r.anch, {});
+      let n = 0;
+      placed.forEach(it => { it.n = ++n; CMT.numbered.push({ c: it.c, n: it.n, missing: false }); });
+      const placedIds = {}; placed.forEach(it => { placedIds[it.c.id] = 1; });
+      r.anch.filter(it => !placedIds[it.c.id]).map(it => it.c).concat(r.orph).forEach(c => CMT.numbered.push({ c, n: ++n, missing: true }));
+      placed.forEach(it => {
+        const last = it.marks[it.marks.length - 1], sup = document.createElement("sup");
+        sup.className = "cmt-ref"; sup.setAttribute("data-n", it.n); sup.setAttribute("data-cid", it.c.id); sup.setAttribute("data-status", it.c.status === "solved" ? "solved" : "open");
+        last.parentNode.insertBefore(sup, last.nextSibling);
+      });
+      paper.classList.toggle("cmt-hide-solved", !CMT.incSolved);
+    }
+    obsOn();
+    renderPanel(); renderPrint(); updateFab();
+  }
+  async function onPaper() { if (!previewOn()) return; render(); await load(); render(); }
+  function updateFab() {
+    const fab = byId("cmtFab"); if (!fab) return;
+    byId("cmtFabN").textContent = String(CMT.list.length);
+    fab.style.display = (previewOn() && (IS_ADMIN || CMT.list.length)) ? "inline-flex" : "none";
+    if (!previewOn()) { hideAdd(); hideCompose(); byId("cmtPanel").classList.remove("open"); document.body.classList.remove("cmt-open"); }
+  }
+
+  /* ---------- side panel ---------- */
+  function fmt(ts) { try { return new Date(ts).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }); } catch (e) { return ""; } }
+  function renderPanel() {
+    const list = byId("cmtList"); if (!list) return;
+    list.textContent = "";
+    const items = CMT.numbered.filter(x => CMT.filter === "all" || (CMT.filter === "open" ? x.c.status !== "solved" : x.c.status === "solved"));
+    if (!items.length) {
+      list.appendChild(el("div", "", CMT.list.length ? "No comments in this view." : (IS_ADMIN ? "No comments yet. Select text in the preview and click \u201cAdd comment\u201d." : "No comments yet.")));
+      list.firstChild.style.cssText = "font-size:12.5px;color:#64748b;padding:6px 2px;";
+    }
+    items.forEach(x => {
+      const c = x.c, solved = c.status === "solved", box = el("div", "cmt-item" + (solved ? " solved" : "")); box.setAttribute("data-cid", c.id);
+      const top = el("div", "top"); top.appendChild(el("b", "", "#" + x.n)); top.appendChild(el("span", "", c.by || "")); top.appendChild(el("span", "", fmt(c.at)));
+      top.appendChild(el("span", "badge", solved ? "Solved" : "Open")); box.appendChild(top);
+      if (c.sec) box.appendChild(el("div", "sec", c.sec));
+      box.appendChild(el("div", "quote", x.missing ? "(the commented text was not found in the current document)" : "\u201c" + (c.q.length < c.len || c.q.length > 140 ? c.q.slice(0, 140) + "\u2026" : c.q) + "\u201d"));
+      box.appendChild(el("div", "txt", c.text));
+      if (solved) box.appendChild(el("div", "by", "Solved by " + (c.solvedBy || "?") + (c.solvedAt ? " \u00b7 " + fmt(c.solvedAt) : "")));
+      const acts = el("div", "acts");
+      if (!x.missing) { const g = el("button", "cmt-btn", "Go to"); g.type = "button"; g.onclick = () => gotoComment(c.id); acts.appendChild(g); }
+      const s = el("button", "cmt-btn primary", solved ? "Reopen" : "Mark solved"); s.type = "button"; s.onclick = () => toggleSolved(c.id); acts.appendChild(s);
+      if (IS_ADMIN) { const d = el("button", "cmt-btn danger", "Delete"); d.type = "button"; d.onclick = () => deleteComment(c.id); acts.appendChild(d); }
+      box.appendChild(acts); list.appendChild(box);
+    });
+    const f = byId("cmtFoot"); if (f) { f.textContent = CMT.status; f.className = "ft" + (CMT.statusErr ? " err" : ""); }
+    const t = byId("cmtCount"); if (t) t.textContent = CMT.list.length + " comment" + (CMT.list.length === 1 ? "" : "s") + " \u00b7 " + CMT.list.filter(c => c.status !== "solved").length + " open";
+  }
+  function openPanel(cid) {
+    byId("cmtPanel").classList.add("open"); document.body.classList.add("cmt-open");
+    if (cid) { const it = byId("cmtList").querySelector('[data-cid="' + cid + '"]'); if (it) { it.scrollIntoView({ block: "nearest" }); it.classList.add("flash"); setTimeout(() => it.classList.remove("flash"), 1600); } }
+  }
+  function gotoComment(cid) {
+    const m = paperEl().querySelector('mark.cmt-hl[data-cid="' + cid + '"]'); if (!m) return;
+    m.scrollIntoView({ block: "center", behavior: "smooth" });
+    paperEl().querySelectorAll('mark.cmt-hl[data-cid="' + cid + '"]').forEach(x => { x.classList.add("cmt-focus"); setTimeout(() => x.classList.remove("cmt-focus"), 1800); });
+  }
+  function toggleSolved(id) {
+    const c = CMT.list.find(x => x.id === id); if (!c) return;
+    const now = Date.now();
+    if (c.status === "solved") { c.status = "open"; c.solvedBy = ""; c.solvedAt = 0; } else { c.status = "solved"; c.solvedBy = ME; c.solvedAt = now; }
+    c.upd = now; render(); save();
+  }
+  function deleteComment(id) {
+    if (!IS_ADMIN) return;
+    if (!confirm("Delete this comment for everyone?")) return;
+    CMT.list = CMT.list.filter(x => x.id !== id); CMT.deleted[id] = { at: Date.now(), by: ME }; render(); save();
+  }
+
+  /* ---------- admin: add a comment on selected text ---------- */
+  let pending = null;
+  function selInfo() {
+    const sel = window.getSelection(), paper = paperEl();
+    if (!sel || !sel.rangeCount || sel.isCollapsed || !paper) return null;
+    const r = sel.getRangeAt(0);
+    if (!paper.contains(r.startContainer) || !paper.contains(r.endContainer)) return null;
+    const pre = document.createRange(); pre.setStart(paper, 0); pre.setEnd(r.startContainer, r.startOffset);
+    const full = textIndex(paper).text, s = pre.toString().length, len = r.toString().length, quote = full.substr(s, len);
+    if (!/\S/.test(quote)) return null;
+    let sec = "";
+    paper.querySelectorAll("h2").forEach(h => { if (h.compareDocumentPosition(r.startContainer) & Node.DOCUMENT_POSITION_FOLLOWING) sec = norm(h.textContent); });
+    const rects = r.getClientRects(), last = rects.length ? rects[rects.length - 1] : r.getBoundingClientRect();
+    return { s, len, q: quote.slice(0, QUOTE_KEEP), pre: full.slice(Math.max(0, s - 40), s), suf: full.slice(s + len, s + len + 40), sec, x: last.right, y: last.bottom };
+  }
+  function hideAdd() { const b = byId("cmtAddBtn"); if (b) b.style.display = "none"; }
+  function hideCompose() { const b = byId("cmtCompose"); if (b) b.style.display = "none"; }
+  function checkSel() {
+    if (!IS_ADMIN || !previewOn()) { hideAdd(); return; }
+    if (byId("cmtCompose").style.display === "block") return;
+    const info = selInfo();
+    if (!info) { hideAdd(); return; }
+    pending = info;
+    const b = byId("cmtAddBtn");
+    b.style.display = "block";
+    b.style.left = Math.max(8, Math.min(info.x, window.innerWidth - 140)) + "px";
+    b.style.top = Math.min(info.y + 8, window.innerHeight - 44) + "px";
+  }
+  function openCompose() {
+    if (!pending) return;
+    if (!currentCode()) { alert("Enter the Course Code first - comments are stored per course."); return; }
+    hideAdd();
+    const box = byId("cmtCompose");
+    byId("cmtComposeQ").textContent = "\u201c" + (pending.q.length > 140 ? pending.q.slice(0, 140) + "\u2026" : pending.q) + "\u201d";
+    byId("cmtComposeT").value = "";
+    box.style.display = "block";
+    box.style.left = Math.max(8, Math.min(pending.x, window.innerWidth - 336)) + "px";
+    box.style.top = Math.max(8, Math.min(pending.y + 8, window.innerHeight - 220)) + "px";
+    setTimeout(() => byId("cmtComposeT").focus(), 0);
+  }
+  async function addComment() {
+    const t = byId("cmtComposeT").value.trim();
+    if (!t) { byId("cmtComposeT").focus(); return; }
+    if (!pending) return;
+    const now = Date.now();
+    if (CMT.code !== currentCode()) await load();
+    CMT.list.push({ id: "c" + now.toString(36) + Math.random().toString(36).slice(2, 6), s: pending.s, len: pending.len, q: pending.q, pre: pending.pre, suf: pending.suf, sec: pending.sec,
+      text: t.slice(0, MAX_TEXT), by: ME, at: now, status: "open", solvedBy: "", solvedAt: 0, upd: now });
+    pending = null; hideCompose();
+    const s = window.getSelection(); if (s) s.removeAllRanges();
+    render(); openPanel(); save();
+  }
+
+  /* ---------- print / PDF: "Review Comments" list after the document ---------- */
+  function buildAppendix(doc, items) {
+    const wrap = doc.createElement("div");
+    wrap.setAttribute("style", "margin-top:18px;");
+    const h = doc.createElement("div");
+    h.textContent = "REVIEW COMMENTS";
+    h.setAttribute("style", "font-family:'Times New Roman',serif;font-size:12pt;font-weight:bold;border-bottom:0.5pt solid #000;padding-bottom:3px;margin-bottom:6px;");
+    wrap.appendChild(h);
+    const tb = doc.createElement("table");
+    tb.setAttribute("border", "1"); tb.setAttribute("cellspacing", "0"); tb.setAttribute("cellpadding", "4");
+    tb.setAttribute("style", "border-collapse:collapse;width:100%;font-family:'Times New Roman',serif;font-size:10.5pt;");
+    const mkRow = (cells, head) => {
+      const tr = doc.createElement("tr");
+      cells.forEach((t, i) => { const c = doc.createElement(head ? "th" : "td"); c.textContent = t; c.setAttribute("style", "border:0.5pt solid #000;padding:3px 5px;vertical-align:top;text-align:" + (head || i === 0 ? "center" : "left") + ";" + (head ? "font-weight:bold;" : "") + (i === 1 || i === 2 ? "white-space:pre-wrap;" : "")); tr.appendChild(c); });
+      return tr;
+    };
+    tb.appendChild(mkRow(["No.", "Commented text", "Comment", "By", "Status"], true));
+    items.forEach(x => {
+      const c = x.c, q = x.missing ? "(text no longer found)" : (c.q.length < c.len || c.q.length > 160 ? c.q.slice(0, 160) + "\u2026" : c.q);
+      tb.appendChild(mkRow([x.missing ? "-" : String(x.n), (c.sec ? c.sec + "\n" : "") + q, c.text, (c.by || "") + (c.at ? "\n" + fmt(c.at) : ""), c.status === "solved" ? "Solved" + (c.solvedBy ? "\n(" + c.solvedBy + ")" : "") : "Open"], false));
+    });
+    wrap.appendChild(tb);
+    return wrap;
+  }
+  function renderPrint() {
+    const paper = paperEl(); if (!paper) return;
+    let host = byId("cmtPrint");
+    if (!host) { host = document.createElement("div"); host.id = "cmtPrint"; paper.parentNode.appendChild(host); }
+    host.textContent = "";
+    const items = CMT.numbered.filter(x => x.c.status !== "solved" || CMT.incSolved);
+    if (previewOn() && items.length) host.appendChild(buildAppendix(document, items));
+  }
+
+  /* ---------- hooks for the Word / fallback exports ---------- */
+  async function refreshForOutput() {
+    try { await Promise.race([load(), new Promise(r => setTimeout(r, 6000))]); } catch (e) { /* use what we have */ }
+  }
+  // Marks the comments on the output DOM `root` and returns what was placed.
+  CMT.forOutput = async function (root, opts) {
+    await refreshForOutput();
+    if (!CMT.list.length) return { anchored: [], orphans: [] };
+    const heads = {}; root.querySelectorAll("h2").forEach(h => { heads[norm(h.textContent)] = 1; });
+    const r = resolveAll(root, sortedAll());
+    // number over ALL comments (same numbering as the preview), then keep only those to be included
+    let n = 0; r.anch.forEach(it => { it.n = ++n; });
+    const inc = it => it.c.status !== "solved" || CMT.incSolved;
+    const placed = applyMarks(root, r.anch.filter(inc), opts || {});
+    const placedIds = {}; placed.forEach(it => { placedIds[it.c.id] = 1; });
+    const lost = r.anch.filter(it => inc(it) && !placedIds[it.c.id]).map(it => it.c).concat(r.orph.filter(c => c.status !== "solved" || CMT.incSolved))
+      .filter(c => !c.sec || heads[c.sec]);
+    return { anchored: placed.map(it => ({ c: it.c, n: it.n })), orphans: lost.map(c => ({ c, n: 0 })) };
+  };
+  // HTML string -> HTML string with highlights, [n] markers and the comment list (used by the older Word export)
+  CMT.decorateHTML = async function (html) {
+    const root = new DOMParser().parseFromString("<body>" + html + "</body>", "text/html").body;
+    const res = await CMT.forOutput(root, { refs: "text", inline: true });
+    const items = res.anchored.map(a => ({ c: a.c, n: a.n, missing: false })).concat(res.orphans.map(o => ({ c: o.c, n: 0, missing: true })));
+    if (items.length) root.appendChild(buildAppendix(root.ownerDocument, items));
+    return root.innerHTML;
+  };
+
+  /* ---------- UI scaffolding ---------- */
+  function init() {
+    const body = document.body, ui = (tag, id, cls) => { const e = el(tag, "cmt-ui" + (cls ? " " + cls : "")); e.id = id; body.appendChild(e); return e; };
+    const fab = ui("button", "cmtFab"); fab.type = "button"; fab.innerHTML = "\uD83D\uDCAC Comments <span id=\"cmtFabN\">0</span>"; fab.onclick = () => openPanel();
+    const add = ui("button", "cmtAddBtn"); add.type = "button"; add.textContent = "\uD83D\uDCAC Add comment";
+    add.addEventListener("mousedown", ev => ev.preventDefault()); add.addEventListener("click", openCompose);
+    const comp = ui("div", "cmtCompose");
+    comp.innerHTML = "<div class=\"q\" id=\"cmtComposeQ\"></div><textarea id=\"cmtComposeT\" maxlength=\"" + MAX_TEXT + "\" placeholder=\"Write your comment...\"></textarea><div class=\"row\"><button type=\"button\" class=\"cmt-btn\" id=\"cmtComposeX\">Cancel</button><button type=\"button\" class=\"cmt-btn primary\" id=\"cmtComposeOk\">Add comment</button></div>";
+    const panel = ui("div", "cmtPanel");
+    panel.innerHTML = "<div class=\"hd\"><h3>Review comments <button type=\"button\" class=\"cmt-btn\" id=\"cmtClose\">&times;</button></h3><div class=\"ctl\"><span id=\"cmtCount\"></span></div>" +
+      "<div class=\"ctl\" style=\"margin-top:8px;\"><select id=\"cmtFilter\"><option value=\"all\">All</option><option value=\"open\">Open</option><option value=\"solved\">Solved</option></select>" +
+      "<label title=\"Solved comments are left out of the PDF / Word output unless this is ticked\"><input type=\"checkbox\" id=\"cmtIncSolved\"> Include solved in PDF/Word</label>" +
+      "<button type=\"button\" class=\"cmt-btn\" id=\"cmtRefresh\" style=\"margin-left:auto;\">Refresh</button></div></div><div id=\"cmtList\"></div><div class=\"ft\" id=\"cmtFoot\"></div>";
+    byId("cmtClose").onclick = () => { panel.classList.remove("open"); document.body.classList.remove("cmt-open"); };
+    byId("cmtFilter").onchange = ev => { CMT.filter = ev.target.value; renderPanel(); };
+    byId("cmtIncSolved").onchange = ev => { CMT.incSolved = ev.target.checked; render(); };
+    byId("cmtRefresh").onclick = async () => { if (CMT.dirty) await save(); else { await load(); } render(); };
+    byId("cmtComposeX").onclick = hideCompose; byId("cmtComposeOk").onclick = addComment;
+    byId("cmtComposeT").addEventListener("keydown", ev => { if (ev.key === "Escape") hideCompose(); if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) addComment(); });
+
+    document.addEventListener("mouseup", () => setTimeout(checkSel, 10));
+    document.addEventListener("keyup", ev => { if (ev.shiftKey || /Arrow|Home|End/.test(ev.key)) setTimeout(checkSel, 10); });
+    document.addEventListener("touchend", () => setTimeout(checkSel, 200));
+    document.addEventListener("selectionchange", () => { const s = window.getSelection(); if (!s || s.isCollapsed) hideAdd(); });
+    window.addEventListener("scroll", hideAdd, true);
+    paperEl().addEventListener("click", ev => {
+      const t = ev.target.closest && ev.target.closest("mark.cmt-hl, sup.cmt-ref");
+      if (t) openPanel(t.getAttribute("data-cid"));
+    });
+    window.addEventListener("beforeprint", () => { if (previewOn()) renderPrint(); });
+    const pv = byId("preview");
+    if (pv) new MutationObserver(() => { updateFab(); if (previewOn() && paperEl().firstChild && !paperEl().querySelector("mark.cmt-hl") && CMT.list.length) render(); }).observe(pv, { attributes: true, attributeFilter: ["style"] });
+    obsOn();
+    setInterval(async () => { if (previewOn() && !document.hidden && !CMT.dirty && !byId("cmtCompose").style.display.includes("block")) { await load(); render(); } }, POLL_MS);
+    updateFab();
+  }
+  init();
+})();
+</script>
+
 <script>
 /* =====================================================================
    WORD (.docx) EXPORT USING THE "docx" LIBRARY  (true OOXML, no server)
@@ -2865,7 +3322,7 @@ function setToolbarBusy(busy) {
     node.childNodes.forEach(ch => {
       if (ch.nodeType === 3) {
         const t = ch.nodeValue.replace(/[ \t\r\n\f]+/g, ' ');
-        if (t) segs.push({ t, b: st.b, i: st.i, sz: st.sz });
+        if (t) segs.push({ t, b: st.b, i: st.i, sz: st.sz, cid: st.cid, cst: st.cst });
         return;
       }
       if (ch.nodeType !== 1) return;
@@ -2880,7 +3337,9 @@ function setToolbarBusy(busy) {
       collectInline(ch, {
         b: st.b || tag === 'b' || tag === 'strong' || /bold|[6-9]00/.test(fw),
         i: st.i || tag === 'i' || tag === 'em' || /italic/.test(fs),
-        sz: sizeOf(ch, st.sz)
+        sz: sizeOf(ch, st.sz),
+        cid: (tag === 'mark' && ch.getAttribute('data-cid')) ? ch.getAttribute('data-cid') : st.cid,
+        cst: (tag === 'mark' && ch.getAttribute('data-status')) ? ch.getAttribute('data-status') : st.cst
       }, segs);
     });
   }
@@ -2907,15 +3366,31 @@ function setToolbarBusy(busy) {
     if (last && last.t !== undefined) last.t = last.t.replace(/ $/, '');
     return out.filter(s => s.t === undefined || s.t !== '');
   }
-  function makeRuns(segs, imgMap) {
-    const D = lib(), runs = [];
+  function makeRuns(segs, imgMap, ctx) {
+    const D = lib(), runs = [], cm = ctx && ctx.cm;
+    let open = null;                                           // comment whose Word range is open in this paragraph
+    const closeOpen = () => {
+      if (!open) return;
+      runs.push(new D.CommentRangeEnd(open.idx));
+      runs.push(new D.TextRun({ children: [new D.CommentReference(open.idx)] }));
+      open = null;
+    };
     segs.forEach(s => {
+      const info = (cm && s.cid) ? cm.map[s.cid] : null;
+      if (open && open !== info) closeOpen();
+      // the Word comment is attached to the first highlighted piece; later pieces are only highlighted
+      if (info && !open && !cm.placed.has(info.idx)) { cm.placed.add(info.idx); open = info; runs.push(new D.CommentRangeStart(info.idx)); }
       if (s.br) runs.push(new D.TextRun({ break: 1 }));
       else if (s.img !== undefined) {
         const data = imgMap.get(s.img);
         if (data) runs.push(new D.ImageRun({ type: 'png', data, transformation: { width: s.w, height: s.h }, altText: { title: 'QR Code', description: 'QR Code', name: 'QR Code' } }));
-      } else runs.push(new D.TextRun({ text: s.t, bold: !!s.b, italics: !!s.i, size: s.sz, font: FONT, color: '000000' }));
+      } else {
+        const o = { text: s.t, bold: !!s.b, italics: !!s.i, size: s.sz, font: FONT, color: '000000' };
+        if (info) o.highlight = info.solved ? 'lightGray' : 'yellow';
+        runs.push(new D.TextRun(o));
+      }
     });
+    closeOpen();
     return runs;
   }
 
@@ -2949,7 +3424,7 @@ function setToolbarBusy(busy) {
     const topSp = (o.before || 0) + (o.fixedBefore !== undefined ? o.fixedBefore : before);
     const botSp = o.fixedAfter !== undefined ? o.fixedAfter : after;
     const mk = (parts, bef, aft, keep) => {
-      const p = { children: makeRuns(parts, ctx.imgMap), alignment, run: { font: FONT, size: sz, color: '000000' }, spacing: { before: bef, after: aft, line: LINE, lineRule: D.LineRuleType.AUTO } };
+      const p = { children: makeRuns(parts, ctx.imgMap, ctx), alignment, run: { font: FONT, size: sz, color: '000000' }, spacing: { before: bef, after: aft, line: LINE, lineRule: D.LineRuleType.AUTO } };
       if (keep) p.keepNext = true;
       if (o.border) p.border = o.border;
       return new D.Paragraph(p);
@@ -3074,7 +3549,7 @@ function setToolbarBusy(busy) {
       const cells = grid[r].map(cell => {
         const el = cell.el, isTh = cell.tag === 'th';
         const va = (styleOf(el, 'vertical-align') || el.getAttribute('valign') || 'middle').toLowerCase();
-        const cctx = { sz: sizeOf(el, tableSz), align: alignOf(el, isTh ? D.AlignmentType.CENTER : D.AlignmentType.START), bold: isTh, imgMap: ctx.imgMap };
+        const cctx = { sz: sizeOf(el, tableSz), align: alignOf(el, isTh ? D.AlignmentType.CENTER : D.AlignmentType.START), bold: isTh, imgMap: ctx.imgMap, cm: ctx.cm };
         let kids = [];
         if ([...el.children].some(x => /^(p|div)$/i.test(x.tagName))) {
           const blocks = [];
@@ -3134,8 +3609,19 @@ function setToolbarBusy(busy) {
     const D = lib();
     const html = buildPaperHTML(d, opts || {});
     const root = new DOMParser().parseFromString('<body>' + html + '</body>', 'text/html').body;
+    // Review comments (admin comments from the preview) -> highlighted text + native Word comments
+    let cm = null;
+    if (window.CMT && typeof CMT.forOutput === 'function') {
+      try {
+        const res = await CMT.forOutput(root, {});
+        if (res.anchored.length || res.orphans.length) {
+          cm = { map: {}, placed: new Set(), items: [], lost: res.orphans.map(o => o.c) };
+          res.anchored.forEach((a, k) => { const info = { idx: k, c: a.c, solved: a.c.status === 'solved' }; cm.map[a.c.id] = info; cm.items.push(info); });
+        }
+      } catch (e) { console.warn('Review comments were left out of the Word file:', e); }
+    }
     const imgMap = await loadImages(root);
-    const ctx = { sz: 24, align: D.AlignmentType.START, bold: false, imgMap };
+    const ctx = { sz: 24, align: D.AlignmentType.START, bold: false, imgMap, cm };
 
     const blocks = [];
     flatten(root, blocks, { before: 0 });
@@ -3144,6 +3630,15 @@ function setToolbarBusy(busy) {
       const nxt = blocks[i + 1];
       blockToNodes(b, ctx, !!(nxt && nxt.tag === 'table')).forEach(n => children.push(n));
     });
+    // comments whose text could not be located any more are listed at the end so nothing is lost
+    const lost = cm ? cm.lost.concat(cm.items.filter(it => !cm.placed.has(it.idx)).map(it => it.c)) : [];
+    if (lost.length) {
+      const tr = (t, o) => new D.TextRun(Object.assign({ text: t, font: FONT, size: 24, color: '000000' }, o || {}));
+      children.push(new D.Paragraph({ children: [tr('REVIEW COMMENTS (text no longer found in the document)', { bold: true })], keepNext: true,
+        spacing: { before: 270, after: 120, line: LINE, lineRule: D.LineRuleType.AUTO }, border: { bottom: { style: D.BorderStyle.SINGLE, size: 4, space: 2, color: '000000' } } }));
+      lost.forEach(c => children.push(new D.Paragraph({ children: [tr((c.by || 'User') + ': ', { bold: true }), tr(c.text || ''), tr(c.q ? '   [on: \u201c' + c.q.slice(0, 120) + '\u201d]' : '', { italics: true })],
+        spacing: { before: 60, after: 60, line: LINE, lineRule: D.LineRuleType.AUTO } })));
+    }
     children.push(new D.Paragraph({ children: [], spacing: { before: 0, after: 0 } }));   // Word needs a paragraph after a final table
 
     const section = {
@@ -3166,7 +3661,8 @@ function setToolbarBusy(busy) {
       })] }) };
     }
 
-    const doc = new D.Document({
+    const placed = cm ? cm.items.filter(it => cm.placed.has(it.idx)) : [];
+    const docOpts = {
       creator: 'Curriculum Document Generator',
       title: String(d.courseTitle || 'Curriculum Document'),
       styles: {
@@ -3174,7 +3670,17 @@ function setToolbarBusy(busy) {
         paragraphStyles: [{ id: 'Normal', name: 'Normal', quickFormat: true, run: { font: FONT, size: 24, color: '000000' }, paragraph: { spacing: { line: LINE } } }]
       },
       sections: [section]
-    });
+    };
+    if (placed.length) {
+      docOpts.comments = { children: placed.map(it => {
+        const c = it.c, by = String(c.by || 'User');
+        const lines = String(c.text || '').split(/\r?\n/);
+        if (it.solved) lines[0] = '[SOLVED' + (c.solvedBy ? ' by ' + c.solvedBy : '') + '] ' + lines[0];
+        return { id: it.idx, author: by, initials: by.slice(0, 2).toUpperCase(), date: new Date(c.at || Date.now()),
+          children: lines.map(t => new D.Paragraph({ children: [new D.TextRun({ text: t, font: FONT, size: 20 })] })) };
+      }) };
+    }
+    const doc = new D.Document(docOpts);
     return D.Packer.toBlob(doc);
   };
 })();
