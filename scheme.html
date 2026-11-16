@@ -2691,15 +2691,18 @@ function handleAuthFailure_(result) {
 
   // Flatten every non-empty course row across every department & (real) semester
   // using the same course fields / computeCourse logic as the rest of the app.
-  // First Year Exit and Second Year Exit stages are intentionally excluded —
+  // By default First Year Exit and Second Year Exit stages are excluded —
   // only SEM_PAGES (the six actual semesters) are considered, matching the
   // six-semester Credit Distribution report elsewhere in this file.
-  function buildAllDeptRows_(results, includeAllElectives){
+  // The Course Code Register passes includeExit = true so that exit-stage
+  // courses are registered too.
+  function buildAllDeptRows_(results, includeAllElectives, includeExit){
     var rows = [];
     results.forEach(function(item){
       var prog = item.prog, st = item.data;
-      SEM_PAGES.forEach(function(p){
+      (includeExit ? PAGES : SEM_PAGES).forEach(function(p){
         var page = st.pages[p.id];
+        if (!page || !page.courses) return;
         // Courses that share the same Sr No are an "Elective (Any - One)" group
         // (see renderCourseTable / pageSums / semStats above) — only the first
         // one is an actually-taken subject, so count that group once per stage,
@@ -3208,6 +3211,8 @@ function handleAuthFailure_(result) {
   }
   function regUniq_(arr){ var seen = {}, out = []; arr.forEach(function(x){ if (x !== "" && x !== undefined && !seen[x]){ seen[x] = 1; out.push(x); } }); return out; }
   function regFind_(id){ return reg.entries.filter(function(e){ return e.id === id; })[0]; }
+  // Real semester number (1-6) or, for the exit stages, a display label ("Exit 1" / "Exit 2").
+  function regStageLabel_(stageId){ var n = semNo_(stageId); return n ? n : (stageId === "exit1" ? "Exit 1" : (stageId === "exit2" ? "Exit 2" : "")); }
   function regSems_(e){ return regUniq_((e.usages || []).map(function(u){ return semNo_(u.stageId); })).sort(); }
 
   // a stored code only stays valid while its semester / department digits match the entry
@@ -3319,7 +3324,11 @@ function handleAuthFailure_(result) {
     });
     return best;
   }
-  function regSchemeSem_(e){ return (e.usages || []).length ? Math.min.apply(null, e.usages.map(function(u){ return semNo_(u.stageId); })) : ""; }
+  // Semester for the code digit: real semesters only. A course used only in an exit stage has no semester (pick it by hand in the Sem column).
+  function regSchemeSem_(e){
+    var ns = (e.usages || []).map(function(u){ return semNo_(u.stageId); }).filter(function(n){ return n !== ""; });
+    return ns.length ? Math.min.apply(null, ns) : "";
+  }
   function regSchemeAbbr_(e){ return regUniq_((e.usages || []).map(function(u){ return u.abbr; }))[0] || ""; }
   function regSchemeDept_(e){
     var codes = regUniq_((e.usages || []).map(function(u){ return u.progCode; }));
@@ -3527,7 +3536,7 @@ function handleAuthFailure_(result) {
     var by = {}, order = [];
     (e.usages || []).forEach(function(u){
       if (!by[u.progCode]){ by[u.progCode] = []; order.push(u.progCode); }
-      var n = semNo_(u.stageId); if (by[u.progCode].indexOf(n) === -1) by[u.progCode].push(n);
+      var n = regStageLabel_(u.stageId); if (by[u.progCode].indexOf(n) === -1) by[u.progCode].push(n);
     });
     return order.map(function(pc){ return pc + ": " + by[pc].sort().join(","); }).join("  \u00b7  ");
   }
@@ -4012,7 +4021,7 @@ function handleAuthFailure_(result) {
         } catch (er) { console.error(er); }
       });
       if (liveList.length) liveNote = " " + liveList.map(function(x){ return x.prog.code; }).join(", ") + " read from the form (including unsaved changes).";
-      regRows = buildAllDeptRows_(results, true);   // every elective, not just the first of each Any-One group
+      regRows = buildAllDeptRows_(results, true, true);   // every elective (not just the first of each Any-One group), and the First / Second Year Exit stages too
       var added = regApplyRows_(force);
       if (added) regDirty = true;
       regLoaded = true;
@@ -4138,7 +4147,7 @@ function handleAuthFailure_(result) {
     var det = [["New Code", "Course Title (register)", "Name in Scheme", "Programme", "Semester", "Existing Code", "Abbreviation (scheme)", "Credits", "Allocated To"]];
     list.forEach(function(e){
       (e.usages || []).forEach(function(u){
-        det.push([e.code || "", e.title, u.title, u.progCode, semNo_(u.stageId), u.code, u.abbr, u.credits ? tidy(u.credits) : "", e.dept === "" ? "Not allocated" : (e.dept === "0" ? "Common to all" : regDeptLabel_(e.dept))]);
+        det.push([e.code || "", e.title, u.title, u.progCode, regStageLabel_(u.stageId), u.code, u.abbr, u.credits ? tidy(u.credits) : "", e.dept === "" ? "Not allocated" : (e.dept === "0" ? "Common to all" : regDeptLabel_(e.dept))]);
       });
     });
     var wb = XLSX.utils.book_new(), w1 = XLSX.utils.aoa_to_sheet(main), w2 = XLSX.utils.aoa_to_sheet(det);
