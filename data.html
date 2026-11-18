@@ -740,7 +740,7 @@ body.viewer-mode header, body.viewer-mode .container { margin-left: 0 !important
     <li><a href="#labEquipCard">8. VIII. Laboratory Equipment / Tools</a></li>
     <li><a href="#weightageCard">9. IX. Suggested Weightage</a></li>
     <li><a href="#assessmentCard">10. X. Assessment Methodologies / Tools</a></li>
-    <li><a href="#matrixCard">11. XI. COs - POs - PSOs Matrix</a></li>
+    <li><a href="#matrixCard">11. XI. COs - POs Matrix</a></li>
     <li><a href="#booksCard">12. XII. Learning Materials / Books</a></li>
     <li><a href="#websitesCard">13. XIII. Learning Websites &amp; Portals</a></li>
     <li><a href="#qppCard">14. XIV. Question Paper Profile (QPP)</a></li>
@@ -871,7 +871,7 @@ It's been 20 minutes since your last save. Click "Save Data" to avoid losing you
 <div class="hint" style="display:block; margin-top:14px; align-items:flex-start;">
 <div><b>Section-specific notes:</b><br>
 &bull; <b>Section IV</b> (Teaching-Learning &amp; Assessment Scheme): Enter contact hours, credits, and marks exactly as per the approved scheme — no validation is applied.<br>
-&bull; <b>Section XI</b> (CO-PO-PSO Matrix): Use standard correlation levels (1/2/3 or blank) consistently across all COs.<br>
+&bull; <b>Section XI</b> (CO-PO Matrix): Use standard correlation levels (1/2/3 or blank) consistently across all COs.<br>
 &bull; <b>Section XIV</b> (Question Paper Profile): Fill Unit(T), Level(L: R/U/A), and Marks(M) per bit carefully — the Total Marks should match your Section IV total theory marks.</div>
 </div>
 <button type="button" class="secondary" style="margin-top:14px;" onclick="document.getElementById('instructionsCard').style.display='none'">Got it, hide instructions</button>
@@ -1042,9 +1042,9 @@ Exclude this section from Preview / Print / PDF / Word
 </div>
 
 <div class="card" id="matrixCard">
-<h2>11. XI. COs - POs - PSOs Matrix</h2>
+<h2>11. XI. COs - POs Matrix</h2>
 <div style="overflow-x:auto;">
-<table id="matrixTable"><thead><tr><th style="text-align:center;">CO</th><th style="text-align:center;">PO1</th><th style="text-align:center;">PO2</th><th style="text-align:center;">PO3</th><th style="text-align:center;">PO4</th><th style="text-align:center;">PO5</th><th style="text-align:center;">PO6</th><th style="text-align:center;">PO7</th><th style="text-align:center;">PO8</th><th style="text-align:center;">PO9</th><th style="text-align:center;">PO10</th><th style="text-align:center;">PO11</th><th style="text-align:center;">PSO1</th><th style="text-align:center;">PSO2</th><th style="text-align:center;">PSO3</th></tr></thead><tbody></tbody></table>
+<table id="matrixTable"><thead><tr><th style="text-align:center;">CO</th><th style="text-align:center;">PO1</th><th style="text-align:center;">PO2</th><th style="text-align:center;">PO3</th><th style="text-align:center;">PO4</th><th style="text-align:center;">PO5</th><th style="text-align:center;">PO6</th><th style="text-align:center;">PO7</th><th style="text-align:center;">PO8</th><th style="text-align:center;">PO9</th><th style="text-align:center;">PO10</th><th style="text-align:center;">PO11</th></tr></thead><tbody></tbody></table>
 </div>
 </div>
 
@@ -1483,7 +1483,7 @@ function buildMatrix(){
  let body=$('matrixTable').querySelector('tbody');
  body.innerHTML='';
  document.querySelectorAll('#coTable tbody tr').forEach((r,i)=>{
-  let cells='<td style="text-align:center;font-weight:600;">CO'+(i+1)+'</td>'+Array(14).fill(0).map((_,j)=>`<td><input style="text-align:center;width:45px" data-m="${i}-${j}" maxlength="1" pattern="[123]"></td>`).join('');
+  let cells='<td style="text-align:center;font-weight:600;">CO'+(i+1)+'</td>'+Array(11).fill(0).map((_,j)=>`<td><input style="text-align:center;width:45px" data-m="${i}-${j}" maxlength="1" pattern="[123]"></td>`).join('');
   body.insertAdjacentHTML('beforeend','<tr>'+cells+'</tr>');
  });
 }
@@ -2084,7 +2084,7 @@ function buildPaperHTML(d, opts) {
     p += listAsTable(d.summativeAssessment, ['Sr. No', 'Methodology / Tool']);
 
     p += `<h2 style="font-family: Times New Roman; font-size: 12pt; border-bottom:0.5pt solid #000; padding-bottom:3px; margin-top:18px;">XI. SUGGESTED COs - POs MATRIX FORM</h2>`;
-    p += `${tableStart}<thead><tr><th ${thStyle}>CO</th><th ${thStyle}>PO1</th><th ${thStyle}>PO2</th><th ${thStyle}>PO3</th><th ${thStyle}>PO4</th><th ${thStyle}>PO5</th><th ${thStyle}>PO6</th><th ${thStyle}>PO7</th><th ${thStyle}>PO8</th><th ${thStyle}>PO9</th><th ${thStyle}>PO10</th><th ${thStyle}>PO11</th><th ${thStyle}>PSO1</th><th ${thStyle}>PSO2</th><th ${thStyle}>PSO3</th></tr></thead><tbody>`;
+    p += `${tableStart}<thead><tr><th ${thStyle}>CO</th><th ${thStyle}>PO1</th><th ${thStyle}>PO2</th><th ${thStyle}>PO3</th><th ${thStyle}>PO4</th><th ${thStyle}>PO5</th><th ${thStyle}>PO6</th><th ${thStyle}>PO7</th><th ${thStyle}>PO8</th><th ${thStyle}>PO9</th><th ${thStyle}>PO10</th><th ${thStyle}>PO11</th></tr></thead><tbody>`;
 
     document.querySelectorAll('#matrixTable tbody tr').forEach((r, i) => { p += '<tr>' + td('CO' + (i + 1), 'center') + [...r.querySelectorAll('input')].map(x => td(esc(x.value), 'center')).join('') + '</tr>' });
     p += '</tbody></table>';
