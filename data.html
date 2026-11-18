@@ -709,6 +709,8 @@ body.viewer-mode header, body.viewer-mode .container { margin-left: 0 !important
 #courseSuggest .cs-meta { font-size: 11px; color: #64748b; margin-top: 1px; }
 #courseSuggest .cs-msg { padding: 10px 12px; color: #64748b; font-size: 12.5px; }
 #courseSuggest .cs-retry { color: #0369a1; cursor: pointer; text-decoration: underline; margin-left: 6px; }
+/* on-screen preview helpers: never printed / exported */
+@media print { .preview-only { display: none !important; } }
 </style>
 </head>
 <body>
@@ -1647,6 +1649,8 @@ async function saveWord(){
          console.warn("docx-library export failed, reverting to html-docx-js:", err);
      }
  }
+ // Fallback export: preview-only rows (e.g. the Section VI hour totals) are not exported
+ bodyHTML = bodyHTML.replace(/<tr class="preview-only"[\s\S]*?<\/tr>/g, '');
  // Fallback export: add highlighted text, [n] markers and the Review Comments list
  try { if (window.CMT && typeof CMT.decorateHTML === 'function') bodyHTML = await CMT.decorateHTML(bodyHTML); }
  catch (err) { console.warn("Review comments were left out of the fallback Word export:", err); }
@@ -2045,6 +2049,15 @@ function buildPaperHTML(d, opts) {
         let title = l.mand ? `<b>*</b> ${esc(l.title)}` : esc(l.title);
         p += `<tr>${td(sr, 'center')}${td(lloStr)}${td(title)}${td(esc(l.hrs), 'center')}${td(esc(l.co), 'center')}</tr>`;
     });
+    // Totals of the Hrs column: shown in the on-screen preview only (hidden in PDF/print and left out of the Word file)
+    {
+        const hrsNum = v => { const n = parseFloat(String(v || '').replace(/[^0-9.]/g, '')); return isNaN(n) ? 0 : n; };
+        let totalHrs = 0, mandHrs = 0;
+        d.lab.forEach(l => { const h = hrsNum(l.hrs); totalHrs += h; if (l.mand) mandHrs += h; });
+        const fmtH = n => String(Math.round(n * 100) / 100);
+        const sumRow = (label, val) => `<tr class="preview-only" style="background:#eef2ff;"><th colspan="3" style="text-align:right; border:0.5pt solid #000; padding:5px; font-family: Times New Roman; font-size: 12pt;"><span style="font-family: Times New Roman; font-size: 12pt;"><b>${label}</b> <span style="font-weight:normal; color:#64748b; font-size:10pt;">(preview only)</span></span></th><th ${thStyle}><span style="font-family: Times New Roman; font-size: 12pt;">${val}</span></th><th ${thStyle}>&nbsp;</th></tr>`;
+        p += sumRow('Total Hours:', fmtH(totalHrs)) + sumRow('Total Mandatory (*) Hours:', fmtH(mandHrs));
+    }
     p += `</tbody></table>`;
 
     p += `<div style="margin-top:10px; text-align:left;"><p style="margin:3px 0; font-family: Times New Roman; font-size: 12pt;"><span style="font-family: Times New Roman; font-size: 12pt;">${LAB_NOTE_HTML}</span></p></div>`;
@@ -3611,7 +3624,7 @@ body.cmt-open #cmtFab { display: none !important; }
                   :                            { top: 75, bottom: 75, left: 75, right: 75 };
     const tableSz = /scheme-table|qpp-table/.test(cls) ? 16 : 24;
 
-    const trs = [...tEl.querySelectorAll('tr')].filter(tr => tr.closest('table') === tEl);
+    const trs = [...tEl.querySelectorAll('tr')].filter(tr => tr.closest('table') === tEl && !tr.classList.contains('preview-only'));
     // map every cell to its grid position (handles rowspan / colspan)
     const occ = [], grid = [];
     trs.forEach((tr, r) => {
@@ -3794,5 +3807,21 @@ body.cmt-open #cmtFab { display: none !important; }
 })();
 </script>
 
+<script>
+/* Remember the "Exclude this section from Preview / Print / PDF / Word" choices for every form.
+   Stored in this browser, per logged-in user, so the choice is already set the next time any form is opened. */
+(function () {
+  function user() { try { return String((JSON.parse(sessionStorage.getItem('autonomy2026_auth') || 'null') || {}).username || '').toLowerCase(); } catch (e) { return ''; } }
+  const key = id => 'las_pref_' + user() + '_' + id;
+  const boxes = () => document.querySelectorAll('input[type="checkbox"][id^="exclude"]');
+  function restore() {
+    boxes().forEach(cb => { try { const v = localStorage.getItem(key(cb.id)); if (v !== null) cb.checked = (v === '1'); } catch (e) { /* storage blocked: skip */ } });
+  }
+  boxes().forEach(cb => cb.addEventListener('change', () => { try { localStorage.setItem(key(cb.id), cb.checked ? '1' : '0'); } catch (e) { /* ignore */ } }));
+  restore();
+  const origLoad = window.loadData;                       // loading a record must not change the remembered choice
+  if (typeof origLoad === 'function') window.loadData = function () { const r = origLoad.apply(this, arguments); restore(); return r; };
+})();
+</script>
 </body>
 </html>
