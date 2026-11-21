@@ -649,7 +649,7 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.6; }
      background: #fff;
  }
  .pagebreak { page-break-before: always; }
- @page { size: A4; margin: 15mm; }
+ @page { size: A4; margin: 15mm; @bottom-left { content: "Page " counter(page) " / " counter(pages); font-family: "Times New Roman", Times, serif; font-size: 12pt; font-weight: bold; vertical-align: top; padding-top: 3mm; } }
 }
 
 /* ===== Global Loading Overlay (modern spinner) ===== */
@@ -2922,7 +2922,8 @@ function setToolbarBusy(busy) {
 /* ===== Review comments (preview) ===== */
 mark.cmt-hl { background: #fff176; color: inherit; cursor: pointer; padding: 0; border-radius: 2px; }
 mark.cmt-hl[data-status="solved"] { background: #d7f0df; }
-mark.cmt-hl.cmt-focus { outline: 2px solid #7c3aed; outline-offset: 1px; }
+.cmt-focus { outline: 2px solid #7c3aed; outline-offset: 2px; }
+sup.cmt-ref.cmt-pin::after { content: "\1F4AC[" attr(data-n) "]"; }
 sup.cmt-ref { font-size: 9px; font-weight: 700; color: #b45309; cursor: pointer; margin-left: 1px; font-family: Arial, sans-serif; }
 sup.cmt-ref::after { content: "[" attr(data-n) "]"; }
 sup.cmt-ref[data-status="solved"] { color: #15803d; }
@@ -2958,7 +2959,7 @@ body.cmt-open #cmtFab { display: none !important; }
 .cmt-item .badge { margin-left: auto; font-weight: 700; font-size: 10.5px; padding: 1px 7px; border-radius: 999px; background: #fef3c7; color: #92400e; }
 .cmt-item.solved .badge { background: #dcfce7; color: #166534; }
 .cmt-item .sec { font-size: 11px; color: #94a3b8; margin-top: 3px; }
-.cmt-item .quote { margin: 5px 0; padding-left: 8px; border-left: 3px solid #fde68a; color: #64748b; font-style: italic; font-size: 12px; }
+.cmt-item .quote { white-space: pre-wrap; margin: 5px 0; padding-left: 8px; border-left: 3px solid #fde68a; color: #64748b; font-style: italic; font-size: 12px; }
 .cmt-item .txt { white-space: pre-wrap; word-break: break-word; }
 .cmt-item .by { font-size: 11px; color: #16a34a; margin-top: 4px; }
 #cmtPanel .ft { padding: 8px 14px; border-top: 1px solid #e2e8f0; font-size: 11.5px; color: #64748b; min-height: 34px; }
@@ -3025,22 +3026,54 @@ body.cmt-open #cmtFab { display: none !important; }
   function resolve(c, text) {
     const q = c.q || "", len = c.len || q.length;
     if (!q) return null;
-    if (text.substr(c.s, q.length) === q && c.s + len <= text.length) return { s: c.s, e: c.s + len };
-    let best = -1, bestScore = -1e9, from = 0, i;
-    while ((i = text.indexOf(q, from)) !== -1) {
-      const sc = comSuffix(text.slice(Math.max(0, i - (c.pre || "").length), i), c.pre || "") + comPrefix(text.slice(i + len, i + len + (c.suf || "").length), c.suf || "") - Math.abs(i - c.s) / 100000;
-      if (sc > bestScore) { bestScore = sc; best = i; }
-      from = i + 1;
+    // 1) the text is still exactly where it was
+    if (text.substr(c.s, q.length) === q && c.s + len <= text.length) return { s: c.s, e: c.s + len, state: "exact" };
+    const preT = (c.pre || "").slice(-24), sufT = (c.suf || "").slice(0, 24);
+    const around = (i, l) => comSuffix(text.slice(Math.max(0, i - preT.length), i), preT) + comPrefix(text.slice(i + l, i + l + sufT.length), sufT);
+    // 2) the same words are found elsewhere (the text moved because other parts were edited). Accept only if the words around it
+    //    agree, or if it is a long phrase that occurs exactly once. A short phrase that merely occurs somewhere else is NOT the same place.
+    const occ = []; let from = 0, i;
+    while ((i = text.indexOf(q, from)) !== -1) { occ.push(i); from = i + 1; }
+    if (occ.length) {
+      let best = occ[0], bs = -1;
+      occ.forEach(o => { const sc = around(o, len); if (sc > bs || (sc === bs && Math.abs(o - c.s) < Math.abs(best - c.s))) { bs = sc; best = o; } });
+      const need = Math.min(10, preT.length + sufT.length);
+      if ((need > 0 && bs >= need) || (occ.length === 1 && q.length >= 40)) return { s: best, e: best + len, state: "moved" };
     }
-    return (best >= 0 && best + len <= text.length) ? { s: best, e: best + len } : null;
+    // 3) the commented text itself was edited or deleted: find the words that surrounded it (before AND after it)
+    if (preT.length >= 8 && sufT.length >= 8) {
+      let bestR = null;
+      from = 0;
+      while ((i = text.indexOf(preT, from)) !== -1) {
+        const a = i + preT.length, j = text.indexOf(sufT, a);
+        if (j !== -1 && j - a <= len + 400 && (!bestR || Math.abs(a - c.s) < Math.abs(bestR.s - c.s))) bestR = { s: a, e: j };
+        from = i + 1;
+      }
+      if (bestR) return { s: bestR.s, e: bestR.e, state: bestR.e > bestR.s ? "edited" : "pin" };
+    }
+    return null;
   }
-  // returns {anch:[{c,s,e}], orph:[c]} in document order
+  // returns {anch:[{c,s,e,state}], orph:[c]} in document order
   function resolveAll(root, comments) {
     const text = textIndex(root).text, anch = [], orph = [];
-    comments.forEach(c => { const r = resolve(c, text); if (r) anch.push({ c, s: r.s, e: r.e }); else orph.push(c); });
+    comments.forEach(c => { const r = resolve(c, text); if (r) anch.push({ c, s: r.s, e: r.e, state: r.state }); else orph.push(c); });
     anch.sort((a, b) => a.s - b.s || (a.c.at || 0) - (b.c.at || 0));
     orph.sort((a, b) => (a.at || 0) - (b.at || 0));
     return { anch, orph };
+  }
+  // small pin placed where deleted commented text used to be
+  function insertPin(root, pos, c) {
+    const idx = textIndex(root), doc = root.ownerDocument || document;
+    const cand = idx.nodes.filter(o => !(o.n.parentNode && /^(TABLE|TBODY|THEAD|TFOOT|TR|COLGROUP)$/.test(o.n.parentNode.nodeName)));
+    const o = cand.find(x => x.s <= pos && pos < x.e) || cand.find(x => x.e === pos);
+    if (!o) return null;
+    const node = o.n, off = pos - o.s, par = node.parentNode, sup = doc.createElement("sup");
+    sup.className = "cmt-ref cmt-pin"; sup.setAttribute("data-cid", c.id); sup.setAttribute("data-status", c.status === "solved" ? "solved" : "open");
+    sup.title = (c.by || "") + ": " + String(c.text || "").slice(0, 200) + " (the commented text was deleted)";
+    if (off <= 0) par.insertBefore(sup, node);
+    else if (off >= node.nodeValue.length) par.insertBefore(sup, node.nextSibling);
+    else par.insertBefore(sup, node.splitText(off));
+    return sup;
   }
   // wrap [s,e) in <mark>; returns the marks created (empty if nothing visible could be wrapped)
   function wrapRange(root, s, e, c) {
@@ -3147,16 +3180,21 @@ body.cmt-open #cmtFab { display: none !important; }
     CMT.numbered = [];
     if (previewOn() && paper.firstChild) {
       const r = resolveAll(paper, sortedAll());
-      const placed = applyMarks(paper, r.anch, {});
-      let n = 0;
-      placed.forEach(it => { it.n = ++n; CMT.numbered.push({ c: it.c, n: it.n, missing: false }); });
+      const placed = applyMarks(paper, r.anch.filter(it => it.state !== "pin"), {});
       const placedIds = {}; placed.forEach(it => { placedIds[it.c.id] = 1; });
-      r.anch.filter(it => !placedIds[it.c.id]).map(it => it.c).concat(r.orph).forEach(c => CMT.numbered.push({ c, n: ++n, missing: true }));
-      placed.forEach(it => {
+      // a comment whose text was deleted stays where the text used to be, as a small pin
+      const pins = [];
+      r.anch.filter(it => it.state === "pin").forEach(it => { const sup = insertPin(paper, it.s, it.c); if (sup) { it.pin = sup; pins.push(it); placedIds[it.c.id] = 1; } });
+      const all = placed.concat(pins).sort((a, b) => a.s - b.s || (a.c.at || 0) - (b.c.at || 0));
+      let n = 0;
+      all.forEach(it => { it.n = ++n; CMT.numbered.push({ c: it.c, n: it.n, state: it.state || "exact", missing: false }); });
+      all.forEach(it => {
+        if (it.pin) { it.pin.setAttribute("data-n", it.n); return; }
         const last = it.marks[it.marks.length - 1], sup = document.createElement("sup");
         sup.className = "cmt-ref"; sup.setAttribute("data-n", it.n); sup.setAttribute("data-cid", it.c.id); sup.setAttribute("data-status", it.c.status === "solved" ? "solved" : "open");
         last.parentNode.insertBefore(sup, last.nextSibling);
       });
+      r.anch.filter(it => !placedIds[it.c.id]).map(it => it.c).concat(r.orph).forEach(c => CMT.numbered.push({ c, n: ++n, state: "lost", missing: true }));
       paper.classList.toggle("cmt-hide-solved", !CMT.incSolved);
     }
     obsOn();
@@ -3185,11 +3223,13 @@ body.cmt-open #cmtFab { display: none !important; }
       const top = el("div", "top"); top.appendChild(el("b", "", "#" + x.n)); top.appendChild(el("span", "", c.by || "")); top.appendChild(el("span", "", fmt(c.at)));
       top.appendChild(el("span", "badge", solved ? "Solved" : "Open")); box.appendChild(top);
       if (c.sec) box.appendChild(el("div", "sec", c.sec));
-      box.appendChild(el("div", "quote", x.missing ? "(the commented text was not found in the current document)" : "\u201c" + (c.q.length < c.len || c.q.length > 140 ? c.q.slice(0, 140) + "\u2026" : c.q) + "\u201d"));
+      const qshow = "\u201c" + (c.q.length < c.len || c.q.length > 140 ? c.q.slice(0, 140) + "\u2026" : c.q) + "\u201d";
+      const qnote = x.state === "pin" ? "\n(the commented text was deleted - the comment stays where it used to be)" : x.state === "lost" ? "\n(the commented text was not found any more)" : x.state === "edited" ? "\n(the text was edited since)" : "";
+      box.appendChild(el("div", "quote", qshow + qnote));
       box.appendChild(el("div", "txt", c.text));
       if (solved) box.appendChild(el("div", "by", "Solved by " + (c.solvedBy || "?") + (c.solvedAt ? " \u00b7 " + fmt(c.solvedAt) : "")));
       const acts = el("div", "acts");
-      if (!x.missing) { const g = el("button", "cmt-btn", "Go to"); g.type = "button"; g.onclick = () => gotoComment(c.id); acts.appendChild(g); }
+      { const g = el("button", "cmt-btn", "Go to"); g.type = "button"; g.onclick = () => gotoComment(c.id); acts.appendChild(g); }
       const s = el("button", "cmt-btn primary", solved ? "Reopen" : "Mark solved"); s.type = "button"; s.onclick = () => toggleSolved(c.id); acts.appendChild(s);
       if (IS_ADMIN) { const d = el("button", "cmt-btn danger", "Delete"); d.type = "button"; d.onclick = () => deleteComment(c.id); acts.appendChild(d); }
       box.appendChild(acts); list.appendChild(box);
@@ -3202,9 +3242,20 @@ body.cmt-open #cmtFab { display: none !important; }
     if (cid) { const it = byId("cmtList").querySelector('[data-cid="' + cid + '"]'); if (it) { it.scrollIntoView({ block: "nearest" }); it.classList.add("flash"); setTimeout(() => it.classList.remove("flash"), 1600); } }
   }
   function gotoComment(cid) {
-    const m = paperEl().querySelector('mark.cmt-hl[data-cid="' + cid + '"]'); if (!m) return;
-    m.scrollIntoView({ block: "center", behavior: "smooth" });
-    paperEl().querySelectorAll('mark.cmt-hl[data-cid="' + cid + '"]').forEach(x => { x.classList.add("cmt-focus"); setTimeout(() => x.classList.remove("cmt-focus"), 1800); });
+    const paper = paperEl(); if (!paper) return;
+    let hits = [].slice.call(paper.querySelectorAll('mark.cmt-hl[data-cid="' + cid + '"]'));
+    if (!hits.length) hits = [].slice.call(paper.querySelectorAll('sup.cmt-pin[data-cid="' + cid + '"]'));
+    if (!hits.length) {                                   // the text is gone: go to its section, else to where it used to be
+      const c = CMT.list.find(x => x.id === cid);
+      if (c && c.sec) { const h = [].slice.call(paper.querySelectorAll("h2")).find(x => norm(x.textContent) === c.sec); if (h) hits = [h]; }
+      if (!hits.length && c) {
+        const idx = textIndex(paper), pos = Math.min(c.s, Math.max(0, idx.text.length - 1)), o = idx.nodes.find(x => x.e > pos);
+        if (o && o.n.parentElement) hits = [o.n.parentElement];
+      }
+    }
+    if (!hits.length) return;
+    hits[0].scrollIntoView({ block: "center", behavior: "smooth" });
+    hits.forEach(x => { x.classList.add("cmt-focus"); setTimeout(() => x.classList.remove("cmt-focus"), 1800); });
   }
   function toggleSolved(id) {
     const c = CMT.list.find(x => x.id === id); if (!c) return;
@@ -3289,8 +3340,10 @@ body.cmt-open #cmtFab { display: none !important; }
     };
     tb.appendChild(mkRow(["No.", "Commented text", "Comment", "By", "Status"], true));
     items.forEach(x => {
-      const c = x.c, q = x.missing ? "(text no longer found)" : (c.q.length < c.len || c.q.length > 160 ? c.q.slice(0, 160) + "\u2026" : c.q);
-      tb.appendChild(mkRow([x.missing ? "-" : String(x.n), (c.sec ? c.sec + "\n" : "") + q, c.text, (c.by || "") + (c.at ? "\n" + fmt(c.at) : ""), c.status === "solved" ? "Solved" + (c.solvedBy ? "\n(" + c.solvedBy + ")" : "") : "Open"], false));
+      const c = x.c, st = x.state || (x.missing ? "lost" : "exact");
+      let q = (c.q.length < c.len || c.q.length > 160 ? c.q.slice(0, 160) + "\u2026" : c.q);
+      if (st === "lost") q += "\n(text no longer found)"; else if (st === "pin") q += "\n(text since deleted)"; else if (st === "edited") q += "\n(text since edited)";
+      tb.appendChild(mkRow([(st === "lost" || !x.n) ? "-" : String(x.n), (c.sec ? c.sec + "\n" : "") + q, c.text, (c.by || "") + (c.at ? "\n" + fmt(c.at) : ""), c.status === "solved" ? "Solved" + (c.solvedBy ? "\n(" + c.solvedBy + ")" : "") : "Open"], false));
     });
     wrap.appendChild(tb);
     return wrap;
@@ -3317,17 +3370,19 @@ body.cmt-open #cmtFab { display: none !important; }
     // number over ALL comments (same numbering as the preview), then keep only those to be included
     let n = 0; r.anch.forEach(it => { it.n = ++n; });
     const inc = it => it.c.status !== "solved" || CMT.incSolved;
-    const placed = applyMarks(root, r.anch.filter(inc), opts || {});
+    const placed = applyMarks(root, r.anch.filter(it => inc(it) && it.state !== "pin"), opts || {});
     const placedIds = {}; placed.forEach(it => { placedIds[it.c.id] = 1; });
-    const lost = r.anch.filter(it => inc(it) && !placedIds[it.c.id]).map(it => it.c).concat(r.orph.filter(c => c.status !== "solved" || CMT.incSolved))
-      .filter(c => !c.sec || heads[c.sec]);
-    return { anchored: placed.map(it => ({ c: it.c, n: it.n })), orphans: lost.map(c => ({ c, n: 0 })) };
+    // comments that have no highlighted text any more (deleted text, or text not found) are listed instead
+    const lostA = r.anch.filter(it => inc(it) && !placedIds[it.c.id]).map(it => ({ c: it.c, n: 0, state: it.state === "pin" ? "pin" : "lost" }));
+    const lostB = r.orph.filter(c => c.status !== "solved" || CMT.incSolved).map(c => ({ c, n: 0, state: "lost" }));
+    const lost = lostA.concat(lostB).filter(o => !o.c.sec || heads[o.c.sec]);
+    return { anchored: placed.map(it => ({ c: it.c, n: it.n, state: it.state })), orphans: lost };
   };
   // HTML string -> HTML string with highlights, [n] markers and the comment list (used by the older Word export)
   CMT.decorateHTML = async function (html) {
     const root = new DOMParser().parseFromString("<body>" + html + "</body>", "text/html").body;
     const res = await CMT.forOutput(root, { refs: "text", inline: true });
-    const items = res.anchored.map(a => ({ c: a.c, n: a.n, missing: false })).concat(res.orphans.map(o => ({ c: o.c, n: 0, missing: true })));
+    const items = res.anchored.map(a => ({ c: a.c, n: a.n, state: a.state, missing: false })).concat(res.orphans.map(o => ({ c: o.c, n: 0, state: o.state, missing: o.state === "lost" })));
     if (items.length) root.appendChild(buildAppendix(root.ownerDocument, items));
     return root.innerHTML;
   };
@@ -3777,8 +3832,11 @@ body.cmt-open #cmtFab { display: none !important; }
       })] }) };
       section.footers = { default: new D.Footer({ children: [new D.Paragraph({
         border: { top: rule },
-        alignment: D.AlignmentType.CENTER,
-        children: [new D.TextRun(Object.assign({ text: 'Sharad Institute of Technology, Polytechnic, Yadrav' }, bold12))]
+        tabStops: [{ type: D.TabStopType.CENTER, position: Math.round(CONTENT_W / 2) }],
+        children: [
+          new D.TextRun(Object.assign({ children: ['Page ', D.PageNumber.CURRENT, ' / ', D.PageNumber.TOTAL_PAGES] }, bold12)),
+          new D.TextRun(Object.assign({ children: [new D.Tab(), 'Sharad Institute of Technology, Polytechnic, Yadrav'] }, bold12))
+        ]
       })] }) };
     }
 
